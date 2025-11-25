@@ -59,7 +59,7 @@ const Dashboard = () => {
             <p className="text-muted-foreground">Manage your AI evaluation projects</p>
           </div>
           <Button
-            className="bg-gradient-to-r from-primary to-secondary text-primary-foreground font-medium shadow-lg hover:shadow-xl hover:shadow-primary/20 transition-all duration-300"
+            className="bg-primary text-primary-foreground font-medium shadow-lg hover:opacity-90 transition-all duration-300"
             onClick={() => navigate("/projects/new")}
           >
             <Plus className="mr-2 h-5 w-5" />
@@ -78,7 +78,7 @@ const Dashboard = () => {
                 Get started by creating your first project and provisioning AI agents for evaluation.
               </p>
               <Button
-                className="bg-gradient-to-r from-primary to-secondary text-primary-foreground"
+                className="bg-primary text-primary-foreground hover:opacity-90"
                 onClick={() => navigate("/projects/new")}
               >
                 <Plus className="mr-2 h-4 w-4" />
@@ -91,7 +91,7 @@ const Dashboard = () => {
             {projects.map((project) => (
               <Card
                 key={project.id}
-                className="border border-border/50 bg-card hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 cursor-pointer"
+                className="border border-border bg-card hover:border-foreground/20 transition-all duration-300 hover:shadow-lg cursor-pointer"
                 onClick={() => navigate("/console")}
               >
                 <CardHeader>
