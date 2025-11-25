@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { LayoutDashboard, MessageSquare, Terminal, Database, Settings, LogOut } from "lucide-react";
 import {
@@ -15,6 +15,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { useAuth } from "@/contexts/AuthContext";
 
 const items = [
   { title: "Projects", url: "/dashboard", icon: LayoutDashboard },
@@ -26,12 +27,10 @@ const items = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("seer-user") || "{}");
+  const { user, signOut } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem("seer-user");
-    navigate("/login");
+    signOut();
   };
 
   return (
@@ -85,12 +84,14 @@ export function AppSidebar() {
           <div className="flex items-center gap-3 mb-3">
             <Avatar className="h-10 w-10 border-2 border-border">
               <AvatarFallback className="bg-primary text-primary-foreground font-bold">
-                {user.name?.charAt(0) || "D"}
+                {user?.user_metadata?.full_name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || "U"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">{user.name || "Demo User"}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.email || "demo@seer.dev"}</p>
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {user?.user_metadata?.full_name || user?.email || "User"}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">{user?.email || ""}</p>
             </div>
           </div>
           <Button
