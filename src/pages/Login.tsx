@@ -18,13 +18,13 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
-      <Card className="w-full max-w-md shadow-2xl border-border/50 backdrop-blur-sm bg-card/95">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md shadow-2xl border-border bg-card">
         <CardHeader className="space-y-3 text-center">
-          <div className="w-16 h-16 mx-auto rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/20">
+          <div className="w-16 h-16 mx-auto rounded-xl bg-primary flex items-center justify-center shadow-lg">
             <span className="text-3xl font-bold text-primary-foreground">S</span>
           </div>
-          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+          <CardTitle className="text-3xl font-bold text-foreground">
             Sign in to Seer Cloud
           </CardTitle>
           <CardDescription className="text-base text-muted-foreground">

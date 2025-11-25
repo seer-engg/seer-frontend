@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 const items = [
   { title: "Projects", url: "/dashboard", icon: LayoutDashboard },
@@ -37,13 +38,16 @@ export function AppSidebar() {
     <Sidebar className="border-r border-sidebar-border bg-sidebar">
       <SidebarContent>
         <div className="px-6 py-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/20">
-              <span className="text-xl font-bold text-primary-foreground">S</span>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center shadow-lg">
+                <span className="text-xl font-bold text-primary-foreground">S</span>
+              </div>
+              <span className="text-xl font-bold text-foreground">
+                Seer Cloud
+              </span>
             </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              Seer Cloud
-            </span>
+            <ThemeSwitcher />
           </div>
         </div>
 
@@ -79,8 +83,8 @@ export function AppSidebar() {
       <SidebarFooter>
         <div className="p-4 border-t border-sidebar-border">
           <div className="flex items-center gap-3 mb-3">
-            <Avatar className="h-10 w-10 border-2 border-primary/20">
-              <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground font-bold">
+            <Avatar className="h-10 w-10 border-2 border-border">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold">
                 {user.name?.charAt(0) || "D"}
               </AvatarFallback>
             </Avatar>
