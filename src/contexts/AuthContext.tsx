@@ -6,9 +6,8 @@ import { useNavigate } from "react-router-dom";
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
+  signInWithGithub: () => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   loading: boolean;
 }
@@ -47,35 +46,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
-  };
-
-  const signUp = async (email: string, password: string, fullName?: string) => {
-    const redirectUrl = `${window.location.origin}/dashboard`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName || "",
-        },
-      },
-    });
-    return { error };
-  };
-
   const signInWithGoogle = async () => {
     const redirectUrl = `${window.location.origin}/dashboard`;
     
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
+      options: {
+        redirectTo: redirectUrl,
+      },
+    });
+    return { error };
+  };
+
+  const signInWithGithub = async () => {
+    const redirectUrl = `${window.location.origin}/dashboard`;
+    
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
       options: {
         redirectTo: redirectUrl,
       },
@@ -93,9 +80,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         user,
         session,
-        signIn,
-        signUp,
         signInWithGoogle,
+        signInWithGithub,
         signOut,
         loading,
       }}
