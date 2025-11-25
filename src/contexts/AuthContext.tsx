@@ -25,6 +25,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log("Auth state changed:", event);
+        
+        // Log OAuth errors from URL
+        if (event === 'SIGNED_OUT' && window.location.search.includes('error')) {
+          const params = new URLSearchParams(window.location.search);
+          const error = params.get('error');
+          const errorDescription = params.get('error_description');
+          console.error('OAuth Error:', error, errorDescription);
+          alert(`Authentication failed: ${errorDescription || error}`);
+        }
+        
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
