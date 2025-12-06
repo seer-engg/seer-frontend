@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Github, Loader2, Mail, Eye } from "lucide-react";
+import { Github, Loader2, Mail, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -74,7 +74,7 @@ const Auth = () => {
       <Card className="w-full max-w-md shadow-2xl border-border bg-card">
         <CardHeader className="space-y-3 text-center">
           <div className="w-16 h-16 mx-auto rounded-xl bg-gradient-to-br from-seer to-seer-dark flex items-center justify-center shadow-lg">
-            <Eye className="w-8 h-8 text-primary-foreground" />
+            <Search className="w-8 h-8 text-primary-foreground" />
           </div>
           <CardTitle className="text-3xl font-bold text-foreground">
             Seer Cloud
