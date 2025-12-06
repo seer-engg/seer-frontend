@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Play, Pause, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChatInterface } from "@/components/seer/ChatInterface";
+import { ChatInterface, VerificationCard } from "@/components/seer/ChatInterface";
 import { LiveEnvironment } from "@/components/seer/LiveEnvironment";
 import { ArtifactPanel } from "@/components/seer/ArtifactPanel";
 import { mockAsanaBoard, mockVerification, mockCodeDiff, type Message } from "@/lib/mock-data";
@@ -23,6 +23,7 @@ const runSteps = [
   { type: "action", content: "Calling asana_update_task(45, status='In Review')..." },
   { type: "success", content: "✓ Task #45 moved to 'In Review'" },
   { type: "verify", content: "Verifying state change with Seer Eval Agent..." },
+  { type: "verification-result", content: "", isVerification: true },
 ];
 
 export default function LiveRun() {
@@ -41,6 +42,29 @@ export default function LiveRun() {
 
     const timer = setTimeout(() => {
       const step = runSteps[stepIndex];
+      
+      // Handle verification result with embedded component
+      if ((step as any).isVerification) {
+        const verificationMessage: Message = {
+          id: stepIndex.toString(),
+          role: 'system',
+          content: '',
+          timestamp: new Date(),
+          component: (
+            <VerificationCard
+              agentClaim={mockVerification.agentClaim}
+              verificationResult={`❌ ${mockVerification.seerResult.actualState}`}
+              passed={mockVerification.seerResult.verified}
+            />
+          ),
+        };
+        setMessages((prev) => [...prev, verificationMessage]);
+        setStepIndex((prev) => prev + 1);
+        setTestStatus("failed");
+        setIsRunning(false);
+        return;
+      }
+
       const newMessage: Message = {
         id: stepIndex.toString(),
         role: step.type === "thinking" ? "agent" : "system",
@@ -59,20 +83,6 @@ export default function LiveRun() {
           fromColumn: "in-progress",
           toColumn: "review",
         });
-      }
-
-      // Show verification artifact
-      if (step.type === "verify") {
-        setTimeout(() => {
-          setArtifact({
-            type: "verification",
-            title: "State Verification",
-            content: mockVerification,
-          });
-          setShowArtifact(true);
-          setTestStatus("failed");
-          setIsRunning(false);
-        }, 1000);
       }
     }, 1200);
 

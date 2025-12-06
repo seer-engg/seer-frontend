@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
+import ProjectDetail from "./pages/ProjectDetail";
 import NewProject from "./pages/NewProject";
 import LiveRun from "./pages/LiveRun";
 import Rube from "./pages/Rube";
@@ -37,6 +38,16 @@ const App = () => (
                   <ProtectedRoute>
                     <SeerLayout>
                       <Projects />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:id"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <ProjectDetail />
                     </SeerLayout>
                   </ProtectedRoute>
                 }

@@ -7,11 +7,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const steps = [
-  "Authenticating (Seer Sandbox)",
-  "Fetching Gmail",
-  "Processing emails",
-  "Writing Doc",
-  "Finalizing",
+  { label: "Authenticating", detail: "Seer Sandbox" },
+  { label: "Fetching", detail: "Gmail API" },
+  { label: "Processing", detail: "5 emails" },
+  { label: "Writing", detail: "Google Doc" },
+  { label: "Finalizing", detail: "Complete" },
 ];
 
 export default function Rube() {
@@ -80,8 +80,9 @@ export default function Rube() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
+            className="space-y-6"
           >
+            {/* Progress Bar */}
             <div className="h-2 bg-secondary rounded-full overflow-hidden">
               <motion.div
                 className="h-full bg-gradient-to-r from-seer to-indigo-500"
@@ -90,26 +91,43 @@ export default function Rube() {
                 transition={{ duration: 0.3 }}
               />
             </div>
-            <div className="flex justify-between text-sm">
+
+            {/* Step Indicators */}
+            <div className="flex justify-between">
               {steps.map((step, i) => (
-                <span
-                  key={step}
-                  className={cn(
-                    "transition-colors",
+                <div key={i} className="flex flex-col items-center gap-1">
+                  <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all",
                     i < currentStep
-                      ? "text-success"
+                      ? "bg-success text-success-foreground"
                       : i === currentStep
-                      ? "text-seer animate-pulse"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  {i < currentStep ? "✓" : i === currentStep ? "●" : "○"}
-                </span>
+                      ? "bg-seer text-white animate-pulse"
+                      : "bg-secondary text-muted-foreground"
+                  )}>
+                    {i < currentStep ? "✓" : i + 1}
+                  </div>
+                  <span className={cn(
+                    "text-xs font-medium transition-colors",
+                    i <= currentStep ? "text-foreground" : "text-muted-foreground"
+                  )}>
+                    {step.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {step.detail}
+                  </span>
+                </div>
               ))}
             </div>
-            <p className="text-center text-sm text-muted-foreground">
-              {steps[Math.min(currentStep, steps.length - 1)]}...
-            </p>
+
+            {/* Current Action */}
+            <div className="text-center p-4 rounded-lg bg-secondary/50 border border-border">
+              <p className="text-sm text-muted-foreground">
+                {currentStep < steps.length 
+                  ? `${steps[currentStep].label} ${steps[currentStep].detail}...`
+                  : "Almost done..."
+                }
+              </p>
+            </div>
           </motion.div>
         )}
 
