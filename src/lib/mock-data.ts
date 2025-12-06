@@ -1,4 +1,5 @@
 // Mock data for Seer prototype
+import { ReactNode } from 'react';
 
 export interface Message {
   id: string;
@@ -7,6 +8,7 @@ export interface Message {
   timestamp: Date;
   artifacts?: Artifact[];
   thinking?: boolean;
+  component?: ReactNode; // Allows embedding React components in messages
 }
 
 export interface Artifact {

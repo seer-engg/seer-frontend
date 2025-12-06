@@ -38,7 +38,10 @@ export default function Projects() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
             >
-              <Card className="hover:border-muted-foreground/50 transition-colors cursor-pointer">
+              <Card 
+                className="hover:border-muted-foreground/50 transition-colors cursor-pointer"
+                onClick={() => navigate(`/projects/${project.id}`)}
+              >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div>
