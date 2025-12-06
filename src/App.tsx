@@ -6,94 +6,83 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
+import Projects from "./pages/Projects";
 import NewProject from "./pages/NewProject";
-import Chat from "./pages/Chat";
-import Console from "./pages/Console";
-import Memories from "./pages/Memories";
+import Rube from "./pages/Rube";
+import ToolHub from "./pages/ToolHub";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
-import DashboardLayout from "./components/DashboardLayout";
+import { SeerLayout } from "./components/seer/SeerLayout";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/login" element={<Auth />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Dashboard />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/new"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <NewProject />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/chat"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Chat />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/console"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Console />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/memories"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Memories />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Settings />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/login" element={<Auth />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <Projects />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/new"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <NewProject />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/rube"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <Rube />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/tools"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <ToolHub />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <Settings />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
           </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
+        </BrowserRouter>
+      </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );
