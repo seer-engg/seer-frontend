@@ -8,9 +8,12 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
 import NewProject from "./pages/NewProject";
+import LiveRun from "./pages/LiveRun";
 import Rube from "./pages/Rube";
+import TraceAnalyzer from "./pages/TraceAnalyzer";
 import ToolHub from "./pages/ToolHub";
 import Settings from "./pages/Settings";
+import Docs from "./pages/Docs";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
@@ -49,11 +52,31 @@ const App = () => (
                 }
               />
               <Route
+                path="/run/:id"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <LiveRun />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/rube"
                 element={
                   <ProtectedRoute>
                     <SeerLayout>
                       <Rube />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/trace"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <TraceAnalyzer />
                     </SeerLayout>
                   </ProtectedRoute>
                 }
@@ -74,6 +97,16 @@ const App = () => (
                   <ProtectedRoute>
                     <SeerLayout>
                       <Settings />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/docs"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <Docs />
                     </SeerLayout>
                   </ProtectedRoute>
                 }

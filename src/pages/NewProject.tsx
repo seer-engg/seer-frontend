@@ -1,225 +1,156 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, GitBranch, Settings2, Zap, CheckCircle } from "lucide-react";
+import { ChatInterface } from "@/components/seer/ChatInterface";
+import { ArtifactPanel } from "@/components/seer/ArtifactPanel";
+import { SandboxModal } from "@/components/seer/SandboxModal";
+import { mockAgentSpec, type Message } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
 
-const NewProject = () => {
+const agentResponses = [
+  {
+    trigger: "",
+    response: "Welcome to Seer. I'm here to help you build a reliable agent.\n\nWhat are we building today? (e.g., 'A PR Reviewer', 'A Support Bot', 'A Data Pipeline')",
+  },
+  {
+    trigger: "pr",
+    response: "Got it — a PR workflow agent. I'll need to understand the integration points.\n\nWhich tools should this agent connect to?\n• GitHub (for PR data)\n• Asana / Linear / Jira (for task tracking)\n• Slack (for notifications)\n\nJust describe your workflow, and I'll figure out the rest.",
+  },
+  {
+    trigger: "asana",
+    response: "Perfect. I'll configure:\n\n• `github_get_pr` — Fetch PR details\n• `github_post_comment` — Post comments on PRs\n• `asana_get_task` — Lookup linked tasks\n• `asana_update_task` — Update task status\n\nShould I use the standard Linear-style workflow? (PR opened → Task moves to 'In Review' → PR merged → Task moves to 'Done')",
+  },
+  {
+    trigger: "yes",
+    response: "Excellent. I've generated an Agent Spec and Test Plan for you.\n\nReview the spec in the panel on the right. It includes 5 test scenarios that cover the happy path and edge cases.\n\nClick **Confirm & Build** when you're ready to proceed.",
+    showSpec: true,
+  },
+];
+
+export default function NewProject() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [step, setStep] = useState(1);
-  const [repository, setRepository] = useState("");
-  const [enableCodex, setEnableCodex] = useState(true);
-  const [apiKey, setApiKey] = useState("");
-  const [provisioning, setProvisioning] = useState(false);
-  const [provisionStep, setProvisionStep] = useState(0);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "1",
+      role: "agent",
+      content: agentResponses[0].response,
+      timestamp: new Date(),
+    },
+  ]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [responseIndex, setResponseIndex] = useState(1);
+  const [showArtifact, setShowArtifact] = useState(false);
+  const [showSandbox, setShowSandbox] = useState(false);
+  const [artifact, setArtifact] = useState<any>(null);
 
-  const provisionSteps = ["Allocating Node...", "Starting LangGraph Runtime...", "Agents Listening on Ports 8002/8003"];
+  const handleSend = useCallback(async (content: string) => {
+    // Add user message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
 
-  const handleProvision = async () => {
-    if (!apiKey) {
-      toast({
-        title: "API Key Required",
-        description: "Please provide your OpenAI API key to continue.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Simulate agent thinking
+    await new Promise((r) => setTimeout(r, 1500));
 
-    setProvisioning(true);
+    // Get next response
+    const nextResponse = agentResponses[Math.min(responseIndex, agentResponses.length - 1)];
     
-    for (let i = 0; i < provisionSteps.length; i++) {
-      setProvisionStep(i);
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+    const agentMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "agent",
+      content: nextResponse.response,
+      timestamp: new Date(),
+    };
+    
+    setMessages((prev) => [...prev, agentMessage]);
+    setIsLoading(false);
+    setResponseIndex((prev) => prev + 1);
+
+    // Show spec artifact if applicable
+    if (nextResponse.showSpec) {
+      setTimeout(() => {
+        setArtifact({
+          type: "spec",
+          title: "Agent Spec",
+          content: mockAgentSpec,
+        });
+        setShowArtifact(true);
+      }, 500);
     }
+  }, [responseIndex]);
 
+  const handleArtifactAction = (action: string) => {
+    if (action === "confirm") {
+      setShowArtifact(false);
+      setShowSandbox(true);
+    }
+  };
+
+  const handleSandboxSelect = (type: "sandbox" | "custom") => {
     toast({
-      title: "Agents Provisioned Successfully",
-      description: "Your AI agents are now ready for evaluation tasks.",
+      title: "Environment Ready",
+      description: type === "sandbox" 
+        ? "Seer Sandbox provisioned. Starting test run..."
+        : "Custom credentials configured.",
     });
-
-    setTimeout(() => navigate("/dashboard"), 1000);
+    
+    // Navigate to live run
+    setTimeout(() => {
+      navigate("/run/demo");
+    }, 500);
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Button variant="ghost" onClick={() => navigate("/dashboard")} className="mb-4 text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Projects
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <header className="h-14 flex items-center gap-4 px-4 border-b border-border shrink-0">
+        <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
         </Button>
+        <div className="h-4 w-px bg-border" />
+        <h1 className="font-medium">New Project</h1>
+      </header>
 
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold text-foreground">New Project</h1>
-          <p className="text-muted-foreground">Set up your AI evaluation environment</p>
-        </div>
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Chat Area */}
+        <motion.div
+          className="flex-1 flex flex-col"
+          animate={{ width: showArtifact ? "calc(100% - 480px)" : "100%" }}
+          transition={{ duration: 0.3 }}
+        >
+          <ChatInterface
+            messages={messages}
+            onSend={handleSend}
+            isLoading={isLoading}
+            placeholder="Describe what you want to build..."
+          />
+        </motion.div>
 
-        {!provisioning ? (
-          <>
-            {step === 1 && (
-              <Card className="border border-border/50 bg-card shadow-lg">
-                <CardHeader>
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
-                      <GitBranch className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle>Step 1: Source</CardTitle>
-                      <CardDescription>Connect your repository</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="repo">GitHub Repository URL</Label>
-                    <Input
-                      id="repo"
-                      placeholder="https://github.com/username/repo"
-                      value={repository}
-                      onChange={(e) => setRepository(e.target.value)}
-                      className="bg-muted/50 border-border/50"
-                    />
-                  </div>
-                  <Button
-                    onClick={() => setStep(2)}
-                    disabled={!repository}
-                    className="w-full bg-gradient-to-r from-primary to-secondary text-primary-foreground"
-                  >
-                    Continue
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {step === 2 && (
-              <Card className="border border-border/50 bg-card shadow-lg">
-                <CardHeader>
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-secondary/20 to-secondary/10 flex items-center justify-center">
-                      <Settings2 className="h-5 w-5 text-secondary" />
-                    </div>
-                    <div>
-                      <CardTitle>Step 2: Agent Configuration</CardTitle>
-                      <CardDescription>Configure your AI agents</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border/50">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium">Eval Agent</p>
-                          <Badge variant="outline" className="bg-success/10 text-success border-success/20">
-                            Enabled
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Port 8002 • Deep evaluation mode</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border/50">
-                      <div className="space-y-1">
-                        <p className="font-medium">Coding Agent (Codex)</p>
-                        <p className="text-sm text-muted-foreground">Port 8003 • Code generation handoff</p>
-                      </div>
-                      <Switch checked={enableCodex} onCheckedChange={setEnableCodex} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="apiKey">
-                      OpenAI API Key <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="apiKey"
-                      type="password"
-                      placeholder="sk-..."
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      className="bg-muted/50 border-border/50 font-mono"
-                    />
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
-                      Back
-                    </Button>
-                    <Button onClick={() => setStep(3)} disabled={!apiKey} className="flex-1 bg-gradient-to-r from-primary to-secondary text-primary-foreground">
-                      Continue
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {step === 3 && (
-              <Card className="border border-border/50 bg-card shadow-lg">
-                <CardHeader>
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-success/20 to-success/10 flex items-center justify-center">
-                      <Zap className="h-5 w-5 text-success" />
-                    </div>
-                    <div>
-                      <CardTitle>Step 3: Provision</CardTitle>
-                      <CardDescription>Deploy your agents</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4 p-6 bg-muted/30 rounded-lg border border-border/50">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-success" />
-                      <span className="font-medium">Repository: {repository}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-success" />
-                      <span className="font-medium">Agents: Eval Agent{enableCodex && " + Codex"}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-success" />
-                      <span className="font-medium">API Key: Configured</span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
-                      Back
-                    </Button>
-                    <Button onClick={handleProvision} className="flex-1 bg-gradient-to-r from-primary to-secondary text-primary-foreground">
-                      <Zap className="mr-2 h-4 w-4" />
-                      Deploy Agents
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </>
-        ) : (
-          <Card className="border border-border/50 bg-card shadow-lg">
-            <CardContent className="py-12">
-              <div className="space-y-8 max-w-md mx-auto">
-                <div className="text-center space-y-4">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center animate-pulse">
-                    <Zap className="h-8 w-8 text-primary-foreground" />
-                  </div>
-                  <h3 className="text-2xl font-bold">Provisioning Agents</h3>
-                  <p className="text-muted-foreground">{provisionSteps[provisionStep]}</p>
-                </div>
-                <Progress value={(provisionStep + 1) * 33.33} className="h-2" />
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Artifact Panel */}
+        <ArtifactPanel
+          isOpen={showArtifact}
+          onClose={() => setShowArtifact(false)}
+          artifact={artifact}
+          onAction={handleArtifactAction}
+        />
       </div>
+
+      {/* Sandbox Modal */}
+      <SandboxModal
+        open={showSandbox}
+        onOpenChange={setShowSandbox}
+        onSelect={handleSandboxSelect}
+      />
     </div>
   );
-};
-
-export default NewProject;
+}
