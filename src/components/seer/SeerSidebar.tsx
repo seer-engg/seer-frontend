@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Eye,
+  Search,
   FolderKanban,
   Zap,
   Activity,
@@ -85,7 +85,7 @@ export function SeerSidebar() {
       <div className="h-14 flex items-center justify-between px-3 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-seer to-indigo-500 flex items-center justify-center">
-            <Eye className="h-4 w-4 text-white" />
+            <Search className="h-4 w-4 text-white" />
           </div>
           {!collapsed && (
             <motion.span

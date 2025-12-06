@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Loader2, Eye, Bot, User, AlertTriangle, CheckCircle, Code, FileText } from "lucide-react";
+import { Send, Loader2, Search, Bot, User, AlertTriangle, CheckCircle, Code, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -114,7 +114,7 @@ function ChatMessage({ message }: { message: Message }) {
           isSystem ? "bg-warning/20" : "bg-gradient-to-br from-seer to-indigo-500"
         )}>
           {isSystem ? (
-            <Eye className="h-4 w-4 text-warning" />
+            <Search className="h-4 w-4 text-warning" />
           ) : (
             <Bot className="h-4 w-4 text-white" />
           )}
@@ -137,7 +137,7 @@ function ChatMessage({ message }: { message: Message }) {
           isSystem ? "bg-warning/20" : "bg-gradient-to-br from-seer to-indigo-500"
         )}>
           {isSystem ? (
-            <Eye className="h-4 w-4 text-warning" />
+            <Search className="h-4 w-4 text-warning" />
           ) : (
             <Bot className="h-4 w-4 text-white" />
           )}
