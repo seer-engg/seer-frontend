@@ -340,10 +340,6 @@ export default function LangGraphChat() {
             <p className="text-xs text-muted-foreground">LangGraph Agent • Ready</p>
           </div>
         </div>
-        <Badge variant="outline" className="text-xs">
-          <Clock className="h-3 w-3 mr-1" />
-          Streaming
-        </Badge>
       </div>
 
       {/* Messages */}
