@@ -21,9 +21,8 @@ import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 
-// Placeholder - replace with your LangGraph deployment URL
-const LANGGRAPH_API_URL = "YOUR_LANGGRAPH_DEPLOYMENT_URL";
-const LANGGRAPH_ASSISTANT_ID = "YOUR_ASSISTANT_ID";
+// LangServe endpoint
+const LANGSERVE_URL = "https://my-railway-app.up.railway.app/supervisor";
 
 interface Message {
   id: string;
@@ -281,36 +280,34 @@ export default function LangGraphChat() {
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      // TODO: Replace with actual LangGraph SDK streaming
-      // This is a mock implementation showing the expected behavior
-      await mockLangGraphStream(
+      await streamFromLangServe(
         userMessage.content,
-        (chunk) => {
-          // Handle streamed content
+        assistantMessage.id,
+        (content, isDone) => {
           setMessages(prev => 
             prev.map(m => 
               m.id === assistantMessage.id 
-                ? { ...m, content: m.content + chunk }
+                ? { ...m, content, isStreaming: !isDone }
                 : m
             )
           );
         },
         (step) => {
-          // Handle thinking steps
           setThinkingSteps(prev => [...prev, step]);
+        },
+        (error) => {
+          console.error("LangServe error:", error);
+          setMessages(prev => 
+            prev.map(m => 
+              m.id === assistantMessage.id 
+                ? { ...m, content: `Error: ${error}`, isStreaming: false }
+                : m
+            )
+          );
         }
       );
-
-      // Mark streaming complete
-      setMessages(prev => 
-        prev.map(m => 
-          m.id === assistantMessage.id 
-            ? { ...m, isStreaming: false }
-            : m
-        )
-      );
     } catch (error) {
-      console.error("Error streaming from LangGraph:", error);
+      console.error("Error streaming from LangServe:", error);
       setMessages(prev => 
         prev.map(m => 
           m.id === assistantMessage.id 
@@ -428,46 +425,135 @@ export default function LangGraphChat() {
   );
 }
 
-// Mock function to simulate LangGraph streaming behavior
-async function mockLangGraphStream(
+// Stream from LangServe endpoint
+async function streamFromLangServe(
   input: string,
-  onContent: (chunk: string) => void,
-  onThinkingStep: (step: ThinkingStep) => void
+  messageId: string,
+  onContent: (content: string, isDone: boolean) => void,
+  onThinkingStep: (step: ThinkingStep) => void,
+  onError: (error: string) => void
 ): Promise<void> {
-  // Simulate tool calls for demonstration
-  const tools = [
-    { name: "search_web", delay: 800 },
-    { name: "fetch_documents", delay: 600 },
-    { name: "analyze_content", delay: 1000 },
-  ];
-
-  for (const tool of tools) {
-    // Tool call
-    onThinkingStep({
-      type: "tool_call",
-      toolName: tool.name,
-      data: { query: input.slice(0, 50) },
-      status: "running",
-      timestamp: new Date(),
+  try {
+    const response = await fetch(`${LANGSERVE_URL}/stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        input: { messages: [{ role: "user", content: input }] }
+      }),
     });
 
-    await new Promise(r => setTimeout(r, tool.delay));
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
 
-    // Tool result
-    onThinkingStep({
-      type: "tool_result",
-      toolName: tool.name,
-      data: { result: `Results from ${tool.name}...`, success: true },
-      status: "complete",
-      timestamp: new Date(),
-    });
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let currentContent = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim() || line.startsWith(":")) continue;
+
+        if (line.startsWith("data: ")) {
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+
+          try {
+            const data = JSON.parse(jsonStr);
+
+            // Handle tool events
+            if (data.event === "on_tool_start" || (data.name && data.type === "tool")) {
+              onThinkingStep({
+                type: "tool_call",
+                toolName: data.name || "tool",
+                data: data.data?.input || data.input || {},
+                status: "running",
+                timestamp: new Date(),
+              });
+            } else if (data.event === "on_tool_end") {
+              onThinkingStep({
+                type: "tool_result",
+                toolName: data.name || "tool",
+                data: data.data?.output || data.output || data,
+                status: "complete",
+                timestamp: new Date(),
+              });
+            } else if (data.event === "on_chat_model_stream") {
+              // Streaming tokens
+              const chunk = data.data?.chunk?.content || "";
+              if (chunk) {
+                currentContent += chunk;
+                onContent(currentContent, false);
+              }
+            } else if (data.content !== undefined && typeof data.content === "string") {
+              // Direct content chunk
+              currentContent += data.content;
+              onContent(currentContent, false);
+            } else if (data.output || data.messages) {
+              // Final output format
+              const content = extractFinalContent(data);
+              if (content && content !== currentContent) {
+                currentContent = content;
+                onContent(currentContent, false);
+              }
+            }
+          } catch {
+            // Partial JSON, continue accumulating
+          }
+        } else if (line.startsWith("event: ")) {
+          // SSE event type - can be used for debugging
+          console.debug("SSE event:", line.slice(7));
+        }
+      }
+    }
+
+    // Mark as complete
+    onContent(currentContent || "I've processed your request.", true);
+  } catch (error) {
+    onError(error instanceof Error ? error.message : "Connection failed");
   }
+}
 
-  // Simulate streaming response
-  const response = `Based on my analysis, here's what I found:\n\n1. I searched the web for relevant information about "${input.slice(0, 30)}..."\n2. I analyzed the available documents and extracted key insights.\n3. The content has been processed and synthesized.\n\nWould you like me to dive deeper into any specific aspect?`;
+// Extract final content from various LangServe response formats
+function extractFinalContent(data: Record<string, unknown>): string {
+  if (typeof data.content === "string") return data.content;
   
-  for (const char of response) {
-    onContent(char);
-    await new Promise(r => setTimeout(r, 15));
+  if (data.messages && Array.isArray(data.messages)) {
+    const lastAI = [...data.messages].reverse().find(
+      (m: { type?: string; role?: string }) => m.type === "ai" || m.role === "assistant"
+    );
+    if (lastAI && typeof (lastAI as { content?: unknown }).content === "string") {
+      return (lastAI as { content: string }).content;
+    }
   }
+  
+  if (data.output) {
+    if (typeof data.output === "string") return data.output;
+    const output = data.output as Record<string, unknown>;
+    if (typeof output.content === "string") return output.content;
+    if (output.messages && Array.isArray(output.messages)) {
+      const lastMsg = [...output.messages].reverse().find(
+        (m: { type?: string; role?: string }) => m.type === "ai" || m.role === "assistant"
+      );
+      if (lastMsg && typeof (lastMsg as { content?: unknown }).content === "string") {
+        return (lastMsg as { content: string }).content;
+      }
+    }
+  }
+  
+  return "";
 }
