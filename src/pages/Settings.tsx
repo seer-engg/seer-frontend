@@ -1,21 +1,107 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Settings2, Key, Building, User, Trash2, ExternalLink } from "lucide-react";
+import { Settings2, Key, Building, User, Trash2, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Settings() {
   const { toast } = useToast();
   const { user } = useAuth();
   
   const [orgName, setOrgName] = useState("Demo Organization");
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [hasExistingKey, setHasExistingKey] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      loadProfile();
+    }
+  }, [user]);
+
+  const loadProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("openai_api_key")
+      .eq("id", user.id)
+      .single();
+    
+    if (data?.openai_api_key) {
+      setHasExistingKey(true);
+      setOpenaiKey("sk-••••••••••••••••••••••••");
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!user || !openaiKey.startsWith("sk-")) {
+      toast({
+        title: "Invalid API Key",
+        description: "Please enter a valid OpenAI API key starting with 'sk-'",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ openai_api_key: openaiKey })
+      .eq("id", user.id);
+
+    setIsSaving(false);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save API key. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      setHasExistingKey(true);
+      setOpenaiKey("sk-••••••••••••••••••••••••");
+      setShowApiKey(false);
+      toast({
+        title: "API Key Saved",
+        description: "Your OpenAI API key has been saved successfully.",
+      });
+    }
+  };
+
+  const handleRemoveApiKey = async () => {
+    if (!user) return;
+
+    setIsSaving(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ openai_api_key: null })
+      .eq("id", user.id);
+
+    setIsSaving(false);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to remove API key. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      setHasExistingKey(false);
+      setOpenaiKey("");
+      toast({
+        title: "API Key Removed",
+        description: "Your OpenAI API key has been removed.",
+      });
+    }
+  };
 
   const handleSave = () => {
     toast({
@@ -158,19 +244,70 @@ export default function Settings() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                <div>
-                  <p className="text-sm font-medium">OpenAI</p>
-                  <p className="text-xs text-muted-foreground font-mono">sk-••••••••••••</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">OpenAI</p>
+                      {hasExistingKey && (
+                        <CheckCircle className="h-4 w-4 text-success" />
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {hasExistingKey ? "API key configured" : "Required for unlimited agent queries"}
+                    </p>
+                  </div>
                 </div>
-                <Button variant="outline" size="sm">Update</Button>
+
+                <div className="space-y-2">
+                  <Label htmlFor="openaiKey">API Key</Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        id="openaiKey"
+                        type={showApiKey ? "text" : "password"}
+                        value={openaiKey}
+                        onChange={(e) => setOpenaiKey(e.target.value)}
+                        placeholder="sk-..."
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <Button 
+                      onClick={handleSaveApiKey} 
+                      disabled={isSaving || !openaiKey.startsWith("sk-")}
+                    >
+                      {isSaving ? "Saving..." : "Save"}
+                    </Button>
+                  </div>
+                  {hasExistingKey && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleRemoveApiKey}
+                      className="text-bug hover:text-bug"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Remove API Key
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              <Separator />
+
               <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
                 <div>
                   <p className="text-sm font-medium">Anthropic</p>
                   <p className="text-xs text-muted-foreground">Not configured</p>
                 </div>
-                <Button variant="outline" size="sm">Add</Button>
+                <Button variant="outline" size="sm" disabled>Coming Soon</Button>
               </div>
             </CardContent>
           </Card>
