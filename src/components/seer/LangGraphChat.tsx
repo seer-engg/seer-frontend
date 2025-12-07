@@ -482,18 +482,36 @@ async function streamFromLangServe(
       for (const line of lines) {
         if (!line.trim() || line.startsWith(":")) continue;
 
+        // Log every line for debugging
+        console.log("[LangServe SSE]", line);
+
+        if (line.startsWith("event: ")) {
+          // SSE event type - log it
+          console.log("[LangServe Event Type]", line.slice(7));
+          continue;
+        }
+
         if (line.startsWith("data: ")) {
           const jsonStr = line.slice(6).trim();
           if (jsonStr === "[DONE]") continue;
 
           try {
             const data = JSON.parse(jsonStr);
+            console.log("[LangServe Parsed]", data);
 
-            // Handle tool events
-            if (data.event === "on_tool_start" || (data.name && data.type === "tool")) {
+            // Handle error events from LangServe
+            if (data.status_code || data.error) {
+              console.error("[LangServe Error]", data);
+              onError(data.message || data.error || "Server error");
+              return;
+            }
+
+            // LangGraph streaming format - look for various patterns
+            // Pattern 1: on_tool_start/on_tool_end events
+            if (data.event === "on_tool_start") {
               onThinkingStep({
                 type: "tool_call",
-                toolName: data.name || "tool",
+                toolName: data.name || data.data?.name || "tool",
                 data: data.data?.input || data.input || {},
                 status: "running",
                 timestamp: new Date(),
@@ -501,43 +519,68 @@ async function streamFromLangServe(
             } else if (data.event === "on_tool_end") {
               onThinkingStep({
                 type: "tool_result",
-                toolName: data.name || "tool",
+                toolName: data.name || data.data?.name || "tool",
                 data: data.data?.output || data.output || data,
                 status: "complete",
                 timestamp: new Date(),
               });
-            } else if (data.event === "on_chat_model_stream") {
-              // Streaming tokens
-              const chunk = data.data?.chunk?.content || "";
+            } 
+            // Pattern 2: on_chat_model_stream for token streaming
+            else if (data.event === "on_chat_model_stream") {
+              const chunk = data.data?.chunk?.content || data.data?.chunk?.text || "";
               if (chunk) {
                 currentContent += chunk;
                 onContent(currentContent, false);
               }
-            } else if (data.content !== undefined && typeof data.content === "string") {
-              // Direct content chunk
-              currentContent += data.content;
+            }
+            // Pattern 3: on_chain_stream / on_chain_end with output
+            else if (data.event === "on_chain_stream" || data.event === "on_chain_end") {
+              const output = data.data?.output || data.data?.chunk;
+              if (output) {
+                const content = extractFinalContent(output);
+                if (content) {
+                  currentContent = content;
+                  onContent(currentContent, false);
+                }
+              }
+            }
+            // Pattern 4: Direct content in data
+            else if (data.content !== undefined && typeof data.content === "string") {
+              currentContent = data.content;
               onContent(currentContent, false);
-            } else if (data.output || data.messages) {
-              // Final output format
+            }
+            // Pattern 5: Output wrapper
+            else if (data.output) {
               const content = extractFinalContent(data);
-              if (content && content !== currentContent) {
+              if (content) {
                 currentContent = content;
                 onContent(currentContent, false);
               }
             }
-          } catch {
-            // Partial JSON, continue accumulating
+            // Pattern 6: Messages array directly
+            else if (data.messages && Array.isArray(data.messages)) {
+              const content = extractFinalContent(data);
+              if (content) {
+                currentContent = content;
+                onContent(currentContent, false);
+              }
+            }
+          } catch (e) {
+            console.warn("[LangServe Parse Error]", e, "Raw:", jsonStr);
           }
-        } else if (line.startsWith("event: ")) {
-          // SSE event type - can be used for debugging
-          console.debug("SSE event:", line.slice(7));
         }
       }
     }
 
-    // Mark as complete
-    onContent(currentContent || "I've processed your request.", true);
+    // Mark as complete - log what we got
+    console.log("[LangServe Complete] Final content:", currentContent);
+    if (currentContent) {
+      onContent(currentContent, true);
+    } else {
+      onContent("No response content received. Check console for SSE data.", true);
+    }
   } catch (error) {
+    console.error("[LangServe Error]", error);
     onError(error instanceof Error ? error.message : "Connection failed");
   }
 }
