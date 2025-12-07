@@ -22,7 +22,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 
 // LangServe endpoint
-const LANGSERVE_URL = "https://my-railway-app.up.railway.app/supervisor";
+const LANGSERVE_URL = "https://supervisor-production-afd7.up.railway.app";
 
 interface Message {
   id: string;
@@ -434,7 +434,7 @@ async function streamFromLangServe(
   onError: (error: string) => void
 ): Promise<void> {
   try {
-    const response = await fetch(`${LANGSERVE_URL}/stream`, {
+    const response = await fetch(`${LANGSERVE_URL}/agent/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
