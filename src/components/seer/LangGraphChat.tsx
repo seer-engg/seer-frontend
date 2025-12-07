@@ -440,7 +440,25 @@ async function streamFromLangServe(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        input: { messages: [{ role: "user", content: input }] }
+        input: {
+          // FIX 1: Use 'type: human' instead of 'role: user'
+          messages: [
+            { 
+              type: "human", 
+              content: input 
+            }
+          ],
+          // FIX 2: Initialize required state fields
+          // Your SupervisorState (agents/state.py) defines 'todos' as required
+          todos: [], 
+          tool_call_counts: { _total: 0 }
+        },
+        // Optional: Add configuration if needed
+        config: {
+          configurable: {
+            thread_id: messageId // Use conversation ID as thread_id
+          }
+        }
       }),
     });
 
