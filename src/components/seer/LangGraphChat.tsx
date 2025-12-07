@@ -13,13 +13,16 @@ import {
   FileText,
   Zap,
   CheckCircle,
-  Clock
+  Clock,
+  Key
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
+import { useUsageGate } from "@/hooks/useUsageGate";
+import { UsageGateModal } from "@/components/UsageGateModal";
 
 // LangServe endpoint
 // Use localhost for local development, Railway URL for production
@@ -243,8 +246,10 @@ export default function LangGraphChat() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
+  const [showGateModal, setShowGateModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { canQuery, hasApiKey, remainingFreeQueries, incrementQueryCount, isLoading: usageLoading } = useUsageGate();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -257,6 +262,12 @@ export default function LangGraphChat() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+
+    // Check usage gate
+    if (!canQuery) {
+      setShowGateModal(true);
+      return;
+    }
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -318,6 +329,10 @@ export default function LangGraphChat() {
       );
     } finally {
       setIsLoading(false);
+      // Increment query count after successful query (only if no API key)
+      if (!hasApiKey) {
+        await incrementQueryCount();
+      }
     }
   };
 
@@ -341,7 +356,26 @@ export default function LangGraphChat() {
             <p className="text-xs text-muted-foreground">LangGraph Agent • Ready</p>
           </div>
         </div>
+        
+        {/* Usage indicator */}
+        {!usageLoading && (
+          <div className="flex items-center gap-2">
+            {hasApiKey ? (
+              <Badge variant="outline" className="text-success border-success/30 bg-success/10">
+                <Key className="h-3 w-3 mr-1" />
+                API Key Active
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
+                {remainingFreeQueries} free {remainingFreeQueries === 1 ? 'query' : 'queries'} left
+              </Badge>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Usage Gate Modal */}
+      <UsageGateModal open={showGateModal} onOpenChange={setShowGateModal} />
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
