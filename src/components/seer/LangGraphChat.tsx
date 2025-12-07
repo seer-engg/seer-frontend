@@ -24,9 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { useUsageGate } from "@/hooks/useUsageGate";
 import { UsageGateModal } from "@/components/UsageGateModal";
 
-// LangServe endpoint
-// Use localhost for local development, Railway URL for production
-const LANGSERVE_URL = import.meta.env.VITE_LANGSERVE_URL || "http://localhost:8000";
+// LangServe endpoint - Railway production URL
+const LANGSERVE_URL = "https://supervisor-production-afd7.up.railway.app";
 
 interface Message {
   id: string;
