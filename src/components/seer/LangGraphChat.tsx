@@ -22,7 +22,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 
 // LangServe endpoint
-const LANGSERVE_URL = "https://supervisor-production-afd7.up.railway.app";
+// Use localhost for local development, Railway URL for production
+const LANGSERVE_URL = import.meta.env.VITE_LANGSERVE_URL || "http://localhost:8000";
 
 interface Message {
   id: string;
@@ -498,6 +499,29 @@ async function streamFromLangServe(
           try {
             const data = JSON.parse(jsonStr);
             console.log("[LangServe Parsed]", data);
+            
+            // LangGraph sends node updates as { "node_name": { state } }
+            // Check if this is a node update format
+            const nodeNames = Object.keys(data).filter(key => 
+              key !== "event" && 
+              key !== "data" && 
+              typeof data[key] === "object" && 
+              data[key] !== null
+            );
+            
+            if (nodeNames.length > 0) {
+              // This is a LangGraph node update - extract content from each node
+              for (const nodeName of nodeNames) {
+                const nodeState = data[nodeName];
+                const content = extractFinalContent(nodeState as Record<string, unknown>);
+                if (content) {
+                  currentContent = content;
+                  onContent(currentContent, false);
+                  console.log(`[LangGraph Node: ${nodeName}] Extracted content:`, content.substring(0, 100));
+                }
+              }
+              continue; // Skip other pattern matching for node updates
+            }
 
             // Handle error events from LangServe
             if (data.status_code || data.error) {
@@ -535,9 +559,21 @@ async function streamFromLangServe(
             }
             // Pattern 3: on_chain_stream / on_chain_end with output
             else if (data.event === "on_chain_stream" || data.event === "on_chain_end") {
-              const output = data.data?.output || data.data?.chunk;
+              const output = data.data?.output || data.data?.chunk || data.output;
               if (output) {
                 const content = extractFinalContent(output);
+                if (content) {
+                  currentContent = content;
+                  onContent(currentContent, false);
+                }
+              }
+            }
+            // Pattern 3b: LangGraph state updates - check for messages in state
+            else if (data.event === "on_chain_end" && data.data) {
+              // LangGraph might send the final state directly
+              const state = data.data.output || data.data;
+              if (state && typeof state === 'object') {
+                const content = extractFinalContent(state);
                 if (content) {
                   currentContent = content;
                   onContent(currentContent, false);
@@ -565,6 +601,23 @@ async function streamFromLangServe(
                 onContent(currentContent, false);
               }
             }
+            // Pattern 7: LangGraph state format - check for supervisor node output
+            else if (data.supervisor && data.supervisor.messages) {
+              const content = extractFinalContent(data.supervisor);
+              if (content) {
+                currentContent = content;
+                onContent(currentContent, false);
+              }
+            }
+            // Pattern 8: Any object with messages property (nested)
+            else if (typeof data === 'object' && data !== null) {
+              // Try to find messages anywhere in the object
+              const content = extractFinalContent(data);
+              if (content && content !== currentContent) {
+                currentContent = content;
+                onContent(currentContent, false);
+              }
+            }
           } catch (e) {
             console.warn("[LangServe Parse Error]", e, "Raw:", jsonStr);
           }
@@ -573,10 +626,14 @@ async function streamFromLangServe(
     }
 
     // Mark as complete - log what we got
-    console.log("[LangServe Complete] Final content:", currentContent);
-    if (currentContent) {
+    console.log("[LangServe Complete] Final content length:", currentContent.length);
+    console.log("[LangServe Complete] Final content preview:", currentContent.substring(0, 200));
+    
+    if (currentContent.trim()) {
       onContent(currentContent, true);
     } else {
+      // Last attempt: check if we missed any content in the buffer
+      console.warn("[LangServe] No content extracted. Check browser console for '[LangServe Parsed]' logs to debug.");
       onContent("No response content received. Check console for SSE data.", true);
     }
   } catch (error) {
@@ -587,21 +644,37 @@ async function streamFromLangServe(
 
 // Extract final content from various LangServe response formats
 function extractFinalContent(data: Record<string, unknown>): string {
-  if (typeof data.content === "string") return data.content;
+  if (typeof data.content === "string" && data.content.trim()) {
+    return data.content;
+  }
   
   if (data.messages && Array.isArray(data.messages)) {
     const lastAI = [...data.messages].reverse().find(
       (m: { type?: string; role?: string }) => m.type === "ai" || m.role === "assistant"
     );
-    if (lastAI && typeof (lastAI as { content?: unknown }).content === "string") {
-      return (lastAI as { content: string }).content;
+    if (lastAI) {
+      const content = (lastAI as { content?: unknown }).content;
+      if (typeof content === "string" && content.trim()) {
+        return content;
+      }
+      // Also check for nested content
+      if (typeof content === "object" && content !== null) {
+        const nestedContent = extractFinalContent(content as Record<string, unknown>);
+        if (nestedContent) {
+          return nestedContent;
+        }
+      }
     }
   }
   
   if (data.output) {
-    if (typeof data.output === "string") return data.output;
+    if (typeof data.output === "string") {
+      return data.output;
+    }
     const output = data.output as Record<string, unknown>;
-    if (typeof output.content === "string") return output.content;
+    if (typeof output.content === "string") {
+      return output.content;
+    }
     if (output.messages && Array.isArray(output.messages)) {
       const lastMsg = [...output.messages].reverse().find(
         (m: { type?: string; role?: string }) => m.type === "ai" || m.role === "assistant"
