@@ -1,6 +1,7 @@
 import { EvalsChat } from "@/components/seer/EvalsChat";
-import { Sparkles } from "lucide-react";
+import { GithubRepoConnect } from "@/components/seer/GithubRepoConnect";
 import { AgentConfig } from "@/lib/agents/types";
+import { Sparkles } from "lucide-react";
 
 // Use production URL in deployed environment, localhost for local dev
 const EVALS_URL = import.meta.env.PROD 
@@ -37,8 +38,11 @@ export default function Evals() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <EvalsChat config={evalsConfig} />
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <GithubRepoConnect />
+        <div className="flex-1 overflow-hidden">
+          <EvalsChat config={evalsConfig} />
+        </div>
       </div>
     </div>
   );
