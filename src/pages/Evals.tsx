@@ -2,8 +2,10 @@ import { EvalsChat } from "@/components/seer/EvalsChat";
 import { Sparkles } from "lucide-react";
 import { AgentConfig } from "@/lib/agents/types";
 
-// TODO: Replace with actual deployed URL
-const EVALS_URL = import.meta.env.VITE_EVALS_URL || "http://localhost:8000";
+// Use production URL in deployed environment, localhost for local dev
+const EVALS_URL = import.meta.env.PROD 
+  ? "https://seer-production.up.railway.app" 
+  : "http://localhost:8000";
 
 const evalsConfig: AgentConfig = {
   name: "Evals",
