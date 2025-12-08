@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-const FREE_QUERY_LIMIT = 3;
+const FREE_QUERY_LIMIT = 1000;
 
 interface UsageGate {
   hasApiKey: boolean;

@@ -225,7 +225,7 @@ function VerificationView({ data }: { data: any }) {
 
       {/* Seer Verification */}
       <div className="space-y-2">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Seer Eval Agent</h3>
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Seer Evals</h3>
         <div className={cn(
           "p-4 rounded-lg border",
           data.seerResult.verified ? "bg-success/10 border-success/30" : "bg-bug/10 border-bug/30"

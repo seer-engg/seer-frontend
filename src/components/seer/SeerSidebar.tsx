@@ -8,7 +8,6 @@ import {
   Activity,
   Package,
   Settings,
-  BookOpen,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -27,15 +26,14 @@ import {
 
 const primaryNav = [
   { name: "Projects", href: "/dashboard", icon: FolderKanban },
-  { name: "Rube", href: "/rube", icon: Zap },
-  { name: "Eval Agent", href: "/eval", icon: Sparkles },
+  { name: "Tool Orchestrator", href: "/tool-orchestrator", icon: Zap },
+  { name: "Evals", href: "/eval", icon: Sparkles },
   { name: "Trace Analyzer", href: "/trace", icon: Activity },
   { name: "Tool Hub", href: "/tools", icon: Package },
 ];
 
 const secondaryNav = [
   { name: "Settings", href: "/settings", icon: Settings },
-  { name: "Docs", href: "/docs", icon: BookOpen },
 ];
 
 export function SeerSidebar() {

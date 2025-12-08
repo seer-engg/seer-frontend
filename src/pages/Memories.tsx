@@ -17,7 +17,7 @@ interface Memory {
 const mockMemories: Memory[] = [
   {
     id: "1",
-    agentName: "Eval Agent",
+    agentName: "Evals",
     dataset: "payment-service-tests",
     hypothesis: "Tests fail when concurrency > 10 due to race condition in transaction handler",
     score: 85,
@@ -25,7 +25,7 @@ const mockMemories: Memory[] = [
   },
   {
     id: "2",
-    agentName: "Eval Agent",
+    agentName: "Evals",
     dataset: "auth-api-integration",
     hypothesis: "Token refresh logic needs exponential backoff for reliability",
     score: 92,
@@ -41,7 +41,7 @@ const mockMemories: Memory[] = [
   },
   {
     id: "4",
-    agentName: "Eval Agent",
+    agentName: "Evals",
     dataset: "user-service-load",
     hypothesis: "Database connection pool exhaustion occurs at 500+ concurrent users",
     score: 88,

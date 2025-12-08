@@ -249,6 +249,64 @@ export function AgentChat({
     scrollToBottom();
   }, [messages, thinkingSteps]);
 
+  // Auto-submit if initialMessages contains a user message without a response
+  useEffect(() => {
+    if (initialMessages.length > 0 && messages.length === initialMessages.length) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.role === "user") {
+        // Check if there's no assistant response yet
+        const hasAssistantResponse = messages.some(m => m.role === "assistant");
+        if (!hasAssistantResponse && !isLoading) {
+          // Auto-submit the user message
+          const userMessage = lastMessage;
+          const assistantMessage: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "",
+            isStreaming: true,
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+
+          const threadId = crypto.randomUUID();
+          streamMessage(
+            userMessage.content,
+            threadId,
+            (content, isDone) => {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessage.id
+                    ? { ...m, content, isStreaming: !isDone }
+                    : m
+                )
+              );
+            },
+            undefined,
+            (error) => {
+              console.error("Agent stream error:", error);
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessage.id
+                    ? { ...m, content: `Error: ${error}`, isStreaming: false }
+                    : m
+                )
+              );
+            }
+          ).catch((error) => {
+            console.error("Error streaming from agent:", error);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMessage.id
+                  ? { ...m, content: "Sorry, I encountered an error. Please try again.", isStreaming: false }
+                  : m
+              )
+            );
+          });
+        }
+      }
+    }
+  }, [initialMessages, messages, isLoading, streamMessage]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;

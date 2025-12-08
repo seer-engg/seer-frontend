@@ -21,7 +21,7 @@ const mockProjects: Project[] = [
     repository: "github.com/demo/payment-service",
     status: "active",
     lastActivity: "2 hours ago",
-    agents: ["Eval Agent", "Codex"],
+    agents: ["Evals", "Codex"],
   },
   {
     id: "2",
@@ -29,7 +29,7 @@ const mockProjects: Project[] = [
     repository: "github.com/demo/auth-api",
     status: "active",
     lastActivity: "5 hours ago",
-    agents: ["Eval Agent"],
+    agents: ["Evals"],
   },
 ];
 

@@ -1,13 +1,13 @@
-import { EvalAgentChat } from "@/components/seer/EvalAgentChat";
+import { EvalsChat } from "@/components/seer/EvalsChat";
 import { Sparkles } from "lucide-react";
 import { AgentConfig } from "@/lib/agents/types";
 
 // TODO: Replace with actual deployed URL
-const EVAL_AGENT_URL = import.meta.env.VITE_EVAL_AGENT_URL || "http://localhost:8000";
+const EVALS_URL = import.meta.env.VITE_EVALS_URL || "http://localhost:8000";
 
-const evalAgentConfig: AgentConfig = {
-  name: "Eval Agent",
-  url: EVAL_AGENT_URL,
+const evalsConfig: AgentConfig = {
+  name: "Evals",
+  url: EVALS_URL,
   icon: Sparkles,
   description: "Generate test plans and align agent specifications",
   features: {
@@ -16,11 +16,11 @@ const evalAgentConfig: AgentConfig = {
     thinkingSteps: true,
   },
   initialState: {
-    // Eval agent doesn't need initial state like Supervisor's todos
+    // Evals doesn't need initial state like Supervisor's todos
   },
 };
 
-export default function EvalAgent() {
+export default function Evals() {
   return (
     <div className="h-screen flex flex-col">
       <div className="border-b border-border/50 bg-card/50 backdrop-blur-sm px-8 py-6">
@@ -29,14 +29,14 @@ export default function EvalAgent() {
             <Sparkles className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Eval Agent</h1>
+            <h1 className="text-2xl font-bold text-foreground">Evals</h1>
             <p className="text-sm text-muted-foreground">Generate test plans with user alignment</p>
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <EvalAgentChat config={evalAgentConfig} />
+        <EvalsChat config={evalsConfig} />
       </div>
     </div>
   );

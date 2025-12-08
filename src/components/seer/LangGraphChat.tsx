@@ -14,7 +14,8 @@ import {
   Zap,
   CheckCircle,
   Clock,
-  Key
+  Key,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -351,7 +352,7 @@ export default function LangGraphChat() {
             <Zap className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">Rube</h1>
+            <h1 className="text-lg font-semibold">Tool Orchestrator</h1>
             <p className="text-xs text-muted-foreground">LangGraph Agent • Ready</p>
           </div>
         </div>
@@ -379,30 +380,113 @@ export default function LangGraphChat() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-seer/20 to-indigo-500/20 flex items-center justify-center mb-4">
-              <Zap className="h-8 w-8 text-seer" />
-            </div>
-            <h2 className="text-xl font-semibold mb-2">Quick Tasks, Instant Results</h2>
-            <p className="text-muted-foreground max-w-md">
-              Ask me anything. I'll show you my thought process as I work through it.
-            </p>
-            <div className="mt-6 grid grid-cols-2 gap-2 max-w-lg">
-              {[
-                "Summarize my last 5 emails",
-                "Find all open PRs on my repo",
-                "Create a task in Asana",
-                "Search for recent news on AI"
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => setInput(suggestion)}
-                  className="text-left px-4 py-3 rounded-lg bg-secondary/50 hover:bg-secondary text-sm transition-colors"
+          <div className="h-full flex flex-col items-center justify-center text-center p-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="max-w-2xl mx-auto space-y-8"
+            >
+              <div className="relative">
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.2, duration: 0.5 }}
+                  className="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-br from-seer via-indigo-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-seer/20"
                 >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
+                  <Zap className="h-12 w-12 text-white" />
+                </motion.div>
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.4, type: "spring", stiffness: 200 }}
+                  className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg"
+                >
+                  <Sparkles className="h-4 w-4 text-white" />
+                </motion.div>
+              </div>
+
+              <div className="space-y-4">
+                <motion.h2
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-3xl font-bold bg-gradient-to-r from-foreground via-seer to-indigo-500 bg-clip-text text-transparent"
+                >
+                  Connect Your Accounts
+                </motion.h2>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-lg text-muted-foreground"
+                >
+                  Coming soon: Connect your Google, Asana, and Microsoft accounts
+                </motion.p>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  className="text-sm text-muted-foreground/80 max-w-md mx-auto"
+                >
+                  We're building seamless integrations to connect your favorite tools. For now, you're using sandboxed accounts to explore the platform.
+                </motion.p>
+              </div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8"
+              >
+                {[
+                  { name: "Google", icon: "🔵", status: "Sandboxed" },
+                  { name: "Asana", icon: "🟣", status: "Sandboxed" },
+                  { name: "Microsoft", icon: "🔷", status: "Sandboxed" },
+                ].map((account, index) => (
+                  <motion.div
+                    key={account.name}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.7 + index * 0.1 }}
+                    className="p-4 rounded-xl border-2 border-dashed border-border/50 bg-card/50 backdrop-blur-sm"
+                  >
+                    <div className="text-2xl mb-2">{account.icon}</div>
+                    <div className="font-semibold text-sm mb-1">{account.name}</div>
+                    <div className="text-xs text-muted-foreground">{account.status}</div>
+                  </motion.div>
+                ))}
+              </motion.div>
+
+              {/* Preloaded Questions */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.0 }}
+                className="mt-8 space-y-3"
+              >
+                <p className="text-sm font-medium text-muted-foreground">Try asking:</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-2xl mx-auto">
+                  {[
+                    "Summarize my last 5 emails",
+                    "Find all open PRs on my repo",
+                    "Create a task in Asana",
+                    "Search for recent news on AI"
+                  ].map((suggestion, index) => (
+                    <motion.button
+                      key={suggestion}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 1.1 + index * 0.1 }}
+                      onClick={() => setInput(suggestion)}
+                      className="text-left px-4 py-3 rounded-lg bg-secondary/50 hover:bg-secondary border border-border/50 hover:border-seer/50 text-sm transition-all duration-200 hover:shadow-md"
+                    >
+                      {suggestion}
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            </motion.div>
           </div>
         ) : (
           <>

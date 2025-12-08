@@ -237,7 +237,7 @@ export function VerificationCard({
             "p-3 rounded-lg border",
             passed ? "bg-success/10 border-success/20" : "bg-bug/10 border-bug/20"
           )}>
-            <p className="text-xs text-muted-foreground mb-1">Seer Eval Agent</p>
+            <p className="text-xs text-muted-foreground mb-1">Seer Evals</p>
             <p className={cn(
               "text-sm font-mono",
               passed ? "text-success" : "text-bug"

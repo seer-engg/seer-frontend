@@ -16,15 +16,15 @@ const Console = () => {
 
   const executionSteps = ["plan", "execute", "assert", "reflect"];
   const mockLogs = [
-    "[Eval Agent] ▶️  Starting container environment...",
-    "[Eval Agent] 📦 Installing dependencies...",
-    "[Eval Agent] 🧪 Running test suite...",
+    "[Evals] ▶️  Starting container environment...",
+    "[Evals] 📦 Installing dependencies...",
+    "[Evals] 🧪 Running test suite...",
     "[Codex] 🔄 Analyzing test failures...",
     "[Codex] ✍️  Generating code improvements...",
-    "[Eval Agent] 🔍 Validating changes...",
+    "[Evals] 🔍 Validating changes...",
     "[Codex] 📝 Creating pull request...",
-    "[Eval Agent] ✅ Test pass rate: 92%",
-    "[Eval Agent] 💾 Storing reflection in memory...",
+    "[Evals] ✅ Test pass rate: 92%",
+    "[Evals] 💾 Storing reflection in memory...",
   ];
 
   useEffect(() => {

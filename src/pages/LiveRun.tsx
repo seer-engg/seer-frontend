@@ -22,7 +22,7 @@ const runSteps = [
   { type: "thinking", content: "PR is open and task exists. Moving task to 'In Review'..." },
   { type: "action", content: "Calling asana_update_task(45, status='In Review')..." },
   { type: "success", content: "✓ Task #45 moved to 'In Review'" },
-  { type: "verify", content: "Verifying state change with Seer Eval Agent..." },
+  { type: "verify", content: "Verifying state change with Seer Evals..." },
   { type: "verification-result", content: "", isVerification: true },
 ];
 

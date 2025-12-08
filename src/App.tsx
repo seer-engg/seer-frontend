@@ -10,12 +10,11 @@ import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import NewProject from "./pages/NewProject";
 import LiveRun from "./pages/LiveRun";
-import Rube from "./pages/Rube";
+import ToolOrchestrator from "./pages/ToolOrchestrator";
 import TraceAnalyzer from "./pages/TraceAnalyzer";
 import ToolHub from "./pages/ToolHub";
 import Settings from "./pages/Settings";
-import Docs from "./pages/Docs";
-import EvalAgent from "./pages/EvalAgent";
+import Evals from "./pages/Evals";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
@@ -74,11 +73,11 @@ const App = () => (
                 }
               />
               <Route
-                path="/rube"
+                path="/tool-orchestrator"
                 element={
                   <ProtectedRoute>
                     <SeerLayout>
-                      <Rube />
+                      <ToolOrchestrator />
                     </SeerLayout>
                   </ProtectedRoute>
                 }
@@ -114,21 +113,11 @@ const App = () => (
                 }
               />
               <Route
-                path="/docs"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <Docs />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/eval"
                 element={
                   <ProtectedRoute>
                     <SeerLayout>
-                      <EvalAgent />
+                      <Evals />
                     </SeerLayout>
                   </ProtectedRoute>
                 }
