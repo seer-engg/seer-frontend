@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
-import { useAgentStream, ThinkingStep } from "@/lib/agents/useAgentStream";
+import { streamAgent, ThinkingStep, extractContentFromState, extractThinkingSteps, flattenNodeUpdates, createThread } from "@/lib/agents/langgraphClient";
 import { AgentConfig } from "@/lib/agents/types";
 
 interface Message {
@@ -128,12 +128,31 @@ function ThinkingProcess({
                             : "returned"}
                         </span>
                       </div>
-                      {(step.type === "tool_result" || step.type === "thinking") && (
-                        <pre className="mt-1 text-xs text-muted-foreground font-mono bg-muted/30 p-2 rounded overflow-x-auto max-h-32">
+                      {(step.type === "tool_result" || step.type === "thinking") && step.data && (
+                        <div className="mt-1 text-xs text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">
+                          {step.type === "thinking" ? (
+                            <div className="whitespace-pre-wrap max-h-96 overflow-y-auto">
+                              {typeof step.data === "string" 
+                                ? step.data
+                                : JSON.stringify(step.data, null, 2)
+                              }
+                            </div>
+                          ) : (
+                            <pre className="max-h-48 overflow-y-auto">
                           {typeof step.data === "string"
-                            ? step.data.slice(0, 500) + (step.data.length > 500 ? "..." : "")
-                            : JSON.stringify(step.data, null, 2).slice(0, 500)}
+                                ? step.data
+                                : JSON.stringify(step.data, null, 2)
+                              }
+                            </pre>
+                          )}
+                        </div>
+                      )}
+                      {step.type === "tool_call" && step.data && typeof step.data === "object" && Object.keys(step.data).length > 0 && (
+                        <div className="mt-1 text-xs text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">
+                          <pre className="max-h-24 overflow-y-auto">
+                            {JSON.stringify(step.data, null, 2)}
                         </pre>
+                        </div>
                       )}
                     </div>
                   </motion.div>
@@ -222,6 +241,7 @@ interface AgentChatProps {
   initialMessages?: Message[];
   placeholder?: string;
   emptyState?: React.ReactNode;
+  autoSubmitText?: string; // Text to automatically submit on mount
 }
 
 export function AgentChat({
@@ -230,16 +250,29 @@ export function AgentChat({
   initialMessages = [],
   placeholder = "Ask me anything...",
   emptyState,
+  autoSubmitText,
 }: AgentChatProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+  const [hasAutoSubmitted, setHasAutoSubmitted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { streamMessage, isLoading, thinkingSteps, clearThinkingSteps } = useAgentStream({
-    url: config.url,
-    initialState: config.initialState,
-  });
+  // Extract agent ID from URL
+  // Port 8000 = supervisor, Port 8002 = eval_agent
+  const getAgentId = (): string => {
+    if (config.url.includes("8002") || config.url.includes("eval")) {
+      return "eval_agent";
+    }
+    if (config.url.includes("8000") || config.url.includes("supervisor")) {
+      return "supervisor";
+    }
+    // Default fallback to supervisor
+    return "supervisor";
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -249,16 +282,43 @@ export function AgentChat({
     scrollToBottom();
   }, [messages, thinkingSteps]);
 
-  // Auto-submit if initialMessages contains a user message without a response
+  // Auto-submit if autoSubmitText is provided
   useEffect(() => {
-    if (initialMessages.length > 0 && messages.length === initialMessages.length) {
+    if (autoSubmitText && !hasAutoSubmitted && !isLoading) {
+      setHasAutoSubmitted(true);
+      handleAutoSubmit(autoSubmitText);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSubmitText, hasAutoSubmitted, isLoading]);
+
+  // Auto-submit if initialMessages contains a user message without a response (fallback)
+  useEffect(() => {
+    if (initialMessages.length > 0 && messages.length === initialMessages.length && !autoSubmitText) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage && lastMessage.role === "user") {
         // Check if there's no assistant response yet
         const hasAssistantResponse = messages.some(m => m.role === "assistant");
         if (!hasAssistantResponse && !isLoading) {
           // Auto-submit the user message
-          const userMessage = lastMessage;
+          handleAutoSubmit(lastMessage.content);
+        }
+      }
+    }
+  }, [initialMessages, messages, isLoading, autoSubmitText]);
+
+  const handleAutoSubmit = async (userContent: string) => {
+    if (!userContent.trim() || isLoading) return;
+
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: userContent.trim(),
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setThinkingSteps([]);
+
           const assistantMessage: Message = {
             id: crypto.randomUUID(),
             role: "assistant",
@@ -268,44 +328,124 @@ export function AgentChat({
           };
           setMessages((prev) => [...prev, assistantMessage]);
 
-          const threadId = crypto.randomUUID();
-          streamMessage(
-            userMessage.content,
-            threadId,
-            (content, isDone) => {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMessage.id
-                    ? { ...m, content, isStreaming: !isDone }
-                    : m
-                )
-              );
-            },
-            undefined,
-            (error) => {
-              console.error("Agent stream error:", error);
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMessage.id
-                    ? { ...m, content: `Error: ${error}`, isStreaming: false }
-                    : m
-                )
-              );
+    await streamToAgent(userMessage.content, assistantMessage.id);
+  };
+
+  const streamToAgent = async (userContent: string, assistantMessageId: string) => {
+    setIsLoading(true);
+    setThinkingSteps([]);
+
+    try {
+      // Get or create thread ID
+      let threadId = currentThreadId;
+      if (!threadId) {
+        // Ensure we create a thread on the backend first
+        threadId = await createThread(config.url);
+        setCurrentThreadId(threadId);
+      }
+
+      const agentId = getAgentId();
+      let currentContent = "";
+      let hasReceivedContent = false;
+
+      for await (const event of streamAgent(
+        config.url,
+        agentId,
+        userContent,
+        threadId,
+        config.initialState
+      )) {
+        const eventData = event.data as Record<string, unknown> | null;
+        
+        // Handle events stream mode - extract content from on_chat_model_stream
+        if (event.event === "events" && eventData) {
+          const eventType = eventData.event as string;
+          
+          // Extract content from chat model stream events (real-time token streaming)
+          if (eventType === "on_chat_model_stream") {
+            const data = eventData.data as Record<string, unknown> | undefined;
+            const chunk = data?.chunk as Record<string, unknown> | undefined;
+            if (chunk && typeof chunk === "object" && "content" in chunk) {
+              const contentChunk = chunk.content as string;
+              if (contentChunk && typeof contentChunk === "string") {
+                currentContent += contentChunk;
+                hasReceivedContent = true;
+                setMessages(prev => 
+                  prev.map(m => 
+                    m.id === assistantMessageId 
+                      ? { ...m, content: currentContent, isStreaming: true }
+                      : m
+                  )
+                );
+              }
             }
-          ).catch((error) => {
-            console.error("Error streaming from agent:", error);
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessage.id
-                  ? { ...m, content: "Sorry, I encountered an error. Please try again.", isStreaming: false }
+          }
+          
+          // Also check on_chain_end for final content if we haven't received streamed content
+          if (eventType === "on_chain_end" && !hasReceivedContent) {
+            const data = eventData.data as Record<string, unknown> | undefined;
+            const output = data?.output as Record<string, unknown> | undefined;
+            if (output && typeof output === "object" && "messages" in output) {
+              // Try to extract content from messages
+              const messages = output.messages as Array<Record<string, unknown>> | undefined;
+              if (Array.isArray(messages) && messages.length > 0) {
+                const lastMessage = messages[messages.length - 1];
+                if (lastMessage && "content" in lastMessage && typeof lastMessage.content === "string") {
+                  currentContent = lastMessage.content;
+                  hasReceivedContent = true;
+                  setMessages(prev => 
+                    prev.map(m => 
+                      m.id === assistantMessageId 
+                        ? { ...m, content: currentContent, isStreaming: true }
+                        : m
+                    )
+                  );
+                }
+              }
+            }
+          }
+        } else if (event.event === "end") {
+          // Finalize streaming
+          setMessages(prev => 
+            prev.map(m => 
+              m.id === assistantMessageId 
+                ? { ...m, content: currentContent || "No response generated", isStreaming: false }
+                : m
+            )
+          );
+          setIsLoading(false);
+          
+          const finalMessage = messages.find((m) => m.id === assistantMessageId);
+          if (finalMessage) {
+            onMessage?.(finalMessage);
+          }
+          break;
+        } else if (event.event === "error") {
+          const errorData = event.data as { message?: string } | string;
+          const errorMessage = typeof errorData === "string" ? errorData : errorData?.message || "Unknown error";
+          console.error("Agent stream error:", errorMessage);
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === assistantMessageId
+                ? { ...m, content: `Error: ${errorMessage}`, isStreaming: false }
                   : m
               )
             );
-          });
+          setIsLoading(false);
         }
       }
+    } catch (error) {
+      console.error("Error streaming from agent:", error);
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === assistantMessageId
+            ? { ...m, content: "Sorry, I encountered an error. Please try again.", isStreaming: false }
+            : m
+        )
+      );
+      setIsLoading(false);
     }
-  }, [initialMessages, messages, isLoading, streamMessage]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -320,7 +460,7 @@ export function AgentChat({
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    clearThinkingSteps();
+    setThinkingSteps([]);
 
     const assistantMessage: Message = {
       id: crypto.randomUUID(),
@@ -331,47 +471,7 @@ export function AgentChat({
     };
     setMessages((prev) => [...prev, assistantMessage]);
 
-    try {
-      const threadId = crypto.randomUUID();
-      await streamMessage(
-        userMessage.content,
-        threadId,
-        (content, isDone) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessage.id
-                ? { ...m, content, isStreaming: !isDone }
-                : m
-            )
-          );
-        },
-        undefined,
-        (error) => {
-          console.error("Agent stream error:", error);
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessage.id
-                ? { ...m, content: `Error: ${error}`, isStreaming: false }
-                : m
-            )
-          );
-        }
-      );
-
-      const finalMessage = messages.find((m) => m.id === assistantMessage.id);
-      if (finalMessage) {
-        onMessage?.(finalMessage);
-      }
-    } catch (error) {
-      console.error("Error streaming from agent:", error);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMessage.id
-            ? { ...m, content: "Sorry, I encountered an error. Please try again.", isStreaming: false }
-            : m
-        )
-      );
-    }
+    await streamToAgent(userMessage.content, assistantMessage.id);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

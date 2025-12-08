@@ -13,7 +13,6 @@ import {
   FileText,
   Zap,
   CheckCircle,
-  Clock,
   Key,
   Sparkles
 } from "lucide-react";
@@ -24,9 +23,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 import { useUsageGate } from "@/hooks/useUsageGate";
 import { UsageGateModal } from "@/components/UsageGateModal";
-
-// LangServe endpoint - Railway production URL
-const LANGSERVE_URL = "https://supervisor-production-afd7.up.railway.app";
+import {
+  streamAgent,
+  extractContentFromState,
+  extractThinkingSteps,
+  flattenNodeUpdates,
+  createThread,
+  type ThinkingStep as LangGraphThinkingStep,
+} from "@/lib/agents/langgraphClient";
 
 interface Message {
   id: string;
@@ -52,7 +56,7 @@ interface ToolResult {
 }
 
 interface ThinkingStep {
-  type: "tool_call" | "tool_result";
+  type: "tool_call" | "tool_result" | "thinking";
   toolName: string;
   data: unknown;
   status: "pending" | "running" | "complete" | "error";
@@ -144,19 +148,37 @@ function ThinkingProcess({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-mono text-seer">
-                          {step.toolName}
+                          {step.type === "thinking" ? "💭 thinking" : step.toolName}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {step.type === "tool_call" ? "called" : "returned"}
+                          {step.type === "tool_call" ? "called" : step.type === "thinking" ? "scratchpad" : "returned"}
                         </span>
                       </div>
-                      {step.type === "tool_result" && (
-                        <pre className="mt-1 text-xs text-muted-foreground font-mono bg-muted/30 p-2 rounded overflow-x-auto max-h-24">
+                      {(step.type === "tool_result" || step.type === "thinking") && step.data && (
+                        <div className="mt-1 text-xs text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">
+                          {step.type === "thinking" ? (
+                            <div className="whitespace-pre-wrap max-h-96 overflow-y-auto">
+                              {typeof step.data === "string" 
+                                ? step.data
+                                : JSON.stringify(step.data, null, 2)
+                              }
+                            </div>
+                          ) : (
+                            <pre className="max-h-48 overflow-y-auto">
                           {typeof step.data === "string" 
-                            ? step.data.slice(0, 200) + (step.data.length > 200 ? "..." : "")
-                            : JSON.stringify(step.data, null, 2).slice(0, 200)
+                                ? step.data
+                                : JSON.stringify(step.data, null, 2)
                           }
                         </pre>
+                          )}
+                        </div>
+                      )}
+                      {step.type === "tool_call" && step.data && typeof step.data === "object" && Object.keys(step.data).length > 0 && (
+                        <div className="mt-1 text-xs text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">
+                          <pre className="max-h-24 overflow-y-auto">
+                            {JSON.stringify(step.data, null, 2)}
+                          </pre>
+                        </div>
                       )}
                     </div>
                   </motion.div>
@@ -247,9 +269,16 @@ export default function LangGraphChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
   const [showGateModal, setShowGateModal] = useState(false);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { canQuery, hasApiKey, remainingFreeQueries, incrementQueryCount, isLoading: usageLoading } = useUsageGate();
+
+  // Supervisor configuration
+  const SUPERVISOR_URL = import.meta.env.PROD 
+    ? "https://seer-production.up.railway.app" 
+    : "http://localhost:8000";
+  const SUPERVISOR_AGENT_ID = "supervisor";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -259,9 +288,9 @@ export default function LangGraphChat() {
     scrollToBottom();
   }, [messages, thinkingSteps]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  // Extract submission logic into a reusable function
+  const submitMessage = async (messageText: string) => {
+    if (!messageText.trim() || isLoading) return;
 
     // Check usage gate
     if (!canQuery) {
@@ -272,12 +301,11 @@ export default function LangGraphChat() {
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: input.trim(),
+      content: messageText.trim(),
       timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInput("");
     setIsLoading(true);
     setThinkingSteps([]);
 
@@ -292,38 +320,106 @@ export default function LangGraphChat() {
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      await streamFromLangServe(
+      // Get or create thread ID
+      let threadId = currentThreadId;
+      if (!threadId) {
+        // Ensure we create a thread on the backend first
+        threadId = await createThread(SUPERVISOR_URL);
+        setCurrentThreadId(threadId);
+      }
+
+      // Stream using LangGraph SDK with events mode for real-time content
+      let currentContent = "";
+      let hasReceivedContent = false;
+
+      for await (const event of streamAgent(
+        SUPERVISOR_URL,
+        SUPERVISOR_AGENT_ID,
         userMessage.content,
-        assistantMessage.id,
-        (content, isDone) => {
+        threadId,
+        { todos: [], tool_call_counts: { _total: 0 } }
+      )) {
+        const eventData = event.data as Record<string, unknown> | null;
+        
+        // Handle events stream mode - extract content from on_chat_model_stream
+        if (event.event === "events" && eventData) {
+          const eventType = eventData.event as string;
+          
+          // Extract content from chat model stream events (real-time token streaming)
+          if (eventType === "on_chat_model_stream") {
+            const data = eventData.data as Record<string, unknown> | undefined;
+            const chunk = data?.chunk as Record<string, unknown> | undefined;
+            if (chunk && typeof chunk === "object" && "content" in chunk) {
+              const contentChunk = chunk.content as string;
+              if (contentChunk && typeof contentChunk === "string") {
+                currentContent += contentChunk;
+                hasReceivedContent = true;
+                setMessages(prev => 
+                  prev.map(m => 
+                    m.id === assistantMessage.id 
+                      ? { ...m, content: currentContent, isStreaming: true }
+                      : m
+                  )
+                );
+              }
+            }
+          }
+          
+          // Also check on_chain_end for final content if we haven't received streamed content
+          if (eventType === "on_chain_end" && !hasReceivedContent) {
+            const data = eventData.data as Record<string, unknown> | undefined;
+            const output = data?.output as Record<string, unknown> | undefined;
+            if (output && typeof output === "object" && "messages" in output) {
+              // Try to extract content from messages
+              const messages = output.messages as Array<Record<string, unknown>> | undefined;
+              if (Array.isArray(messages) && messages.length > 0) {
+                const lastMessage = messages[messages.length - 1];
+                if (lastMessage && "content" in lastMessage && typeof lastMessage.content === "string") {
+                  currentContent = lastMessage.content;
+                  hasReceivedContent = true;
+                  setMessages(prev => 
+                    prev.map(m => 
+                      m.id === assistantMessage.id 
+                        ? { ...m, content: currentContent, isStreaming: true }
+                        : m
+                    )
+                  );
+                }
+              }
+            }
+          }
+        } else if (event.event === "end") {
+          // Finalize streaming
           setMessages(prev => 
             prev.map(m => 
               m.id === assistantMessage.id 
-                ? { ...m, content, isStreaming: !isDone }
+                ? { ...m, content: currentContent || "No response generated", isStreaming: false }
                 : m
             )
           );
-        },
-        (step) => {
-          setThinkingSteps(prev => [...prev, step]);
-        },
-        (error) => {
-          console.error("LangServe error:", error);
-          setMessages(prev => 
-            prev.map(m => 
-              m.id === assistantMessage.id 
-                ? { ...m, content: `Error: ${error}`, isStreaming: false }
-                : m
-            )
-          );
+          break;
+        } else if (event.event === "error") {
+          const errorData = event.data as { message?: string; error?: string };
+          throw new Error(errorData.message || errorData.error || "Unknown error");
         }
-      );
+      }
+
+      // Ensure final content is set (in case end event wasn't received)
+      if (currentContent) {
+        setMessages(prev => 
+          prev.map(m => 
+            m.id === assistantMessage.id 
+              ? { ...m, content: currentContent, isStreaming: false }
+              : m
+          )
+        );
+      }
     } catch (error) {
-      console.error("Error streaming from LangServe:", error);
+      console.error("Error streaming from LangGraph:", error);
       setMessages(prev => 
         prev.map(m => 
           m.id === assistantMessage.id 
-            ? { ...m, content: "Sorry, I encountered an error. Please try again.", isStreaming: false }
+            ? { ...m, content: `Error: ${error instanceof Error ? error.message : "Connection failed"}`, isStreaming: false }
             : m
         )
       );
@@ -334,6 +430,15 @@ export default function LangGraphChat() {
         await incrementQueryCount();
       }
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+    
+    const messageText = input.trim();
+    setInput("");
+    await submitMessage(messageText);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -352,7 +457,7 @@ export default function LangGraphChat() {
             <Zap className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">Tool Orchestrator</h1>
+            <h1 className="text-lg font-semibold">Orchestrator</h1>
             <p className="text-xs text-muted-foreground">LangGraph Agent • Ready</p>
           </div>
         </div>
@@ -478,7 +583,10 @@ export default function LangGraphChat() {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 1.1 + index * 0.1 }}
-                      onClick={() => setInput(suggestion)}
+                      onClick={() => {
+                        // Directly submit the suggestion without setting input
+                        submitMessage(suggestion);
+                      }}
                       className="text-left px-4 py-3 rounded-lg bg-secondary/50 hover:bg-secondary border border-border/50 hover:border-seer/50 text-sm transition-all duration-200 hover:shadow-md"
                     >
                       {suggestion}
@@ -539,268 +647,3 @@ export default function LangGraphChat() {
   );
 }
 
-// Stream from LangServe endpoint
-async function streamFromLangServe(
-  input: string,
-  messageId: string,
-  onContent: (content: string, isDone: boolean) => void,
-  onThinkingStep: (step: ThinkingStep) => void,
-  onError: (error: string) => void
-): Promise<void> {
-  try {
-    const response = await fetch(`${LANGSERVE_URL}/agent/stream`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        input: {
-          // FIX 1: Use 'type: human' instead of 'role: user'
-          messages: [
-            { 
-              type: "human", 
-              content: input 
-            }
-          ],
-          // FIX 2: Initialize required state fields
-          // Your SupervisorState (agents/state.py) defines 'todos' as required
-          todos: [], 
-          tool_call_counts: { _total: 0 }
-        },
-        // Optional: Add configuration if needed
-        config: {
-          configurable: {
-            thread_id: messageId // Use conversation ID as thread_id
-          }
-        }
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("No response body");
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let currentContent = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.trim() || line.startsWith(":")) continue;
-
-        // Log every line for debugging
-        console.log("[LangServe SSE]", line);
-
-        if (line.startsWith("event: ")) {
-          // SSE event type - log it
-          console.log("[LangServe Event Type]", line.slice(7));
-          continue;
-        }
-
-        if (line.startsWith("data: ")) {
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") continue;
-
-          try {
-            const data = JSON.parse(jsonStr);
-            console.log("[LangServe Parsed]", data);
-            
-            // LangGraph sends node updates as { "node_name": { state } }
-            // Check if this is a node update format
-            const nodeNames = Object.keys(data).filter(key => 
-              key !== "event" && 
-              key !== "data" && 
-              typeof data[key] === "object" && 
-              data[key] !== null
-            );
-            
-            if (nodeNames.length > 0) {
-              // This is a LangGraph node update - extract content from each node
-              for (const nodeName of nodeNames) {
-                const nodeState = data[nodeName];
-                const content = extractFinalContent(nodeState as Record<string, unknown>);
-                if (content) {
-                  currentContent = content;
-                  onContent(currentContent, false);
-                  console.log(`[LangGraph Node: ${nodeName}] Extracted content:`, content.substring(0, 100));
-                }
-              }
-              continue; // Skip other pattern matching for node updates
-            }
-
-            // Handle error events from LangServe
-            if (data.status_code || data.error) {
-              console.error("[LangServe Error]", data);
-              onError(data.message || data.error || "Server error");
-              return;
-            }
-
-            // LangGraph streaming format - look for various patterns
-            // Pattern 1: on_tool_start/on_tool_end events
-            if (data.event === "on_tool_start") {
-              onThinkingStep({
-                type: "tool_call",
-                toolName: data.name || data.data?.name || "tool",
-                data: data.data?.input || data.input || {},
-                status: "running",
-                timestamp: new Date(),
-              });
-            } else if (data.event === "on_tool_end") {
-              onThinkingStep({
-                type: "tool_result",
-                toolName: data.name || data.data?.name || "tool",
-                data: data.data?.output || data.output || data,
-                status: "complete",
-                timestamp: new Date(),
-              });
-            } 
-            // Pattern 2: on_chat_model_stream for token streaming
-            else if (data.event === "on_chat_model_stream") {
-              const chunk = data.data?.chunk?.content || data.data?.chunk?.text || "";
-              if (chunk) {
-                currentContent += chunk;
-                onContent(currentContent, false);
-              }
-            }
-            // Pattern 3: on_chain_stream / on_chain_end with output
-            else if (data.event === "on_chain_stream" || data.event === "on_chain_end") {
-              const output = data.data?.output || data.data?.chunk || data.output;
-              if (output) {
-                const content = extractFinalContent(output);
-                if (content) {
-                  currentContent = content;
-                  onContent(currentContent, false);
-                }
-              }
-            }
-            // Pattern 3b: LangGraph state updates - check for messages in state
-            else if (data.event === "on_chain_end" && data.data) {
-              // LangGraph might send the final state directly
-              const state = data.data.output || data.data;
-              if (state && typeof state === 'object') {
-                const content = extractFinalContent(state);
-                if (content) {
-                  currentContent = content;
-                  onContent(currentContent, false);
-                }
-              }
-            }
-            // Pattern 4: Direct content in data
-            else if (data.content !== undefined && typeof data.content === "string") {
-              currentContent = data.content;
-              onContent(currentContent, false);
-            }
-            // Pattern 5: Output wrapper
-            else if (data.output) {
-              const content = extractFinalContent(data);
-              if (content) {
-                currentContent = content;
-                onContent(currentContent, false);
-              }
-            }
-            // Pattern 6: Messages array directly
-            else if (data.messages && Array.isArray(data.messages)) {
-              const content = extractFinalContent(data);
-              if (content) {
-                currentContent = content;
-                onContent(currentContent, false);
-              }
-            }
-            // Pattern 7: LangGraph state format - check for supervisor node output
-            else if (data.supervisor && data.supervisor.messages) {
-              const content = extractFinalContent(data.supervisor);
-              if (content) {
-                currentContent = content;
-                onContent(currentContent, false);
-              }
-            }
-            // Pattern 8: Any object with messages property (nested)
-            else if (typeof data === 'object' && data !== null) {
-              // Try to find messages anywhere in the object
-              const content = extractFinalContent(data);
-              if (content && content !== currentContent) {
-                currentContent = content;
-                onContent(currentContent, false);
-              }
-            }
-          } catch (e) {
-            console.warn("[LangServe Parse Error]", e, "Raw:", jsonStr);
-          }
-        }
-      }
-    }
-
-    // Mark as complete - log what we got
-    console.log("[LangServe Complete] Final content length:", currentContent.length);
-    console.log("[LangServe Complete] Final content preview:", currentContent.substring(0, 200));
-    
-    if (currentContent.trim()) {
-      onContent(currentContent, true);
-    } else {
-      // Last attempt: check if we missed any content in the buffer
-      console.warn("[LangServe] No content extracted. Check browser console for '[LangServe Parsed]' logs to debug.");
-      onContent("No response content received. Check console for SSE data.", true);
-    }
-  } catch (error) {
-    console.error("[LangServe Error]", error);
-    onError(error instanceof Error ? error.message : "Connection failed");
-  }
-}
-
-// Extract final content from various LangServe response formats
-function extractFinalContent(data: Record<string, unknown>): string {
-  if (typeof data.content === "string" && data.content.trim()) {
-    return data.content;
-  }
-  
-  if (data.messages && Array.isArray(data.messages)) {
-    const lastAI = [...data.messages].reverse().find(
-      (m: { type?: string; role?: string }) => m.type === "ai" || m.role === "assistant"
-    );
-    if (lastAI) {
-      const content = (lastAI as { content?: unknown }).content;
-      if (typeof content === "string" && content.trim()) {
-        return content;
-      }
-      // Also check for nested content
-      if (typeof content === "object" && content !== null) {
-        const nestedContent = extractFinalContent(content as Record<string, unknown>);
-        if (nestedContent) {
-          return nestedContent;
-        }
-      }
-    }
-  }
-  
-  if (data.output) {
-    if (typeof data.output === "string") {
-      return data.output;
-    }
-    const output = data.output as Record<string, unknown>;
-    if (typeof output.content === "string") {
-      return output.content;
-    }
-    if (output.messages && Array.isArray(output.messages)) {
-      const lastMsg = [...output.messages].reverse().find(
-        (m: { type?: string; role?: string }) => m.type === "ai" || m.role === "assistant"
-      );
-      if (lastMsg && typeof (lastMsg as { content?: unknown }).content === "string") {
-        return (lastMsg as { content: string }).content;
-      }
-    }
-  }
-  
-  return "";
-}

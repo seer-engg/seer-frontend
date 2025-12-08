@@ -6,7 +6,6 @@ import { AlignmentQuestionnaire } from "./AlignmentQuestionnaire";
 import { Card } from "@/components/ui/card";
 import { Sparkles } from "lucide-react";
 import { AgentConfig } from "@/lib/agents/types";
-import { useAgentStream } from "@/lib/agents/useAgentStream";
 
 interface EvalsChatProps {
   config: AgentConfig;
@@ -77,6 +76,8 @@ export function EvalsChat({ config }: EvalsChatProps) {
   useEffect(() => {
     if (suggestionMessage && !autoSubmitMessage) {
       setAutoSubmitMessage(suggestionMessage);
+      // Reset suggestionMessage to allow re-clicking
+      setSuggestionMessage(null);
     }
   }, [suggestionMessage, autoSubmitMessage]);
 
@@ -121,24 +122,12 @@ export function EvalsChat({ config }: EvalsChatProps) {
 
       {/* Chat Interface */}
       <div className="flex-1 min-h-0">
-        {autoSubmitMessage ? (
-          <AgentChat
-            config={config}
-            placeholder="Describe the agent you want to evaluate..."
-            initialMessages={[{
-              id: crypto.randomUUID(),
-              role: "user",
-              content: autoSubmitMessage,
-              timestamp: new Date(),
-            }]}
-          />
-        ) : (
-          <AgentChat
-            config={config}
-            placeholder="Describe the agent you want to evaluate..."
-            emptyState={<EvalsEmptyState config={config} onSuggestionClick={handleSuggestionClick} />}
-          />
-        )}
+        <AgentChat
+          config={config}
+          placeholder="Describe the agent you want to evaluate..."
+          autoSubmitText={autoSubmitMessage || undefined}
+          emptyState={!autoSubmitMessage ? <EvalsEmptyState config={config} onSuggestionClick={handleSuggestionClick} /> : undefined}
+        />
       </div>
     </div>
   );

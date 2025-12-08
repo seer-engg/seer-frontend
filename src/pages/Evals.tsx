@@ -4,9 +4,10 @@ import { AgentConfig } from "@/lib/agents/types";
 import { Sparkles } from "lucide-react";
 
 // Use production URL in deployed environment, localhost for local dev
+// Evals agent runs on port 8002 (as per run.py)
 const EVALS_URL = import.meta.env.PROD 
   ? "https://seer-production.up.railway.app" 
-  : "http://localhost:8000";
+  : "http://localhost:8002";
 
 const evalsConfig: AgentConfig = {
   name: "Evals",

@@ -26,7 +26,7 @@ import {
 
 const primaryNav = [
   { name: "Projects", href: "/dashboard", icon: FolderKanban },
-  { name: "Tool Orchestrator", href: "/tool-orchestrator", icon: Zap },
+  { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
   { name: "Evals", href: "/eval", icon: Sparkles },
   { name: "Trace Analyzer", href: "/trace", icon: Activity },
   { name: "Tool Hub", href: "/tools", icon: Package },
