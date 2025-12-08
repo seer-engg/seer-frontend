@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +28,7 @@ import {
 const primaryNav = [
   { name: "Projects", href: "/dashboard", icon: FolderKanban },
   { name: "Rube", href: "/rube", icon: Zap },
+  { name: "Eval Agent", href: "/eval", icon: Sparkles },
   { name: "Trace Analyzer", href: "/trace", icon: Activity },
   { name: "Tool Hub", href: "/tools", icon: Package },
 ];
