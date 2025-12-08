@@ -212,12 +212,13 @@ export function useAgentStream(config: AgentStreamConfig) {
                     const updated = [...prev];
                     // For think tool, mark existing thinking step as complete
                     if (toolName === "think") {
-                      const thinkingIndex = updated.findLastIndex(
+                      const thinkingIndex = [...updated].reverse().findIndex(
                         (s) => s.toolName === "think" && s.status === "running"
                       );
-                      if (thinkingIndex >= 0) {
-                        updated[thinkingIndex] = {
-                          ...updated[thinkingIndex],
+                      const actualThinkingIndex = thinkingIndex >= 0 ? updated.length - 1 - thinkingIndex : -1;
+                      if (actualThinkingIndex >= 0) {
+                        updated[actualThinkingIndex] = {
+                          ...updated[actualThinkingIndex],
                           status: "complete",
                           data: typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput),
                         };
@@ -268,9 +269,10 @@ export function useAgentStream(config: AgentStreamConfig) {
                     };
                     setThinkingSteps((prev) => {
                       // Check if there's already a thinking step for this tool
-                      const existingIndex = prev.findLastIndex(
+                      const reverseIndex = [...prev].reverse().findIndex(
                         (s) => s.toolName === "think" && s.status === "running"
                       );
+                      const existingIndex = reverseIndex >= 0 ? prev.length - 1 - reverseIndex : -1;
                       if (existingIndex >= 0) {
                         // Update existing thinking step
                         const updated = [...prev];
