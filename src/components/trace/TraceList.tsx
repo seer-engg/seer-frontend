@@ -14,8 +14,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatDistanceToNow } from "date-fns";
-import { ExternalLink, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
-import { getLangSmithTraceUrl } from "@/lib/langsmith-api";
+import { Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface TraceListProps {
   onSelectTrace: (traceId: string) => void;
@@ -24,23 +23,25 @@ interface TraceListProps {
 
 export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
   const [projectFilter, setProjectFilter] = useState<
-    "supervisor-v1" | "seer-v1" | "all"
-  >("all");
+    "supervisor-v1" | "seer-v1"
+  >("supervisor-v1");
   const [dateRange, setDateRange] = useState<
-    "15m" | "30m" | "1h" | "3h" | "1d" | "all"
-  >("1h");
+    "15m" | "30m" | "1h" | "3h" | "1d" | "7d" | "30d" | "all"
+  >("all");
 
   // Calculate start_time based on date range
   const getStartTime = (): string | undefined => {
     if (dateRange === "all") return undefined;
     
-    // Convert to milliseconds
+    // Convert to minutes
     const minutesMap: Record<string, number> = {
       "15m": 15,
       "30m": 30,
       "1h": 60,
       "3h": 180,
       "1d": 1440, // 24 hours
+      "7d": 10080, // 7 days
+      "30d": 43200, // 30 days
     };
     
     const minutes = minutesMap[dateRange] || 60;
@@ -57,7 +58,7 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
     queryKey: ["traces", projectFilter, dateRange],
     queryFn: () =>
       tracesAPI.listTraces({
-        project: projectFilter === "all" ? undefined : projectFilter,
+        project: projectFilter,
         limit: 100,
         start_time: getStartTime(),
       }),
@@ -119,7 +120,6 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Projects</SelectItem>
                 <SelectItem value="supervisor-v1">Supervisor v1</SelectItem>
                 <SelectItem value="seer-v1">Seer v1</SelectItem>
               </SelectContent>
@@ -142,6 +142,8 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
                 <SelectItem value="1h">Last hour</SelectItem>
                 <SelectItem value="3h">Last 3 hours</SelectItem>
                 <SelectItem value="1d">Last 24 hours</SelectItem>
+                <SelectItem value="7d">Last 7 days</SelectItem>
+                <SelectItem value="30d">Last 30 days</SelectItem>
                 <SelectItem value="all">All time</SelectItem>
               </SelectContent>
             </Select>
@@ -226,17 +228,6 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
                       </p>
                     )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(getLangSmithTraceUrl(trace.id), "_blank");
-                    }}
-                    title="Open in LangSmith"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
                 </div>
               </CardContent>
             </Card>

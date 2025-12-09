@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { tracesAPI, getLangSmithTraceUrl, type TraceDetail } from "@/lib/langsmith-api";
+import { tracesAPI, type TraceDetail } from "@/lib/langsmith-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TraceTree } from "./TraceTree";
 import { formatDistanceToNow } from "date-fns";
-import { ExternalLink, Clock, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
+import { Clock, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 
 interface TraceDetailProps {
   traceId: string;
@@ -132,14 +132,6 @@ export function TraceDetail({ traceId }: TraceDetailProps) {
                 )}
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(getLangSmithTraceUrl(trace.id), "_blank")}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Open in LangSmith
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
