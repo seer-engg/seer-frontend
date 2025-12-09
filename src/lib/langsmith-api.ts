@@ -126,7 +126,7 @@ async function fetchAPI<T>(
     }
 
     if (!response.ok) {
-      let errorData = {};
+      let errorData: { detail?: string } = {};
       try {
         errorData = await response.json();
       } catch {

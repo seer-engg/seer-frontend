@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, useEffect } from "react";
-import type { IntegrationType } from "@/lib/composio/integrations";
+import type { IntegrationType } from "@/lib/composio/client";
 
 export type IntegrationSelection = {
   id: string;
