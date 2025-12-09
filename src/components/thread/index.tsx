@@ -22,6 +22,7 @@ import {
   SquarePen,
   XIcon,
   Plus,
+  ChevronDown,
 } from "lucide-react";
 import { useQueryState, parseAsBoolean } from "@/hooks/useQueryState";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
@@ -45,6 +46,11 @@ import {
   ArtifactTitle,
   useArtifactContext,
 } from "./artifact";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 function StickyToBottomContent(props: {
   content: ReactNode;
@@ -84,6 +90,18 @@ function ScrollToBottom(props: { className?: string }) {
       <ArrowDown className="h-4 w-4" />
       <span>Scroll to bottom</span>
     </Button>
+  );
+}
+
+function AgentThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-seer opacity-60" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-seer" />
+      </span>
+      Agent is thinking...
+    </div>
   );
 }
 
@@ -137,10 +155,26 @@ export function Thread() {
   } = useFileUpload();
   const [firstTokenReceived, setFirstTokenReceived] = useState(false);
   const isLargeScreen = useMediaQuery("(min-width: 1024px)");
+  const [thinkingOpen, setThinkingOpen] = useState(false);
 
   const stream = useStreamContext();
   const messages = stream.messages;
   const isLoading = stream.isLoading;
+  const filteredMessages = messages.filter(
+    (m) => !m.id?.startsWith(DO_NOT_RENDER_ID_PREFIX),
+  );
+  const lastAiIndex = (() => {
+    for (let i = filteredMessages.length - 1; i >= 0; i -= 1) {
+      if (filteredMessages[i]?.type === "ai") {
+        return i;
+      }
+    }
+    return -1;
+  })();
+  const thinkingMessages =
+    lastAiIndex > 0 ? filteredMessages.slice(0, lastAiIndex) : [];
+  const latestMessages =
+    lastAiIndex >= 0 ? filteredMessages.slice(lastAiIndex) : filteredMessages;
 
   const lastError = useRef<string | undefined>(undefined);
 
@@ -251,9 +285,25 @@ export function Thread() {
   };
 
   const chatStarted = !!threadId || !!messages.length;
-  const hasNoAIOrToolMessages = !messages.find(
+  const hasNoAIOrToolMessages = !filteredMessages.find(
     (m) => m.type === "ai" || m.type === "tool",
   );
+
+  const renderMessage = (message: Message, index: number) =>
+    message.type === "human" ? (
+      <HumanMessage
+        key={message.id || `${message.type}-${index}`}
+        message={message}
+        isLoading={isLoading}
+      />
+    ) : (
+      <AssistantMessage
+        key={message.id || `${message.type}-${index}`}
+        message={message}
+        isLoading={isLoading}
+        handleRegenerate={handleRegenerate}
+      />
+    );
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -399,24 +449,31 @@ export function Thread() {
               contentClassName="pt-8 pb-16 max-w-3xl mx-auto flex flex-col gap-4 w-full"
               content={
                 <>
-                  {messages
-                    .filter((m) => !m.id?.startsWith(DO_NOT_RENDER_ID_PREFIX))
-                    .map((message, index) =>
-                      message.type === "human" ? (
-                        <HumanMessage
-                          key={message.id || `${message.type}-${index}`}
-                          message={message}
-                          isLoading={isLoading}
+                  {thinkingMessages.length > 0 && (
+                    <Collapsible
+                      open={thinkingOpen}
+                      onOpenChange={setThinkingOpen}
+                      className="rounded-2xl border border-border/60 bg-background/60 px-4 py-3"
+                    >
+                      <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium text-muted-foreground">
+                        <span>Thinking</span>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            thinkingOpen ? "rotate-180" : "",
+                          )}
                         />
-                      ) : (
-                        <AssistantMessage
-                          key={message.id || `${message.type}-${index}`}
-                          message={message}
-                          isLoading={isLoading}
-                          handleRegenerate={handleRegenerate}
-                        />
-                      ),
-                    )}
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-4 space-y-4">
+                        {thinkingMessages.map((message, index) =>
+                          renderMessage(message, index),
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+                  {latestMessages.map((message, index) =>
+                    renderMessage(message, index),
+                  )}
                   {/* Special rendering case where there are no AI/tool messages, but there is an interrupt.
                     We need to render it outside of the messages list, since there are no messages to render */}
                   {hasNoAIOrToolMessages && !!stream.interrupt && (
@@ -427,6 +484,7 @@ export function Thread() {
                       handleRegenerate={handleRegenerate}
                     />
                   )}
+                  {isLoading && <AgentThinkingIndicator />}
                   {isLoading && !firstTokenReceived && (
                     <AssistantMessageLoading />
                   )}
