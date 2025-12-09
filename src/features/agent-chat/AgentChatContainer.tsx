@@ -9,6 +9,7 @@ import { ThreadProvider } from "@/providers/Thread";
 import { useStreamContext } from "@/providers/Stream";
 import { ensureToolCallsHaveResponses } from "@/lib/ensure-tool-responses";
 import { useArtifactContext } from "@/components/thread/artifact";
+import { IntegrationSelector } from "@/components/seer/integrations/IntegrationSelector";
 
 export interface AgentChatHeroProps {
   heroVisible: boolean;
@@ -142,10 +143,13 @@ function AgentChatContent({
   }, [renderHero, heroVisible, dismissHero, sendSuggestion]);
 
   return (
-    <>
+    <div className="relative h-full">
+      <div className="pointer-events-auto absolute right-4 top-4 z-40">
+        <IntegrationSelector />
+      </div>
       {heroNode}
       <Thread />
-    </>
+    </div>
   );
 }
 
