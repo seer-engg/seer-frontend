@@ -72,11 +72,13 @@ function OrchestratorHero({ heroVisible, sendSuggestion }: AgentChatHeroProps) {
 
 export default function ToolOrchestrator() {
   return (
-    <AgentChatContainer
-      apiUrl={SUPERVISOR_URL}
-      assistantId={SUPERVISOR_ASSISTANT_ID}
-      renderHero={(props) => <OrchestratorHero {...props} />}
-    />
+    <div data-tour="orchestrator-page">
+      <AgentChatContainer
+        apiUrl={SUPERVISOR_URL}
+        assistantId={SUPERVISOR_ASSISTANT_ID}
+        renderHero={(props) => <OrchestratorHero {...props} />}
+      />
+    </div>
   );
 }
 

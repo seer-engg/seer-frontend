@@ -35,29 +35,68 @@ const getTourSteps = (): Step[] => [
     disableBeacon: true,
   },
   {
-    target: '[data-tour="evals-page"]',
+    target: 'a[href="/tool-orchestrator"]',
     content: (
       <div>
-        <h3 className="text-lg font-semibold mb-2">Generate Agent Specs</h3>
+        <h3 className="text-lg font-semibold mb-2">Orchestrator ⚡</h3>
         <p className="text-sm text-muted-foreground">
-          Describe your agent idea here, and Seer will generate a detailed spec with test cases. This is where the magic happens!
+          Build multi-step agent workflows here. The Orchestrator can coordinate complex tasks across multiple integrations like GitHub, Asana, and Google Drive.
         </p>
       </div>
     ),
-    placement: "bottom",
+    placement: "right",
     disableBeacon: true,
   },
   {
-    target: '[data-tour="settings-page"]',
+    target: 'a[href="/eval"]',
     content: (
       <div>
-        <h3 className="text-lg font-semibold mb-2">Configure Settings</h3>
+        <h3 className="text-lg font-semibold mb-2">Evals ✨</h3>
         <p className="text-sm text-muted-foreground">
-          Add your API keys, manage preferences, and customize your experience. Don't forget to set up your OpenAI API key for unlimited queries!
+          Generate agent specs and test cases here. Describe your agent idea, and Seer will create a detailed specification with test scenarios. This is where the magic happens!
         </p>
       </div>
     ),
-    placement: "left",
+    placement: "right",
+    disableBeacon: true,
+  },
+  {
+    target: 'a[href="/tools"]',
+    content: (
+      <div>
+        <h3 className="text-lg font-semibold mb-2">Tool Hub 🛠️</h3>
+        <p className="text-sm text-muted-foreground">
+          Connect integrations to extend your agent capabilities. We support GitHub, Google Drive, and Asana, plus sandboxed testing for 15+ more integrations like Twitter, Slack, and Notion.
+        </p>
+      </div>
+    ),
+    placement: "right",
+    disableBeacon: true,
+  },
+  {
+    target: 'a[href="/trace"]',
+    content: (
+      <div>
+        <h3 className="text-lg font-semibold mb-2">Traces 📊</h3>
+        <p className="text-sm text-muted-foreground">
+          View detailed execution traces of your agents. See every step, tool call, and decision your agents make. Perfect for debugging and understanding agent behavior.
+        </p>
+      </div>
+    ),
+    placement: "right",
+    disableBeacon: true,
+  },
+  {
+    target: 'a[href="/settings"]',
+    content: (
+      <div>
+        <h3 className="text-lg font-semibold mb-2">Settings ⚙️</h3>
+        <p className="text-sm text-muted-foreground">
+          Configure your API keys, manage preferences, and customize your experience. Don't forget to set up your OpenAI API key for unlimited queries!
+        </p>
+      </div>
+    ),
+    placement: "right",
     disableBeacon: true,
   },
   {
@@ -66,7 +105,7 @@ const getTourSteps = (): Step[] => [
       <div>
         <h3 className="text-lg font-semibold mb-2">You're All Set! 🎉</h3>
         <p className="text-sm text-muted-foreground">
-          You can restart this tour anytime from Settings. Ready to start evaluating agents?
+          You can restart this tour anytime from Settings. Ready to start evaluating agents? Try the Orchestrator or generate your first agent spec in Evals!
         </p>
       </div>
     ),

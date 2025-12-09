@@ -11,7 +11,7 @@ export default function TraceAnalyzer() {
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
 
   return (
-    <div className="h-full overflow-hidden">
+    <div className="h-full overflow-hidden" data-tour="traces-page">
       <ResizablePanelGroup direction="horizontal" className="h-full">
         <ResizablePanel defaultSize={40} minSize={30} maxSize={60}>
           <div className="h-full overflow-y-auto p-4">
