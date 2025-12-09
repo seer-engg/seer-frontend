@@ -122,12 +122,12 @@ export function EvalsChat({ config }: EvalsChatProps) {
 
       {/* Chat Interface */}
       <div className="flex-1 min-h-0">
-        <AgentChat
-          config={config}
-          placeholder="Describe the agent you want to evaluate..."
+          <AgentChat
+            config={config}
+            placeholder="Describe the agent you want to evaluate..."
           autoSubmitText={autoSubmitMessage || undefined}
           emptyState={!autoSubmitMessage ? <EvalsEmptyState config={config} onSuggestionClick={handleSuggestionClick} /> : undefined}
-        />
+          />
       </div>
     </div>
   );

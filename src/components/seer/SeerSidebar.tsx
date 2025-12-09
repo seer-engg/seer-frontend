@@ -18,11 +18,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useUsageGate } from "@/hooks/useUsageGate";
+import { Key } from "lucide-react";
 
 const primaryNav = [
   { name: "Projects", href: "/dashboard", icon: FolderKanban },
@@ -40,6 +43,7 @@ export function SeerSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { user, signOut } = useAuth();
   const location = useLocation();
+  const { remainingFreeQueries, hasApiKey, usageLoading } = useUsageGate();
 
   const NavItem = ({ item, isActive }: { item: typeof primaryNav[0]; isActive: boolean }) => (
     <Tooltip delayDuration={0}>
@@ -138,6 +142,58 @@ export function SeerSidebar() {
           )}
         </div>
       </div>
+
+      {/* Usage Badge */}
+      {!usageLoading && (
+        <div className="px-3 py-2 border-t border-sidebar-border">
+          {hasApiKey ? (
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className={cn(
+                  "w-full justify-center text-xs border-success/30 bg-success/10 text-success",
+                  collapsed && "w-auto"
+                )}>
+                  {collapsed ? (
+                    <Key className="h-3 w-3" />
+                  ) : (
+                    <>
+                      <Key className="h-3 w-3 mr-1" />
+                      API Key Active
+                    </>
+                  )}
+                </Badge>
+              </TooltipTrigger>
+              {collapsed && (
+                <TooltipContent side="right">
+                  <p>API Key Active</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          ) : (
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className={cn(
+                  "w-full justify-center text-xs border-warning/30 bg-warning/10 text-warning",
+                  collapsed && "w-auto"
+                )}>
+                  {collapsed ? (
+                    <span>{remainingFreeQueries}</span>
+                  ) : (
+                    <>
+                      {remainingFreeQueries} free {remainingFreeQueries === 1 ? 'query' : 'queries'} left
+                    </>
+                  )}
+                </Badge>
+              </TooltipTrigger>
+              {collapsed && (
+                <TooltipContent side="right">
+                  <p>{remainingFreeQueries} free {remainingFreeQueries === 1 ? 'query' : 'queries'} left</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          )}
+        </div>
+      )}
 
       {/* User Profile */}
       <div className="px-2 py-3 border-t border-sidebar-border">

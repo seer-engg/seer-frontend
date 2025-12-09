@@ -67,7 +67,7 @@ export default function Projects() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-center gap-3 text-muted-foreground">
                   <Clock className="h-5 w-5" />
-                  <span className="text-sm font-medium">Expected launch: Q1 2025</span>
+                  <span className="text-sm font-medium">Expected launch: Dec 16, 2025</span>
                 </div>
               </CardContent>
             </Card>

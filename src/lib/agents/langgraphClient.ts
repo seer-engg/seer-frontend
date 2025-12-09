@@ -30,6 +30,180 @@ export interface ThinkingStep {
   data: unknown;
   status: "pending" | "running" | "complete" | "error";
   timestamp: Date;
+  runId?: string; // Unique identifier for this tool invocation
+}
+
+export interface ThinkingPhase {
+  id: string;
+  steps: ThinkingStep[];
+  isActive: boolean;
+  startedAt: Date;
+  completedAt?: Date;
+}
+
+/**
+ * Extract thinking steps directly from LangGraph SDK stream events
+ * This is the correct approach when using streamMode: "events"
+ */
+export function extractThinkingStepsFromEvents(
+  event: StreamEvent,
+  previousSteps: ThinkingStep[] = []
+): ThinkingStep[] {
+  const steps = [...previousSteps];
+  const eventData = event.data as Record<string, unknown> | null;
+  
+  if (!eventData) return steps;
+  
+  // Handle events stream mode
+  if (event.event === "events" && typeof eventData === "object" && eventData !== null) {
+    const eventType = eventData.event as string;
+    const data = eventData.data as Record<string, unknown> | undefined;
+    const metadata = (eventData.metadata as Record<string, unknown>) || {};
+    
+    // Helper to extract tool name from various event formats
+    const extractToolName = (data: Record<string, unknown> | undefined): string => {
+      if (!data) return "unknown_tool";
+      
+      // Try different field names
+      const name = (data.name as string) || 
+                   (data.tool_name as string) ||
+                   (data.tool as string) ||
+                   (data.function as string);
+      
+      if (name && typeof name === "string" && name.trim()) {
+        return name.trim();
+      }
+      
+      // Check if output contains thinking-like content
+      const output = data.output || data.result || data.content;
+      if (output && typeof output === "string") {
+        if (output.includes("Thought:") || output.includes("scratchpad")) {
+          return "think";
+        }
+      }
+      
+      return "unknown_tool";
+    };
+    
+    // Helper to extract tool output content
+    const extractToolOutput = (data: Record<string, unknown> | undefined): unknown => {
+      if (!data) return {};
+      
+      // Try different output field names
+      let content = data.output || data.result || data.content || data.data || {};
+      
+      // Parse thinking tool output to extract just the scratchpad
+      if (typeof content === "string" && (content.includes("Thought:") || content.includes("scratchpad"))) {
+        // The think tool returns formatted text like "Thought: <scratchpad>\nLast tool: <last_tool>"
+        // Extract the scratchpad part
+        const thoughtMatch = content.match(/Thought:\s*(.+?)(?:\n|$)/s);
+        if (thoughtMatch) {
+          return thoughtMatch[1].trim();
+        }
+      }
+      
+      return content;
+    };
+    
+    // Handle on_tool_start event - tool call initiated
+    if (eventType === "on_tool_start") {
+      const toolName = extractToolName(data);
+      const toolInput = data?.input || {};
+      
+      // Extract run_id from metadata if available (uniquely identifies this tool invocation)
+      const runId = (metadata.run_id as string) || (data?.run_id as string) || undefined;
+      
+      // Always add a new step for each tool start (even if same tool is already running)
+      // This allows tracking multiple sequential calls to the same tool (e.g., multiple think() calls)
+      steps.push({
+        type: toolName === "think" ? "thinking" : "tool_call",
+        toolName,
+        data: toolInput,
+        status: "running",
+        timestamp: new Date(),
+        runId,
+      });
+    }
+    
+    // Handle on_tool_end event - tool call completed
+    if (eventType === "on_tool_end") {
+      const toolName = extractToolName(data);
+      const toolOutput = extractToolOutput(data);
+      
+      // Extract run_id from metadata if available
+      const runId = (metadata.run_id as string) || (data?.run_id as string) || undefined;
+      
+      // Find the matching step: prefer run_id match, fallback to most recent running step of same tool
+      let existingIndex = -1;
+      if (runId) {
+        // Try to match by run_id first (most accurate)
+        existingIndex = steps.findIndex(
+          (s) => s.toolName === toolName && s.runId === runId && s.status === "running"
+        );
+      }
+      
+      // Fallback: find most recent running step of same tool (for events without run_id)
+      if (existingIndex === -1) {
+        // Find all running steps of this tool, get the most recent one
+        const runningSteps = steps
+          .map((s, idx) => ({ step: s, idx }))
+          .filter(({ step }) => step.toolName === toolName && step.status === "running")
+          .sort((a, b) => b.step.timestamp.getTime() - a.step.timestamp.getTime());
+        
+        if (runningSteps.length > 0) {
+          existingIndex = runningSteps[0].idx;
+        }
+      }
+      
+      if (existingIndex >= 0) {
+        steps[existingIndex] = {
+          ...steps[existingIndex],
+          type: toolName === "think" ? "thinking" : "tool_result",
+          data: toolOutput || {},
+          status: "complete",
+          runId: runId || steps[existingIndex].runId, // Preserve or set run_id
+        };
+      } else {
+        // Tool ended but we didn't see it start - add it anyway
+        steps.push({
+          type: toolName === "think" ? "thinking" : "tool_result",
+          toolName,
+          data: toolOutput || {},
+          status: "complete",
+          timestamp: new Date(),
+          runId,
+        });
+      }
+    }
+    
+    // Handle tool_call_chunks in on_chat_model_stream
+    if (eventType === "on_chat_model_stream" && data) {
+      const chunk = data.chunk as Record<string, unknown> | undefined;
+      if (chunk && typeof chunk === "object" && "tool_call_chunks" in chunk) {
+        const toolCallChunks = (chunk as { tool_call_chunks?: Array<{ name?: string; args?: unknown; id?: string }> }).tool_call_chunks;
+        if (Array.isArray(toolCallChunks) && toolCallChunks.length > 0) {
+          for (const toolCallChunk of toolCallChunks) {
+            const toolName = toolCallChunk.name || "unknown_tool";
+            // Check if we already have this tool call
+            const existingIndex = steps.findIndex(
+              (s) => s.toolName === toolName && s.status === "running"
+            );
+            if (existingIndex === -1) {
+              steps.push({
+                type: toolName === "think" ? "thinking" : "tool_call",
+                toolName,
+                data: toolCallChunk.args || {},
+                status: "running",
+                timestamp: new Date(),
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return steps;
 }
 
 /**
@@ -130,6 +304,7 @@ export async function createThread(apiUrl?: string): Promise<string> {
   const thread = await client.threads.create();
   return thread.thread_id;
 }
+
 
 /**
  * Flatten nested node updates and merge into cumulative state
