@@ -71,3 +71,18 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## LangGraph Agent Chat
+
+The dashboard now embeds the reusable Agent Chat UI from `agent-chat-ui` for both the supervisor and eval agents. The shared `AgentChatContainer` component lives in `src/features/agent-chat/AgentChatContainer.tsx` and simply needs an API URL plus an assistant (graph) ID.
+
+You can override the built-in defaults via environment variables:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `VITE_AGENT_CHAT_API_URL` | Optional global LangGraph deployment URL fallback | _none_ |
+| `VITE_AGENT_CHAT_ASSISTANT_ID` | Optional global assistant ID fallback | _none_ |
+| `VITE_EVAL_AGENT_ID` | Eval graph ID | `eval_agent` |
+| `VITE_SUPERVISOR_AGENT_ID` | Supervisor graph ID | `supervisor` |
+
+If you need to talk to a hosted LangGraph deployment that requires a LangSmith API key, set `localStorage["lg:chat:apiKey"]` (or provide `apiKey` to the container). The UI will prompt for missing values, so you can also paste ad-hoc URLs directly in the browser when debugging.
