@@ -5,11 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Settings2, Key, Building, User, Trash2, Eye, EyeOff, CheckCircle } from "lucide-react";
+import { Settings2, Key, Building, User, Trash2, Eye, EyeOff, CheckCircle, PlayCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { supabase } from "@/integrations/supabase/client";
+import { restartOnboardingTour } from "@/components/OnboardingTour";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -111,7 +112,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin">
+    <div className="h-full overflow-y-auto scrollbar-thin" data-tour="settings-page">
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-semibold">Settings</h1>
@@ -220,6 +221,48 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">Choose your preferred color scheme</p>
                 </div>
                 <ThemeSwitcher />
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Onboarding */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+        >
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-seer/10 flex items-center justify-center">
+                  <PlayCircle className="h-5 w-5 text-seer" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Onboarding</CardTitle>
+                  <CardDescription>Take the guided tour again</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Take the guided tour again to refresh your memory about Seer's features and navigation.
+                </p>
+                <Button
+                  onClick={() => {
+                    restartOnboardingTour();
+                    toast({
+                      title: "Tour Restarted",
+                      description: "The onboarding tour will begin shortly.",
+                    });
+                  }}
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                >
+                  <PlayCircle className="h-4 w-4 mr-2" />
+                  Restart Tour
+                </Button>
               </div>
             </CardContent>
           </Card>

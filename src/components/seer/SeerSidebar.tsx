@@ -3,7 +3,6 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Search,
-  FolderKanban,
   Zap,
   Activity,
   Package,
@@ -28,7 +27,6 @@ import { useUsageGate } from "@/hooks/useUsageGate";
 import { Key } from "lucide-react";
 
 const primaryNav = [
-  { name: "Projects", href: "/dashboard", icon: FolderKanban },
   { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
   { name: "Evals", href: "/eval", icon: Sparkles },
   { name: "Traces", href: "/trace", icon: Activity },

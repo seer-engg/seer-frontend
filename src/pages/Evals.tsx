@@ -59,7 +59,7 @@ function EvalsHero({ heroVisible, sendSuggestion }: AgentChatHeroProps) {
 
 export default function Evals() {
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col" data-tour="evals-page">
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="flex-1 overflow-hidden">
           <AgentChatContainer

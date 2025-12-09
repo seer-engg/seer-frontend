@@ -6,9 +6,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Auth from "./pages/Auth";
-import Projects from "./pages/Projects";
-import ProjectDetail from "./pages/ProjectDetail";
-import NewProject from "./pages/NewProject";
 import LiveRun from "./pages/LiveRun";
 import ToolOrchestrator from "./pages/ToolOrchestrator";
 import TraceAnalyzer from "./pages/TraceAnalyzer";
@@ -30,38 +27,8 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={<Navigate to="/tool-orchestrator" replace />} />
               <Route path="/login" element={<Auth />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <Projects />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/projects/:id"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <ProjectDetail />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/projects/new"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <NewProject />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
               <Route
                 path="/run/:id"
                 element={
