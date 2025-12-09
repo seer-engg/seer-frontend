@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         // Redirect authenticated users away from login page
         if (session && window.location.pathname === "/login") {
-          navigate("/dashboard");
+          navigate("/tool-orchestrator");
         }
       }
     );
@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [navigate]);
 
   const signInWithGoogle = async () => {
-    const redirectUrl = `${window.location.origin}/dashboard`;
+    const redirectUrl = `${window.location.origin}/tool-orchestrator`;
     
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signInWithGithub = async () => {
-    const redirectUrl = `${window.location.origin}/dashboard`;
+    const redirectUrl = `${window.location.origin}/tool-orchestrator`;
     
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signUpWithEmail = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/dashboard`;
+    const redirectUrl = `${window.location.origin}/tool-orchestrator`;
     
     const { error } = await supabase.auth.signUp({
       email,

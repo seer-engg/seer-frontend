@@ -18,7 +18,7 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useAuth } from "@/contexts/AuthContext";
 
 const items = [
-  { title: "Projects", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Projects", url: "/tool-orchestrator", icon: LayoutDashboard },
   { title: "Chat", url: "/chat", icon: MessageSquare },
   { title: "Console", url: "/console", icon: Terminal },
   { title: "Memories", url: "/memories", icon: Database },
