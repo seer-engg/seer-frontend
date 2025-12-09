@@ -26,15 +26,25 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
   const [projectFilter, setProjectFilter] = useState<
     "supervisor-v1" | "seer-v1" | "all"
   >("all");
-  const [dateRange, setDateRange] = useState<"24h" | "7d" | "30d" | "all">(
-    "7d"
-  );
+  const [dateRange, setDateRange] = useState<
+    "15m" | "30m" | "1h" | "3h" | "1d" | "all"
+  >("1h");
 
   // Calculate start_time based on date range
   const getStartTime = (): string | undefined => {
     if (dateRange === "all") return undefined;
-    const hours = dateRange === "24h" ? 24 : dateRange === "7d" ? 168 : 720;
-    const startTime = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    // Convert to milliseconds
+    const minutesMap: Record<string, number> = {
+      "15m": 15,
+      "30m": 30,
+      "1h": 60,
+      "3h": 180,
+      "1d": 1440, // 24 hours
+    };
+    
+    const minutes = minutesMap[dateRange] || 60;
+    const startTime = new Date(Date.now() - minutes * 60 * 1000);
     return startTime.toISOString();
   };
 
@@ -127,9 +137,11 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="24h">Last 24 hours</SelectItem>
-                <SelectItem value="7d">Last 7 days</SelectItem>
-                <SelectItem value="30d">Last 30 days</SelectItem>
+                <SelectItem value="15m">Last 15 minutes</SelectItem>
+                <SelectItem value="30m">Last 30 minutes</SelectItem>
+                <SelectItem value="1h">Last hour</SelectItem>
+                <SelectItem value="3h">Last 3 hours</SelectItem>
+                <SelectItem value="1d">Last 24 hours</SelectItem>
                 <SelectItem value="all">All time</SelectItem>
               </SelectContent>
             </Select>

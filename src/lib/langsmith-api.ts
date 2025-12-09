@@ -20,7 +20,7 @@ function getApiBaseUrl(): string {
   }
   
   // Default to localhost
-  return "http://localhost:8001";
+  return "http://localhost:8080";
 }
 
 const API_BASE_URL = getApiBaseUrl();
