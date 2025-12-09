@@ -43,7 +43,7 @@ export function SeerSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { user, signOut } = useAuth();
   const location = useLocation();
-  const { remainingFreeQueries, hasApiKey, usageLoading } = useUsageGate();
+  const { remainingFreeQueries, hasApiKey, isLoading: usageLoading } = useUsageGate();
 
   const NavItem = ({ item, isActive }: { item: typeof primaryNav[0]; isActive: boolean }) => (
     <Tooltip delayDuration={0}>

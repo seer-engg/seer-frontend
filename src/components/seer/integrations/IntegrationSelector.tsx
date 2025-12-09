@@ -7,7 +7,8 @@ import { IntegrationConnect } from "./IntegrationConnect";
 import { GithubRepoSelector } from "./GithubRepoSelector";
 import { GoogleDriveFolderSelector } from "./GoogleDriveFolderSelector";
 import { AsanaWorkspaceSelector } from "./AsanaWorkspaceSelector";
-import { INTEGRATION_CONFIGS, IntegrationType } from "@/lib/composio/integrations";
+import { INTEGRATION_CONFIGS } from "@/lib/composio/integrations";
+import type { IntegrationType } from "@/lib/composio/client";
 import {
   Popover,
   PopoverContent,

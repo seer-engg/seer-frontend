@@ -2,7 +2,7 @@
  * Integration configuration and types for Composio integrations
  */
 
-import { IntegrationType } from "./client";
+import type { IntegrationType } from "./client";
 import { Github, FolderOpen, CheckSquare2, Sparkles } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 
