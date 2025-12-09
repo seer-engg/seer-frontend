@@ -77,19 +77,6 @@ export function useAgentStream(config: AgentConfig, threadId: string | null, set
       const agentId = getAgentId();
       let currentContent = "";
       let hasReceivedContent = false;
-        if (!thinkingPhaseId || !currentPhases.find(p => p.id === thinkingPhaseId)) {
-          thinkingPhaseId = crypto.randomUUID();
-          const newPhase: ThinkingPhase = {
-            id: thinkingPhaseId,
-            steps: [],
-            isActive: true,
-            startedAt: new Date(),
-          };
-          currentPhases = [...currentPhases, newPhase];
-          return newPhase;
-        }
-        return currentPhases.find(p => p.id === thinkingPhaseId)!;
-      };
 
       for await (const event of streamAgent(
         config.url,

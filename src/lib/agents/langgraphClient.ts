@@ -64,20 +64,46 @@ export function extractThinkingStepsFromEvents(
     const extractToolName = (data: Record<string, unknown> | undefined): string => {
       if (!data) return "unknown_tool";
       
-      // Try different field names
+      // Try different field names (LangGraph SDK uses 'name' field)
       const name = (data.name as string) || 
                    (data.tool_name as string) ||
                    (data.tool as string) ||
                    (data.function as string);
       
       if (name && typeof name === "string" && name.trim()) {
-        return name.trim();
+        const trimmedName = name.trim().toLowerCase();
+        // Normalize "think" tool name variations
+        if (trimmedName === "think" || trimmedName.includes("think")) {
+          return "think";
+        }
+        return trimmedName;
       }
       
-      // Check if output contains thinking-like content
+      // Check input for thinking-like content (on_tool_start has input, on_tool_end has output)
+      const input = data.input as Record<string, unknown> | undefined;
+      if (input && typeof input === "object") {
+        // Check if input contains scratchpad field (think tool signature)
+        if ("scratchpad" in input || "last_tool_call" in input) {
+          return "think";
+        }
+        // Check if input is a string containing thinking keywords
+        if (typeof input === "string" && (input.includes("scratchpad") || input.includes("Thought:"))) {
+          return "think";
+        }
+      }
+      
+      // Check output contains thinking-like content (for on_tool_end events)
       const output = data.output || data.result || data.content;
       if (output && typeof output === "string") {
-        if (output.includes("Thought:") || output.includes("scratchpad")) {
+        if (output.includes("Thought:") || output.includes("scratchpad") || output.includes("Last tool:")) {
+          return "think";
+        }
+      }
+      
+      // Last resort: if we have no name but have input/output, check if it looks like think tool
+      if (input || output) {
+        const combined = JSON.stringify({ input, output }).toLowerCase();
+        if (combined.includes("scratchpad") || combined.includes("thought:") || combined.includes("last tool")) {
           return "think";
         }
       }
@@ -107,8 +133,17 @@ export function extractThinkingStepsFromEvents(
     
     // Handle on_tool_start event - tool call initiated
     if (eventType === "on_tool_start") {
-      const toolName = extractToolName(data);
+      let toolName = extractToolName(data);
       const toolInput = data?.input || {};
+      
+      // DEBUG: If we got unknown_tool, check if input has think tool signature
+      if (toolName === "unknown_tool" && toolInput && typeof toolInput === "object") {
+        const inputObj = toolInput as Record<string, unknown>;
+        // Think tool has scratchpad and/or last_tool_call fields
+        if ("scratchpad" in inputObj || "last_tool_call" in inputObj) {
+          toolName = "think";
+        }
+      }
       
       // Extract run_id from metadata if available (uniquely identifies this tool invocation)
       const runId = (metadata.run_id as string) || (data?.run_id as string) || undefined;
@@ -127,8 +162,27 @@ export function extractThinkingStepsFromEvents(
     
     // Handle on_tool_end event - tool call completed
     if (eventType === "on_tool_end") {
-      const toolName = extractToolName(data);
+      let toolName = extractToolName(data);
       const toolOutput = extractToolOutput(data);
+      
+      // DEBUG: If we got unknown_tool, check if output has think tool signature
+      if (toolName === "unknown_tool") {
+        // Think tool output contains "Thought:" or "scratchpad" or "Last tool:"
+        if (typeof toolOutput === "string") {
+          const outputStr = toolOutput.toLowerCase();
+          if (outputStr.includes("thought:") || outputStr.includes("scratchpad") || outputStr.includes("last tool:")) {
+            toolName = "think";
+          }
+        }
+        // Also check the raw data output field
+        const rawOutput = data?.output as string | undefined;
+        if (rawOutput && typeof rawOutput === "string") {
+          const rawOutputStr = rawOutput.toLowerCase();
+          if (rawOutputStr.includes("thought:") || rawOutputStr.includes("scratchpad") || rawOutputStr.includes("last tool:")) {
+            toolName = "think";
+          }
+        }
+      }
       
       // Extract run_id from metadata if available
       const runId = (metadata.run_id as string) || (data?.run_id as string) || undefined;
