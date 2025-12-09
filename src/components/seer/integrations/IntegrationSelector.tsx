@@ -26,18 +26,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { CheckCircle2, ChevronDown, Loader2, AlertTriangle, RefreshCcw, XCircle, Link, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useIntegrationContext } from "@/contexts/IntegrationContext";
 
 const INTEGRATION_ORDER: IntegrationType[] = ["sandbox", "github", "googledrive", "asana"];
 
 export function IntegrationSelector() {
   const [open, setOpen] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationType>("sandbox"); // Default to sandbox
-  const [selectedResources, setSelectedResources] = useState<Record<IntegrationType, { id: string; name: string } | null>>({
-    sandbox: null,
-    github: null,
-    googledrive: null,
-    asana: null,
-  });
+  const { selection: selectedResources, updateSelection } = useIntegrationContext();
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
 
   // Check localStorage for first open
@@ -56,9 +52,10 @@ export function IntegrationSelector() {
     }
   }, [open, hasOpenedOnce]);
 
-  const handleResourceSelected = (type: IntegrationType) => (id: string, name: string) => {
-    setSelectedResources((prev) => ({ ...prev, [type]: { id, name } }));
-  };
+  const handleResourceSelected =
+    (type: IntegrationType) => (id: string, name: string) => {
+      updateSelection(type, { id, name });
+    };
 
   const handleIntegrationSelect = (type: IntegrationType) => {
     setSelectedIntegration(type);

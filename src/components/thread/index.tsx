@@ -51,6 +51,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useIntegrationContext } from "@/contexts/IntegrationContext";
 
 function StickyToBottomContent(props: {
   content: ReactNode;
@@ -156,6 +157,7 @@ export function Thread() {
   const [firstTokenReceived, setFirstTokenReceived] = useState(false);
   const isLargeScreen = useMediaQuery("(min-width: 1024px)");
   const [thinkingOpen, setThinkingOpen] = useState(false);
+  const { selection: integrationSelection } = useIntegrationContext();
 
   const stream = useStreamContext();
   const messages = stream.messages;
@@ -245,8 +247,14 @@ export function Thread() {
 
     const toolMessages = ensureToolCallsHaveResponses(stream.messages);
 
-    const context =
-      Object.keys(artifactContext).length > 0 ? artifactContext : undefined;
+    const baseContext =
+      artifactContext && Object.keys(artifactContext).length > 0
+        ? artifactContext
+        : undefined;
+    const context = {
+      ...(baseContext ?? {}),
+      integrations: integrationSelection,
+    };
 
     stream.submit(
       { messages: [...toolMessages, newHumanMessage], context },

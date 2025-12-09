@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useCallback } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Message } from "@langchain/langgraph-sdk";
 import { ArtifactProvider } from "@/components/thread/artifact";
@@ -10,6 +16,10 @@ import { useStreamContext } from "@/providers/Stream";
 import { ensureToolCallsHaveResponses } from "@/lib/ensure-tool-responses";
 import { useArtifactContext } from "@/components/thread/artifact";
 import { IntegrationSelector } from "@/components/seer/integrations/IntegrationSelector";
+import {
+  IntegrationProvider,
+  useIntegrationContext,
+} from "@/contexts/IntegrationContext";
 
 export interface AgentChatHeroProps {
   heroVisible: boolean;
@@ -62,16 +72,18 @@ export function AgentChatContainer({
   }, [apiKey]);
 
   return (
-    <ThreadProvider>
-      <StreamProvider
-        defaultApiUrl={apiUrl}
-        defaultAssistantId={assistantId}
-      >
-        <ArtifactProvider>
-          <AgentChatContent renderHero={renderHero} />
-        </ArtifactProvider>
-      </StreamProvider>
-    </ThreadProvider>
+    <IntegrationProvider>
+      <ThreadProvider>
+        <StreamProvider
+          defaultApiUrl={apiUrl}
+          defaultAssistantId={assistantId}
+        >
+          <ArtifactProvider>
+            <AgentChatContent renderHero={renderHero} />
+          </ArtifactProvider>
+        </StreamProvider>
+      </ThreadProvider>
+    </IntegrationProvider>
   );
 }
 
@@ -84,6 +96,7 @@ function AgentChatContent({
   const [artifactContext] = useArtifactContext();
   const heroEnabled = typeof renderHero === "function";
   const [heroVisible, setHeroVisible] = useState(heroEnabled);
+  const { selection: integrationSelection } = useIntegrationContext();
 
   useEffect(() => {
     if (!heroEnabled) return;
@@ -106,10 +119,14 @@ function AgentChatContent({
         content: [{ type: "text", text }],
       };
 
-      const context =
+      const contextBase =
         artifactContext && Object.keys(artifactContext).length > 0
           ? artifactContext
           : undefined;
+      const context = {
+        ...contextBase,
+        integrations: integrationSelection,
+      };
 
       stream.submit(
         {
@@ -134,7 +151,7 @@ function AgentChatContent({
 
       setHeroVisible(false);
     },
-    [artifactContext, stream],
+    [artifactContext, stream, integrationSelection],
   );
 
   const heroNode = useMemo(() => {
