@@ -20,6 +20,7 @@ export type Database = {
           created_at: string
           email: string | null
           full_name: string | null
+          has_completed_onboarding: boolean | null
           id: string
           openai_api_key: string | null
           query_count: number
@@ -30,6 +31,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           full_name?: string | null
+          has_completed_onboarding?: boolean | null
           id: string
           openai_api_key?: string | null
           query_count?: number
@@ -40,6 +42,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           full_name?: string | null
+          has_completed_onboarding?: boolean | null
           id?: string
           openai_api_key?: string | null
           query_count?: number
