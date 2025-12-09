@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { RefreshCcw, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 type GithubRepo = {
@@ -56,11 +56,17 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
   const { toast } = useToast();
   const composioClient = getComposioClient();
   const userEmail = user?.email ?? null;
+  const onRepoSelectedRef = useRef(onRepoSelected);
 
   const [repos, setRepos] = useState<GithubRepo[]>([]);
   const [repoError, setRepoError] = useState<string | null>(null);
   const [reposLoading, setReposLoading] = useState(false);
   const [selectedRepoId, setSelectedRepoId] = useState<string>("");
+
+  // Keep latest callback without recreating fetchRepositories (prevents infinite refetch loop)
+  useEffect(() => {
+    onRepoSelectedRef.current = onRepoSelected;
+  }, [onRepoSelected]);
 
   const fetchRepositories = useCallback(async () => {
     if (!composioClient || !connectedAccountId || !userEmail) return;
@@ -85,7 +91,7 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
         const firstRepoId = String(normalized[0].id ?? normalized[0].full_name ?? normalized[0].name);
         setSelectedRepoId(firstRepoId);
         const firstRepo = normalized[0];
-        onRepoSelected?.(firstRepoId, firstRepo.full_name ?? firstRepo.name);
+        onRepoSelectedRef.current?.(firstRepoId, firstRepo.full_name ?? firstRepo.name);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -98,7 +104,7 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
     } finally {
       setReposLoading(false);
     }
-  }, [composioClient, connectedAccountId, toast, userEmail, onRepoSelected]);
+  }, [composioClient, connectedAccountId, toast, userEmail]);
 
   useEffect(() => {
     if (connectedAccountId) {
@@ -142,7 +148,7 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
           setSelectedRepoId(value);
           const repo = repos.find((r) => String(r.id ?? r.full_name ?? r.name) === value);
           if (repo) {
-            onRepoSelected?.(value, repo.full_name ?? repo.name);
+            onRepoSelectedRef.current?.(value, repo.full_name ?? repo.name);
           }
         }}
       >
