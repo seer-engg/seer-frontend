@@ -31,7 +31,7 @@ const primaryNav = [
   { name: "Projects", href: "/dashboard", icon: FolderKanban },
   { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
   { name: "Evals", href: "/eval", icon: Sparkles },
-  { name: "Trace Analyzer", href: "/trace", icon: Activity },
+  { name: "Traces", href: "/trace", icon: Activity },
   { name: "Tool Hub", href: "/tools", icon: Package },
 ];
 
