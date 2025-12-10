@@ -134,6 +134,7 @@ function AgentChatContent({
           context,
         },
         {
+          onDisconnect: "continue",
           streamMode: ["values"],
           streamSubgraphs: true,
           streamResumable: true,

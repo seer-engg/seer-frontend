@@ -259,6 +259,7 @@ export function Thread() {
     stream.submit(
       { messages: [...toolMessages, newHumanMessage], context },
       {
+        onDisconnect: "continue",
         streamMode: ["values"],
         streamSubgraphs: true,
         streamResumable: true,
@@ -285,6 +286,7 @@ export function Thread() {
     prevMessageLength.current = prevMessageLength.current - 1;
     setFirstTokenReceived(false);
     stream.submit(undefined, {
+      onDisconnect: "continue",
       checkpoint: parentCheckpoint,
       streamMode: ["values"],
       streamSubgraphs: true,
