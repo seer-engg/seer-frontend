@@ -15,6 +15,7 @@ import Evals from "./pages/Evals";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
+import DatasetExplorer from "./pages/DatasetExplorer";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,16 @@ const App = () => (
                   <ProtectedRoute>
                     <SeerLayout>
                       <TraceAnalyzer />
+                    </SeerLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/datasets"
+                element={
+                  <ProtectedRoute>
+                    <SeerLayout>
+                      <DatasetExplorer />
                     </SeerLayout>
                   </ProtectedRoute>
                 }

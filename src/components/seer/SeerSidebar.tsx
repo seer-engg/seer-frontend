@@ -11,6 +11,7 @@ import {
   ChevronRight,
   LogOut,
   Sparkles,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,6 +31,7 @@ const primaryNav = [
   { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
   { name: "Evals", href: "/eval", icon: Sparkles },
   { name: "Traces", href: "/trace", icon: Activity },
+  { name: "Datasets", href: "/datasets", icon: Database },
   { name: "Tool Hub", href: "/tools", icon: Package },
 ];
 
