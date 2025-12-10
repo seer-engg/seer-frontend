@@ -68,10 +68,57 @@ export interface TraceDetail {
   children: RunNode[];
 }
 
+export interface DatasetSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  data_type: string | null;
+  created_at: string | null;
+  modified_at: string | null;
+  example_count: number | null;
+  session_count: number | null;
+  last_session_start_time: string | null;
+}
+
+export interface DatasetExample {
+  id: string;
+  created_at: string | null;
+  inputs: Record<string, unknown>;
+  outputs: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface ExperimentSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  metadata: Record<string, unknown> | null;
+  tenant_id: string | null;
+}
+
+export interface DatasetDetail extends DatasetSummary {
+  inputs_schema: Record<string, unknown> | null;
+  outputs_schema: Record<string, unknown> | null;
+  transformations: Record<string, unknown>[] | null;
+  examples: DatasetExample[];
+  experiments: ExperimentSummary[];
+}
+
 export interface ListTracesParams {
   project?: "supervisor-v1" | "seer-v1";
   limit?: number;
   start_time?: string; // ISO 8601 format
+}
+
+export interface ListDatasetsParams {
+  limit?: number;
+}
+
+export interface GetDatasetDetailParams {
+  exampleLimit?: number;
+  experimentLimit?: number;
 }
 
 class TracesAPIError extends Error {
@@ -180,6 +227,36 @@ export const tracesAPI = {
    */
   async getTraceDetail(traceId: string): Promise<TraceDetail> {
     return fetchAPI<TraceDetail>(`/api/traces/${traceId}`);
+  },
+
+  /**
+   * List datasets from LangSmith
+   */
+  async listDatasets(params: ListDatasetsParams = {}): Promise<DatasetSummary[]> {
+    const searchParams = new URLSearchParams();
+    if (params.limit) {
+      searchParams.append("limit", params.limit.toString());
+    }
+    const endpoint = `/api/datasets${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+    return fetchAPI<DatasetSummary[]>(endpoint);
+  },
+
+  /**
+   * Get dataset metadata, sample examples, and connected experiments
+   */
+  async getDatasetDetail(
+    datasetId: string,
+    params: GetDatasetDetailParams = {}
+  ): Promise<DatasetDetail> {
+    const searchParams = new URLSearchParams();
+    if (params.exampleLimit) {
+      searchParams.append("example_limit", params.exampleLimit.toString());
+    }
+    if (params.experimentLimit) {
+      searchParams.append("experiment_limit", params.experimentLimit.toString());
+    }
+    const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
+    return fetchAPI<DatasetDetail>(`/api/datasets/${datasetId}${suffix}`);
   },
 
   /**
