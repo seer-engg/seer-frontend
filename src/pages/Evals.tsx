@@ -2,9 +2,9 @@ import { AgentChatContainer, AgentChatHeroProps } from "@/features/agent-chat/Ag
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 
-const EVALS_URL = import.meta.env.PROD
-  ? "https://seer-production.up.railway.app"
-  : "http://localhost:8002";
+const EVALS_URL =
+  (import.meta.env.VITE_EVALS_URL as string | undefined) ||
+  "http://localhost:8002";
 
 const EVAL_ASSISTANT_ID =
   (import.meta.env.VITE_EVAL_AGENT_ID as string | undefined) || "eval_agent";
