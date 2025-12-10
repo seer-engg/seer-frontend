@@ -84,5 +84,3 @@ You can override the built-in defaults via environment variables:
 | `VITE_AGENT_CHAT_ASSISTANT_ID` | Optional global assistant ID fallback | _none_ |
 | `VITE_EVAL_AGENT_ID` | Eval graph ID | `eval_agent` |
 | `VITE_SUPERVISOR_AGENT_ID` | Supervisor graph ID | `supervisor` |
-
-If you need to talk to a hosted LangGraph deployment that requires a LangSmith API key, set `localStorage["lg:chat:apiKey"]` (or provide `apiKey` to the container). The UI will prompt for missing values, so you can also paste ad-hoc URLs directly in the browser when debugging.

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type RunNode } from "@/lib/langsmith-api";
+import { type RunNode } from "@/lib/langfuse-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

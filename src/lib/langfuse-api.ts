@@ -230,7 +230,7 @@ export const tracesAPI = {
   },
 
   /**
-   * List datasets from LangSmith
+   * List datasets from Langfuse (via backend proxy)
    */
   async listDatasets(params: ListDatasetsParams = {}): Promise<DatasetSummary[]> {
     const searchParams = new URLSearchParams();
@@ -268,9 +268,10 @@ export const tracesAPI = {
 };
 
 /**
- * Get LangSmith URL for a trace
+ * Get Langfuse URL for a trace
+ * Note: This requires the Langfuse host URL to be configured
  */
-export function getLangSmithTraceUrl(traceId: string): string {
-  return `https://smith.langchain.com/trace/${traceId}`;
+export function getLangfuseTraceUrl(traceId: string): string {
+  const langfuseHost = import.meta.env.VITE_LANGFUSE_BASE_URL || "http://localhost:3000";
+  return `${langfuseHost}/traces/${traceId}`;
 }
-

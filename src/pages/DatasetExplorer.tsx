@@ -6,7 +6,7 @@ import {
   type DatasetDetail,
   type DatasetExample,
   type ExperimentSummary,
-} from "@/lib/langsmith-api";
+} from "@/lib/langfuse-api";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -210,7 +210,7 @@ export default function DatasetExplorer() {
                 Datasets
               </h1>
               <p className="text-sm text-muted-foreground">
-                Browse LangSmith datasets and view connected experiments.
+                Browse Langfuse datasets and view connected experiments.
               </p>
             </div>
 
