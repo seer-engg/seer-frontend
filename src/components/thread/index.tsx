@@ -52,6 +52,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useIntegrationContext } from "@/contexts/IntegrationContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 function StickyToBottomContent(props: {
   content: ReactNode;
@@ -144,6 +145,7 @@ export function Thread() {
     parseAsBoolean.withDefault(false),
   );
   const [input, setInput] = useState("");
+  const { user } = useAuth();
   const {
     contentBlocks,
     setContentBlocks,
@@ -254,6 +256,7 @@ export function Thread() {
     const context = {
       ...(baseContext ?? {}),
       integrations: integrationSelection,
+      user_id: user?.email,
     };
 
     stream.submit(

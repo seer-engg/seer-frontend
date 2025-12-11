@@ -2,10 +2,9 @@
  * Optional resource selector for Google Drive folders
  */
 
-import { getComposioClient } from "@/lib/composio/client";
+import { executeTool } from "@/lib/composio/proxy-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
 import { RefreshCcw, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,8 +25,6 @@ export function GoogleDriveFolderSelector({
   onFolderSelected,
 }: GoogleDriveFolderSelectorProps) {
   const { user } = useAuth();
-  const { toast } = useToast();
-  const composioClient = getComposioClient();
   const userEmail = user?.email ?? null;
 
   const [folders, setFolders] = useState<GoogleDriveFolder[]>([]);
@@ -36,16 +33,16 @@ export function GoogleDriveFolderSelector({
   const [error, setError] = useState<string | null>(null);
 
   const fetchFolders = useCallback(async () => {
-    if (!composioClient || !connectedAccountId || !userEmail) return;
+    if (!connectedAccountId || !userEmail) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const response = await composioClient.tools.execute("GOOGLEDRIVE_LIST_FILES", {
+      const response = await executeTool({
+        toolSlug: "GOOGLEDRIVE_LIST_FILES",
         userId: userEmail,
         connectedAccountId,
-        dangerouslySkipVersionCheck: true,
         arguments: {
           q: "mimeType='application/vnd.google-apps.folder'",
           pageSize: 50,
@@ -87,7 +84,7 @@ export function GoogleDriveFolderSelector({
     } finally {
       setLoading(false);
     }
-  }, [composioClient, connectedAccountId, toast, userEmail, onFolderSelected, selectedFolderId]);
+  }, [connectedAccountId, userEmail, onFolderSelected, selectedFolderId]);
 
   useEffect(() => {
     if (connectedAccountId) {

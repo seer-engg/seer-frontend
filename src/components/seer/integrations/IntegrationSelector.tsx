@@ -24,16 +24,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CheckCircle2, ChevronDown, Loader2, AlertTriangle, RefreshCcw, XCircle, Link, Check } from "lucide-react";
-import { useState, useEffect } from "react";
+import { CheckCircle2, ChevronDown, Loader2, AlertTriangle, RefreshCcw, XCircle, Link, Check, Sparkles } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useIntegrationContext } from "@/contexts/IntegrationContext";
 
-const INTEGRATION_ORDER: IntegrationType[] = ["sandbox", "github", "googledrive", "asana"];
+const INTEGRATION_ORDER: IntegrationType[] = ["github", "googledrive", "asana", "gmail"];
 
 export function IntegrationSelector() {
   const [open, setOpen] = useState(false);
-  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationType>("sandbox"); // Default to sandbox
+  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationType | null>(null);
   const { selection: selectedResources, updateSelection } = useIntegrationContext();
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
 
@@ -54,9 +54,69 @@ export function IntegrationSelector() {
   }, [open, hasOpenedOnce]);
 
   const handleResourceSelected =
-    (type: IntegrationType) => (id: string, name: string) => {
-      updateSelection(type, { id, name });
+    (type: IntegrationType) => (id: string, name: string, extraData?: { workspaceGid?: string; projectGid?: string }) => {
+      // CRITICAL: Preserve the Composio connected_account_id when selecting resources
+      // The 'id' parameter here is usually a resource ID (workspace GID, repo ID, etc.), NOT the connected_account_id
+      const current = selectedResources[type];
+      
+      // Check if 'id' looks like a Composio connected_account_id (starts with 'ca_')
+      const isComposioAccountId = id.startsWith('ca_');
+      
+      // Determine the correct connected_account_id to use
+      let connectedAccountId: string;
+      if (isComposioAccountId) {
+        // The 'id' parameter IS a connected_account_id, use it
+        connectedAccountId = id;
+      } else {
+        // The 'id' parameter is a resource ID (workspace GID, etc.)
+        // Use existing connected_account_id from current selection, or fallback to id if none exists
+        // BUT: if current?.id also doesn't start with 'ca_', we need to find the actual connected_account_id
+        if (current?.id && current.id.startsWith('ca_')) {
+          connectedAccountId = current.id; // Preserve existing connected_account_id
+        } else {
+          // No valid connected_account_id found - this shouldn't happen, but use id as fallback
+          console.warn(`[IntegrationSelector] No connected_account_id found for ${type}, using id: ${id}`);
+          connectedAccountId = id;
+        }
+      }
+      
+      updateSelection(type, {
+        id: connectedAccountId, // Always use the connected_account_id
+        name,
+        mode: current?.mode || "connected",
+        // Store resource-specific IDs separately
+        ...(type === "asana" && extraData?.workspaceGid && { workspaceGid: extraData.workspaceGid }),
+        ...(type === "asana" && extraData?.projectGid && { projectGid: extraData.projectGid }),
+      });
     };
+
+  const handleConnected = useCallback((type: IntegrationType, connectedAccountId: string) => {
+    // Store connected account ID in IntegrationContext
+    // The ID is the Composio connected_account_id
+    console.log(`[IntegrationSelector] handleConnected called for ${type} with account ID: ${connectedAccountId}`);
+    const current = selectedResources[type];
+    // Preserve existing resource IDs (workspaceGid, projectGid, etc.) if they exist
+    updateSelection(type, {
+      id: connectedAccountId,
+      name: current?.name || "", // Preserve existing name if set, otherwise empty
+      mode: "connected",
+      // Preserve all resource IDs
+      ...(current?.workspaceGid && { workspaceGid: current.workspaceGid }),
+      ...(current?.projectGid && { projectGid: current.projectGid }),
+      ...(current?.repoId && { repoId: current.repoId }),
+      ...(current?.folderId && { folderId: current.folderId }),
+    });
+    console.log(`[IntegrationSelector] Updated selection for ${type}:`, { id: connectedAccountId, mode: "connected", preserved: current });
+  }, [updateSelection, selectedResources]);
+
+  const handleUseSandbox = useCallback((type: IntegrationType) => {
+    // Set integration to use sandbox mode
+    updateSelection(type, {
+      id: "sandbox",
+      name: "Sandbox",
+      mode: "sandbox",
+    });
+  }, [updateSelection]);
 
   const handleIntegrationSelect = (type: IntegrationType) => {
     setSelectedIntegration(type);
@@ -105,6 +165,8 @@ export function IntegrationSelector() {
                     isSelected={selectedIntegration === type}
                     onSelect={() => handleIntegrationSelect(type)}
                     onResourceSelected={handleResourceSelected(type)}
+                    onConnected={(connectedAccountId) => handleConnected(type, connectedAccountId)}
+                    onUseSandbox={() => handleUseSandbox(type)}
                     selectedResource={selectedResources[type]}
                   />
                 ))}
@@ -122,6 +184,7 @@ interface IntegrationCommandItemProps {
   isSelected: boolean;
   onSelect: () => void;
   onResourceSelected: (id: string, name: string) => void;
+  onUseSandbox: () => void;
   selectedResource: { id: string; name: string } | null;
 }
 
@@ -130,12 +193,18 @@ function IntegrationCommandItem({
   isSelected,
   onSelect,
   onResourceSelected,
+  onConnected,
+  onUseSandbox,
   selectedResource,
 }: IntegrationCommandItemProps) {
   const config = INTEGRATION_CONFIGS[type];
+  const isSandboxMode = selectedResource?.id === "sandbox" || selectedResource?.mode === "sandbox";
 
   return (
-    <IntegrationConnect type={type}>
+    <IntegrationConnect 
+      type={type}
+      onConnected={onConnected}
+    >
       {({ status, connectedAccountId, isLoading, onAuthorize, onRefresh, onCancel }) => (
         <div className="space-y-1">
           <CommandItem
@@ -146,14 +215,11 @@ function IntegrationCommandItem({
             )}
           >
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <config.icon className={cn(
-                "h-4 w-4 shrink-0",
-                type === "sandbox" && "text-seer"
-              )} />
+              <config.icon className="h-4 w-4 shrink-0" />
               <span className="text-sm font-medium truncate">{config.displayName}</span>
-              {type === "sandbox" && (
+              {isSandboxMode && (
                 <Badge variant="outline" className="text-xs bg-seer/10 text-seer border-seer/20 ml-auto">
-                  Default
+                  Sandbox
                 </Badge>
               )}
             </div>
@@ -293,8 +359,33 @@ function IntegrationCommandItem({
                 )}
               </div>
 
+              {/* Use Sandbox Option */}
+              {!isSandboxMode && (
+                <div className="px-2 pb-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUseSandbox();
+                        }}
+                        className="w-full text-xs h-7 bg-seer/5 hover:bg-seer/10 border-seer/20 text-seer"
+                      >
+                        <Sparkles className="h-3 w-3 mr-1.5" />
+                        Use Sandbox
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p>Use Seer's sandboxed {config.displayName} integration to explore the platform without connecting your account.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
+
               {/* Resource Selection */}
-              {status === "connected" && connectedAccountId && type !== "sandbox" && (
+              {status === "connected" && connectedAccountId && !isSandboxMode && (
                 <div className="space-y-2">
                   {type === "github" && (
                     <GithubRepoSelector
@@ -311,8 +402,74 @@ function IntegrationCommandItem({
                   {type === "asana" && (
                     <AsanaWorkspaceSelector
                       connectedAccountId={connectedAccountId}
-                      onWorkspaceSelected={onResourceSelected}
-                      onProjectSelected={onResourceSelected}
+                      initialWorkspaceGid={selectedResources[type]?.workspaceGid}
+                      initialProjectGid={selectedResources[type]?.projectGid}
+                      onWorkspaceSelected={(workspaceGid, workspaceName) => {
+                        // CRITICAL: Pass workspace info but ALWAYS preserve the connected_account_id
+                        // connectedAccountId prop comes from IntegrationConnect and is the Composio connected_account_id (ca_*)
+                        // workspaceGid is the Asana workspace GID (numeric)
+                        // We MUST use connectedAccountId prop, NOT the workspaceGid, for the 'id' field
+                        const current = selectedResources[type];
+                        
+                        // Determine the correct connected_account_id to use
+                        // Priority: 1) connectedAccountId prop (most reliable - comes from IntegrationConnect), 
+                        //           2) current?.id if it's a Composio ID (ca_*), 
+                        //           3) fallback
+                        let finalConnectedAccountId: string;
+                        if (connectedAccountId && connectedAccountId.startsWith('ca_')) {
+                          // Use prop first - it's the source of truth from IntegrationConnect
+                          finalConnectedAccountId = connectedAccountId;
+                        } else if (current?.id && current.id.startsWith('ca_')) {
+                          // Fallback to current selection if prop is invalid
+                          finalConnectedAccountId = current.id;
+                        } else {
+                          // Fallback - shouldn't happen, but log warning
+                          console.warn(`[IntegrationSelector] No valid connected_account_id found for ${type}. Current: ${current?.id}, Prop: ${connectedAccountId}`);
+                          finalConnectedAccountId = connectedAccountId || current?.id || '';
+                        }
+                        
+                        console.log(`[IntegrationSelector] Workspace selected for ${type}: workspaceGid=${workspaceGid}, connectedAccountId prop=${connectedAccountId}, preserving connected_account_id=${finalConnectedAccountId}`);
+                        
+                        // Update selection with workspace info, preserving connected_account_id
+                        // IMPORTANT: Preserve all existing fields (like workspaceGid if already set)
+                        updateSelection(type, {
+                          id: finalConnectedAccountId, // ALWAYS use Composio connected_account_id, never workspace GID
+                          name: workspaceName,
+                          mode: current?.mode || "connected",
+                          workspaceGid: workspaceGid, // Store workspace GID separately
+                          // Preserve other resource IDs if they exist
+                          ...(current?.projectGid && { projectGid: current.projectGid }),
+                          ...(current?.repoId && { repoId: current.repoId }),
+                          ...(current?.folderId && { folderId: current.folderId }),
+                        });
+                        console.log(`[IntegrationSelector] Updated selection with workspaceGid:`, { type, id: finalConnectedAccountId, workspaceGid, name: workspaceName });
+                      }}
+                      onProjectSelected={(projectGid, projectName, workspaceGid) => {
+                        // CRITICAL: Pass project info but ALWAYS preserve the connected_account_id
+                        const current = selectedResources[type];
+                        
+                        // Determine the correct connected_account_id to use
+                        let finalConnectedAccountId: string;
+                        if (current?.id && current.id.startsWith('ca_')) {
+                          finalConnectedAccountId = current.id;
+                        } else if (connectedAccountId && connectedAccountId.startsWith('ca_')) {
+                          finalConnectedAccountId = connectedAccountId;
+                        } else {
+                          console.warn(`[IntegrationSelector] No valid connected_account_id found for ${type} project selection`);
+                          finalConnectedAccountId = connectedAccountId || current?.id || '';
+                        }
+                        
+                        console.log(`[IntegrationSelector] Project selected for ${type}: projectGid=${projectGid}, preserving connected_account_id=${finalConnectedAccountId}`);
+                        
+                        // Update selection with project info, preserving connected_account_id
+                        updateSelection(type, {
+                          id: finalConnectedAccountId, // ALWAYS use Composio connected_account_id
+                          name: projectName,
+                          mode: current?.mode || "connected",
+                          workspaceGid: workspaceGid,
+                          projectGid: projectGid,
+                        });
+                      }}
                     />
                   )}
                   {selectedResource && (
@@ -323,10 +480,10 @@ function IntegrationCommandItem({
                 </div>
               )}
 
-              {/* Sandbox info */}
-              {type === "sandbox" && (
-                <div className="text-xs text-muted-foreground">
-                  Use Seer's sandboxed integrations to explore the platform without connecting your accounts.
+              {/* Sandbox mode info */}
+              {isSandboxMode && (
+                <div className="px-2 pb-2 text-xs text-muted-foreground">
+                  Using Seer's sandboxed {config.displayName} integration. Connect your account to use your own data.
                 </div>
               )}
 

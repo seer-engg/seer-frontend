@@ -2,7 +2,7 @@
  * Resource selector for GitHub repositories
  */
 
-import { getComposioClient } from "@/lib/composio/client";
+import { executeTool } from "@/lib/composio/proxy-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -54,7 +54,6 @@ interface GithubRepoSelectorProps {
 export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: GithubRepoSelectorProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const composioClient = getComposioClient();
   const userEmail = user?.email ?? null;
   const onRepoSelectedRef = useRef(onRepoSelected);
 
@@ -69,16 +68,16 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
   }, [onRepoSelected]);
 
   const fetchRepositories = useCallback(async () => {
-    if (!composioClient || !connectedAccountId || !userEmail) return;
+    if (!connectedAccountId || !userEmail) return;
 
     setReposLoading(true);
     setRepoError(null);
 
     try {
-      const response = await composioClient.tools.execute("GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER", {
+      const response = await executeTool({
+        toolSlug: "GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER",
         userId: userEmail,
         connectedAccountId,
-        dangerouslySkipVersionCheck: true,
         arguments: {
           per_page: 50,
           sort: "updated",
@@ -104,7 +103,7 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
     } finally {
       setReposLoading(false);
     }
-  }, [composioClient, connectedAccountId, toast, userEmail]);
+  }, [connectedAccountId, toast, userEmail]);
 
   useEffect(() => {
     if (connectedAccountId) {
