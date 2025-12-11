@@ -4,14 +4,11 @@
  */
 
 const getProxyBaseUrl = (): string => {
-  // Get Supervisor URL from env or use default
-  const supervisorUrl = 
-    import.meta.env.VITE_SUPERVISOR_URL ||
-    import.meta.env.VITE_AGENT_CHAT_API_URL ||
-    import.meta.env.VITE_LANGGRAPH_API_URL ||
-    "http://localhost:8080"; // Default LangGraph port
+  // Get Seer Backend URL from env or use default
+  const seerBackendUrl = 
+    import.meta.env.VITE_SEER_BACKEND_URL || "http://localhost:9000";
   
-  return supervisorUrl;
+  return seerBackendUrl;
 };
 
 export interface ConnectedAccount {
