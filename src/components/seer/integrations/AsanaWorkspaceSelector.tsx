@@ -2,7 +2,7 @@
  * Resource selector for Asana workspaces and projects
  */
 
-import { getComposioClient } from "@/lib/composio/client";
+import { executeTool } from "@/lib/composio/proxy-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -28,36 +28,41 @@ interface AsanaWorkspaceSelectorProps {
   connectedAccountId: string;
   onWorkspaceSelected?: (workspaceGid: string, workspaceName: string) => void;
   onProjectSelected?: (projectGid: string, projectName: string) => void;
+  initialWorkspaceGid?: string; // Persisted workspace GID from previous selection
+  initialProjectGid?: string; // Persisted project GID from previous selection
 }
 
 export function AsanaWorkspaceSelector({
   connectedAccountId,
   onWorkspaceSelected,
   onProjectSelected,
+  initialWorkspaceGid,
+  initialProjectGid,
 }: AsanaWorkspaceSelectorProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const composioClient = getComposioClient();
   const userEmail = user?.email ?? null;
 
   const [workspaces, setWorkspaces] = useState<AsanaWorkspace[]>([]);
   const [projects, setProjects] = useState<AsanaProject[]>([]);
-  const [selectedWorkspaceGid, setSelectedWorkspaceGid] = useState<string>("");
-  const [selectedProjectGid, setSelectedProjectGid] = useState<string>("");
+  // Initialize from persisted selection if available
+  const [selectedWorkspaceGid, setSelectedWorkspaceGid] = useState<string>(initialWorkspaceGid || "");
+  const [selectedProjectGid, setSelectedProjectGid] = useState<string>(initialProjectGid || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchWorkspaces = useCallback(async () => {
-    if (!composioClient || !connectedAccountId || !userEmail) return;
+    if (!connectedAccountId || !userEmail) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const response = await composioClient.tools.execute("ASANA_GET_MULTIPLE_WORKSPACES", {
+      const response = await executeTool({
+        toolSlug: "ASANA_GET_MULTIPLE_WORKSPACES",
         userId: userEmail,
         connectedAccountId,
-        dangerouslySkipVersionCheck: true,
+        arguments: {},
       });
 
       const data = response.data;
@@ -78,11 +83,28 @@ export function AsanaWorkspaceSelector({
         }));
         setWorkspaces(normalized);
         if (normalized.length > 0) {
-          const firstWorkspace = normalized[0];
-          setSelectedWorkspaceGid(firstWorkspace.gid);
-          onWorkspaceSelected?.(firstWorkspace.gid, firstWorkspace.name);
-          // Fetch projects for first workspace
-          await fetchProjects(firstWorkspace.gid);
+          // Check if we have a persisted workspace GID (from props or state)
+          const persistedGid = initialWorkspaceGid || selectedWorkspaceGid;
+          const workspaceToSelect = normalized.find(w => w.gid === persistedGid) || normalized[0];
+          
+          // Only auto-select if no workspace is currently selected (neither from props nor state)
+          if (!persistedGid) {
+            setSelectedWorkspaceGid(workspaceToSelect.gid);
+            console.log(`[AsanaWorkspaceSelector] Auto-selecting first workspace: gid=${workspaceToSelect.gid}, name=${workspaceToSelect.name}`);
+            onWorkspaceSelected?.(workspaceToSelect.gid, workspaceToSelect.name);
+            console.log(`[AsanaWorkspaceSelector] Called onWorkspaceSelected callback`);
+          } else {
+            // Use persisted workspace - update state if needed
+            if (workspaceToSelect.gid !== selectedWorkspaceGid) {
+              setSelectedWorkspaceGid(workspaceToSelect.gid);
+            }
+            console.log(`[AsanaWorkspaceSelector] Using persisted workspace: gid=${workspaceToSelect.gid}, name=${workspaceToSelect.name}`);
+            // Still call callback to ensure parent knows about the selection
+            onWorkspaceSelected?.(workspaceToSelect.gid, workspaceToSelect.name);
+          }
+          
+          // Fetch projects for selected workspace
+          await fetchProjects(workspaceToSelect.gid);
         }
       }
     } catch (error) {
@@ -96,18 +118,18 @@ export function AsanaWorkspaceSelector({
     } finally {
       setLoading(false);
     }
-  }, [composioClient, connectedAccountId, toast, userEmail, onWorkspaceSelected]);
+  }, [connectedAccountId, toast, userEmail, onWorkspaceSelected]);
 
   const fetchProjects = useCallback(
     async (workspaceGid: string) => {
-      if (!composioClient || !connectedAccountId || !userEmail) return;
+      if (!connectedAccountId || !userEmail) return;
 
       setLoading(true);
       try {
-        const response = await composioClient.tools.execute("ASANA_GET_WORKSPACE_PROJECTS", {
+        const response = await executeTool({
+          toolSlug: "ASANA_GET_WORKSPACE_PROJECTS",
           userId: userEmail,
           connectedAccountId,
-          dangerouslySkipVersionCheck: true,
           arguments: {
             workspace_gid: workspaceGid,
             limit: 50,
@@ -135,8 +157,18 @@ export function AsanaWorkspaceSelector({
         setLoading(false);
       }
     },
-    [composioClient, connectedAccountId, userEmail, onProjectSelected],
+    [connectedAccountId, userEmail, onProjectSelected],
   );
+
+  // Initialize from persisted selection if available
+  useEffect(() => {
+    if (initialWorkspaceGid && !selectedWorkspaceGid) {
+      setSelectedWorkspaceGid(initialWorkspaceGid);
+    }
+    if (initialProjectGid && !selectedProjectGid) {
+      setSelectedProjectGid(initialProjectGid);
+    }
+  }, [initialWorkspaceGid, initialProjectGid]);
 
   useEffect(() => {
     if (connectedAccountId) {
@@ -213,7 +245,7 @@ export function AsanaWorkspaceSelector({
               setSelectedProjectGid(value);
               const project = projects.find((p) => p.gid === value);
               if (project) {
-                onProjectSelected?.(value, project.name);
+                onProjectSelected?.(value, project.name, selectedWorkspaceGid);
               }
             }}
           >

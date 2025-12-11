@@ -2,9 +2,15 @@ import { createContext, useContext, useMemo, useState, useEffect } from "react";
 import type { IntegrationType } from "@/lib/composio/client";
 
 export type IntegrationSelection = {
-  id: string;
-  name: string;
+  id: string; // Composio connected_account_id (required for tool execution)
+  name: string; // Resource name (workspace/repo/folder name)
   type?: string;
+  mode?: "connected" | "sandbox"; // Track whether using connected account or sandbox
+  // Resource-specific IDs (optional, for Asana workspace, GitHub repo, etc.)
+  workspaceGid?: string; // Asana workspace GID
+  projectGid?: string; // Asana project GID
+  repoId?: string; // GitHub repo ID
+  folderId?: string; // Google Drive folder ID
 };
 
 export type IntegrationState = Record<
@@ -24,7 +30,6 @@ interface IntegrationContextValue {
 const STORAGE_KEY = "seer_integrations_state";
 
 const defaultState = {
-  sandbox: null,
   github: null,
   googledrive: null,
   asana: null,
@@ -63,8 +68,14 @@ export function IntegrationProvider({
     () => ({
       selection,
       setSelection,
-      updateSelection: (type, value) =>
-        setSelection((prev) => ({ ...prev, [type]: value })),
+      updateSelection: (type, value) => {
+        console.log(`[IntegrationContext] updateSelection called for ${type}:`, JSON.stringify(value, null, 2));
+        setSelection((prev) => {
+          const updated = { ...prev, [type]: value };
+          console.log(`[IntegrationContext] Selection updated. New state:`, JSON.stringify(updated, null, 2));
+          return updated;
+        });
+      },
     }),
     [selection],
   );

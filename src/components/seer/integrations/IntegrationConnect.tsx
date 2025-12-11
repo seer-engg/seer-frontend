@@ -4,8 +4,14 @@
  */
 
 import { useAuth } from "@/contexts/AuthContext";
-import { getComposioClient, getAuthConfigId, IntegrationType } from "@/lib/composio/client";
+import { getAuthConfigId, IntegrationType } from "@/lib/composio/client";
 import { INTEGRATION_CONFIGS, ConnectionStatus, ConnectedAccount } from "@/lib/composio/integrations";
+import {
+  listConnectedAccounts,
+  initiateConnection,
+  waitForConnection,
+  deleteConnectedAccount,
+} from "@/lib/composio/proxy-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -51,13 +57,12 @@ export function IntegrationConnect({
   const { toast } = useToast();
 
   const config = INTEGRATION_CONFIGS[type];
-  const composioClient = useMemo(() => getComposioClient(), []);
   const authConfigId = useMemo(() => getAuthConfigId(type), [type]);
 
   const userEmail = user?.email ?? null;
-  const missingApiKey = !import.meta.env.VITE_COMPOSIO_API_KEY;
   const missingAuthConfig = !authConfigId;
-  const canUseComposio = Boolean(composioClient && authConfigId && !missingApiKey && !missingAuthConfig);
+  // No longer need API key check - backend proxy handles it
+  const canUseComposio = Boolean(authConfigId && userEmail && !missingAuthConfig);
   const isSandbox = type === "sandbox";
 
   // Sandbox is always connected and doesn't need OAuth
@@ -83,7 +88,7 @@ export function IntegrationConnect({
     setConnectionError(null);
 
     try {
-      const response = await composioClient!.connectedAccounts.list({
+      const response = await listConnectedAccounts({
         userIds: [userEmail],
         toolkitSlugs: [config.toolkitSlug],
         authConfigIds: authConfigId ? [authConfigId] : undefined,
@@ -92,37 +97,51 @@ export function IntegrationConnect({
       const items = response.items ?? [];
       const activeAccount = items.find((item) => item.status === "ACTIVE");
 
+      // Clear any previous errors on successful fetch
+      setConnectionError(null);
+
       if (activeAccount) {
+        console.log(`[IntegrationConnect] Found ACTIVE account for ${type}:`, activeAccount.id);
+        if (activeAccount.user_id) {
+          console.log(`[IntegrationConnect] Account user_id format:`, activeAccount.user_id);
+        }
         setConnectedAccountId(activeAccount.id);
         setConnectionStatus("connected");
+        // Call onConnected callback - don't include it in deps to avoid loops
         onConnected?.(activeAccount.id);
       } else if (items.length) {
+        console.log(`[IntegrationConnect] Found ${items.length} account(s) but none ACTIVE for ${type}`);
         setConnectedAccountId(items[0].id);
         setConnectionStatus("pending");
       } else {
+        console.log(`[IntegrationConnect] No accounts found for ${type}`);
         resetConnectionState();
       }
     } catch (error) {
+      console.error("[IntegrationConnect] Error fetching connections:", error);
       setConnectionStatus("error");
       setConnectionError(error instanceof Error ? error.message : "Unknown error");
     } finally {
       setConnectionLoading(false);
     }
-  }, [canUseComposio, composioClient, authConfigId, config.toolkitSlug, resetConnectionState, userEmail, onConnected]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseComposio, authConfigId, config.toolkitSlug, resetConnectionState, userEmail]);
 
   const handleAuthorize = useCallback(async () => {
-    if (!composioClient || !authConfigId || !userEmail) return;
+    if (!authConfigId || !userEmail) return;
     setAuthorizeLoading(true);
     setConnectionError(null);
 
     try {
       const callbackUrl = `${window.location.origin}${window.location.pathname}`;
-      const connectionRequest = await composioClient.connectedAccounts.link(userEmail, authConfigId, {
+      const connectionRequest = await initiateConnection({
+        userId: userEmail,
+        authConfigId,
         callbackUrl,
       });
 
       if (!connectionRequest.redirectUrl) {
-        throw new Error("Composio did not return a redirect URL");
+        throw new Error("Backend did not return a redirect URL");
       }
 
       window.location.href = connectionRequest.redirectUrl;
@@ -138,16 +157,16 @@ export function IntegrationConnect({
     } finally {
       setAuthorizeLoading(false);
     }
-  }, [composioClient, authConfigId, toast, userEmail, config.displayName]);
+  }, [authConfigId, toast, userEmail, config.displayName]);
 
   const handleCancel = useCallback(async () => {
-    if (!composioClient || !connectedAccountId) return;
+    if (!connectedAccountId) return;
     
     setConnectionLoading(true);
     setConnectionError(null);
 
     try {
-      await composioClient.connectedAccounts.delete(connectedAccountId);
+      await deleteConnectedAccount(connectedAccountId);
       toast({
         title: `${config.displayName} connection cancelled`,
         description: "The pending connection has been cancelled. You can connect again anytime.",
@@ -164,7 +183,7 @@ export function IntegrationConnect({
     } finally {
       setConnectionLoading(false);
     }
-  }, [composioClient, connectedAccountId, toast, config.displayName, resetConnectionState]);
+  }, [connectedAccountId, toast, config.displayName, resetConnectionState]);
 
   useEffect(() => {
     // Sandbox is always connected, no need to fetch
@@ -182,15 +201,24 @@ export function IntegrationConnect({
     if (canUseComposio && !authLoading) {
       fetchConnections();
     }
-  }, [authLoading, canUseComposio, fetchConnections, resetConnectionState, userEmail, isSandbox]);
+    // Only re-fetch when these core dependencies change, not when fetchConnections callback changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, canUseComposio, userEmail, isSandbox]);
 
-  // Handle OAuth callback
+  // Handle OAuth callback - use a ref to prevent re-running
   useEffect(() => {
     if (!canUseComposio) return;
 
     const params = new URLSearchParams(window.location.search);
     const matchedValue = CONNECTION_QUERY_KEYS.map((key) => params.get(key)).find(Boolean);
     if (!matchedValue) return;
+
+    // Prevent processing the same callback multiple times
+    const processingKey = `oauth_processing_${type}_${matchedValue}`;
+    if (sessionStorage.getItem(processingKey)) {
+      return;
+    }
+    sessionStorage.setItem(processingKey, "true");
 
     const cleanQueryParams = () => {
       let mutated = false;
@@ -210,24 +238,43 @@ export function IntegrationConnect({
     (async () => {
       try {
         setConnectionStatus("pending");
-        await composioClient?.connectedAccounts.waitForConnection(matchedValue, 120000);
-        toast({
-          title: `${config.displayName} connected`,
-          description: "Composio confirmed the authorization.",
+        setConnectionError(null);
+        const result = await waitForConnection({
+          connectionId: matchedValue,
+          timeoutMs: 120000,
         });
+        
+        // Store the connected account ID
+        if (result.connectedAccountId) {
+          setConnectedAccountId(result.connectedAccountId);
+          setConnectionStatus("connected");
+          onConnected?.(result.connectedAccountId);
+          toast({
+            title: `${config.displayName} connected`,
+            description: "Composio confirmed the authorization.",
+          });
+        }
+        // Refresh connections to get latest status
+        await fetchConnections();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
+        setConnectionStatus("error");
+        setConnectionError(message);
         toast({
           title: "Connection not ready",
           description: message,
           variant: "destructive",
         });
+        // Still try to fetch in case it's just a timeout
+        fetchConnections();
       } finally {
         cleanQueryParams();
-        fetchConnections();
+        sessionStorage.removeItem(processingKey);
       }
     })();
-  }, [canUseComposio, composioClient, fetchConnections, toast, config.displayName]);
+    // Only depend on canUseComposio - don't include callbacks to avoid loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseComposio]);
 
   // Render using children function if provided
   if (children) {

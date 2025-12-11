@@ -20,6 +20,7 @@ import {
   IntegrationProvider,
   useIntegrationContext,
 } from "@/contexts/IntegrationContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface AgentChatHeroProps {
   heroVisible: boolean;
@@ -97,6 +98,12 @@ function AgentChatContent({
   const heroEnabled = typeof renderHero === "function";
   const [heroVisible, setHeroVisible] = useState(heroEnabled);
   const { selection: integrationSelection } = useIntegrationContext();
+  const { user } = useAuth();
+  
+  // Debug: Log integration selection whenever it changes
+  useEffect(() => {
+    console.log("[AgentChatContainer] Integration selection updated:", JSON.stringify(integrationSelection, null, 2));
+  }, [integrationSelection]);
 
   useEffect(() => {
     if (!heroEnabled) return;
@@ -123,10 +130,26 @@ function AgentChatContent({
         artifactContext && Object.keys(artifactContext).length > 0
           ? artifactContext
           : undefined;
+      
+      // Pass user email as user_id to Supervisor so it uses the correct Composio user
+      // This ensures Supervisor uses the same user_id that was used when connecting accounts
+      // IMPORTANT: Use the EXACT email that was used during connection (no modifications)
+      const userEmailForComposio = user?.email || undefined;
+      
+      // Debug logging to verify what email is being used
+      if (userEmailForComposio) {
+        console.log("[AgentChatContainer] Passing user_id to Supervisor:", userEmailForComposio);
+      }
+      console.log("[AgentChatContainer] Integration selection being passed:", JSON.stringify(integrationSelection, null, 2));
+      
       const context = {
         ...contextBase,
         integrations: integrationSelection,
+        user_id: userEmailForComposio, // Pass exact user email as user_id for Composio
+        user_email: userEmailForComposio, // Also pass as user_email for compatibility
       };
+      
+      console.log("[AgentChatContainer] Full context being sent:", JSON.stringify(context, null, 2));
 
       stream.submit(
         {
