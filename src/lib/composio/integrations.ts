@@ -3,7 +3,7 @@
  */
 
 import type { IntegrationType } from "./client";
-import { Github, FolderOpen, CheckSquare2, Sparkles } from "lucide-react";
+import { Github, FolderOpen, CheckSquare2, Sparkles, Mail } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 
 export interface IntegrationConfig {
@@ -47,6 +47,14 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     toolkitSlug: "asana",
     requiresResourceSelection: true,
     resourceLabel: "Workspace",
+  },
+  gmail: {
+    type: "gmail",
+    displayName: "Gmail",
+    icon: Mail,
+    toolkitSlug: "gmail",
+    requiresResourceSelection: false,
+    resourceLabel: "Mailbox",
   },
 };
 

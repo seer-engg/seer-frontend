@@ -6,6 +6,8 @@ const COMPOSIO_API_KEY = import.meta.env.VITE_COMPOSIO_API_KEY;
 const COMPOSIO_GITHUB_AUTH_CONFIG_ID = import.meta.env.VITE_COMPOSIO_GITHUB_AUTH_CONFIG_ID;
 const COMPOSIO_GOOGLEDRIVE_AUTH_CONFIG_ID = import.meta.env.VITE_COMPOSIO_GOOGLEDRIVE_AUTH_CONFIG_ID;
 const COMPOSIO_ASANA_AUTH_CONFIG_ID = import.meta.env.VITE_COMPOSIO_ASANA_AUTH_CONFIG_ID;
+// Fixed Gmail auth config ID (from Composio dashboard)
+const COMPOSIO_GMAIL_AUTH_CONFIG_ID = "ac_XXRRIJCJCZRJ";
 
 /**
  * Singleton accessor for the Composio SDK client.
@@ -60,7 +62,12 @@ export function getAsanaAuthConfigId(): string | null {
   return COMPOSIO_ASANA_AUTH_CONFIG_ID;
 }
 
-export type IntegrationType = "sandbox" | "github" | "googledrive" | "asana";
+export function getGmailAuthConfigId(): string | null {
+  // Currently a fixed ID; change to env-based if you need configurability.
+  return COMPOSIO_GMAIL_AUTH_CONFIG_ID;
+}
+
+export type IntegrationType = "sandbox" | "github" | "googledrive" | "asana" | "gmail";
 
 export function getAuthConfigId(type: IntegrationType): string | null {
   switch (type) {
@@ -72,6 +79,8 @@ export function getAuthConfigId(type: IntegrationType): string | null {
       return getGoogleDriveAuthConfigId();
     case "asana":
       return getAsanaAuthConfigId();
+    case "gmail":
+      return getGmailAuthConfigId();
     default:
       return null;
   }

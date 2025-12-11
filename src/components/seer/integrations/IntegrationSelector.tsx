@@ -29,7 +29,7 @@ import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useIntegrationContext } from "@/contexts/IntegrationContext";
 
-const INTEGRATION_ORDER: IntegrationType[] = ["github", "googledrive", "asana"];
+const INTEGRATION_ORDER: IntegrationType[] = ["github", "googledrive", "asana", "gmail"];
 
 export function IntegrationSelector() {
   const [open, setOpen] = useState(false);

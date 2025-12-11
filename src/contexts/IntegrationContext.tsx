@@ -33,6 +33,7 @@ const defaultState = {
   github: null,
   googledrive: null,
   asana: null,
+  gmail: null,
 } satisfies IntegrationState;
 
 const IntegrationContext = createContext<IntegrationContextValue | undefined>(
