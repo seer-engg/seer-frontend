@@ -11,17 +11,18 @@ import { Clock, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 
 interface TraceDetailProps {
   traceId: string;
+  projectName?: string; // Optional project name for metadata filtering
 }
 
-export function TraceDetail({ traceId }: TraceDetailProps) {
+export function TraceDetail({ traceId, projectName }: TraceDetailProps) {
   const {
     data: trace,
     isLoading,
     error,
     refetch,
   } = useQuery({
-    queryKey: ["trace", traceId],
-    queryFn: () => tracesAPI.getTraceDetail(traceId),
+    queryKey: ["trace", traceId, projectName],
+    queryFn: () => tracesAPI.getTraceDetail(traceId, projectName),
   });
 
   const getStatusBadge = (status: TraceDetail["status"]) => {

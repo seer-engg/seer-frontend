@@ -107,7 +107,7 @@ export interface DatasetDetail extends DatasetSummary {
 }
 
 export interface ListTracesParams {
-  project?: "supervisor-v1" | "seer-v1";
+  project_name?: string; // Project name for metadata filtering (e.g., 'seer-v1', 'supervisor-v1')
   limit?: number;
   start_time?: string; // ISO 8601 format
 }
@@ -147,12 +147,17 @@ async function fetchAPI<T>(
     );
   }
   
+  // Handle body serialization if provided
+  const body = options?.body ? (typeof options.body === 'string' ? options.body : JSON.stringify(options.body)) : undefined;
+  const { body: _, ...restOptions } = options || {};
+  
   try {
     const response = await fetch(url, {
-      ...options,
+      ...restOptions,
+      body,
       headers: {
         "Content-Type": "application/json",
-        ...options?.headers,
+        ...restOptions?.headers,
       },
     });
 
@@ -199,15 +204,28 @@ async function fetchAPI<T>(
   }
 }
 
+export interface ProjectInfo {
+  project_name: string;
+}
+
 export const tracesAPI = {
   /**
-   * List traces from allowed projects
+   * List all available projects (hardcoded list from backend)
+   * Projects are distinguished by metadata.project_name in traces
+   */
+  async listProjects(): Promise<ProjectInfo[]> {
+    const response = await fetchAPI<{ projects: ProjectInfo[] }>("/api/projects");
+    return response.projects;
+  },
+
+  /**
+   * List traces from a specific project (using project_name for metadata filtering)
    */
   async listTraces(params: ListTracesParams = {}): Promise<TraceSummary[]> {
     const searchParams = new URLSearchParams();
     
-    if (params.project) {
-      searchParams.append("project", params.project);
+    if (params.project_name) {
+      searchParams.append("project_name", params.project_name);
     }
     if (params.limit) {
       searchParams.append("limit", params.limit.toString());
@@ -225,8 +243,9 @@ export const tracesAPI = {
   /**
    * Get detailed trace with nested runs
    */
-  async getTraceDetail(traceId: string): Promise<TraceDetail> {
-    return fetchAPI<TraceDetail>(`/api/traces/${traceId}`);
+  async getTraceDetail(traceId: string, projectName?: string): Promise<TraceDetail> {
+    const params = projectName ? `?project_name=${encodeURIComponent(projectName)}` : "";
+    return fetchAPI<TraceDetail>(`/api/traces/${traceId}${params}`);
   },
 
   /**

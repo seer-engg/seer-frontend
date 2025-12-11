@@ -107,8 +107,7 @@ const StreamSession = ({
         toast.error("Failed to connect to LangGraph server", {
           description: () => (
             <p>
-              Please ensure your graph is running at <code>{apiUrl}</code> and
-              your API key is correctly set (if connecting to a deployed graph).
+              Please ensure your graph is running at <code>{apiUrl}</code>.
             </p>
           ),
           duration: 10000,
@@ -196,10 +195,8 @@ export const StreamProvider: React.FC<StreamProviderProps> = ({
               const formData = new FormData(form);
               const apiUrl = formData.get("apiUrl") as string;
               const assistantId = formData.get("assistantId") as string;
-              const apiKey = formData.get("apiKey") as string;
 
               setApiUrl(apiUrl);
-              setApiKey(apiKey);
               setAssistantId(assistantId);
 
               form.reset();
@@ -238,23 +235,6 @@ export const StreamProvider: React.FC<StreamProviderProps> = ({
                 className="bg-background"
                 defaultValue={assistantId || DEFAULT_ASSISTANT_ID}
                 required
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="apiKey">LangSmith API Key</Label>
-              <p className="text-muted-foreground text-sm">
-                This is <strong>NOT</strong> required if using a local LangGraph
-                server. This value is stored in your browser's local storage and
-                is only used to authenticate requests sent to your LangGraph
-                server.
-              </p>
-              <PasswordInput
-                id="apiKey"
-                name="apiKey"
-                defaultValue={apiKey ?? ""}
-                className="bg-background"
-                placeholder="lsv2_pt_..."
               />
             </div>
 

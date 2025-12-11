@@ -9,6 +9,7 @@ import {
 
 export default function TraceAnalyzer() {
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
+  const [selectedProjectName, setSelectedProjectName] = useState<string | undefined>();
 
   return (
     <div className="h-full overflow-hidden" data-tour="traces-page">
@@ -18,11 +19,14 @@ export default function TraceAnalyzer() {
             <div className="mb-4">
               <h1 className="text-2xl font-bold mb-2">Traces</h1>
               <p className="text-sm text-muted-foreground">
-                View agent traces from supervisor-v1 and seer-v1 projects
+                View traces from registered Langfuse projects
               </p>
             </div>
             <TraceList
-              onSelectTrace={setSelectedTraceId}
+              onSelectTrace={(traceId, projectName) => {
+                setSelectedTraceId(traceId);
+                setSelectedProjectName(projectName);
+              }}
               selectedTraceId={selectedTraceId}
             />
           </div>
@@ -34,8 +38,8 @@ export default function TraceAnalyzer() {
               <>
                 <div className="mb-4">
                   <h2 className="text-2xl font-bold">Trace Details</h2>
-          </div>
-                <TraceDetail traceId={selectedTraceId} />
+                </div>
+                <TraceDetail traceId={selectedTraceId} projectName={selectedProjectName} />
               </>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -47,7 +51,7 @@ export default function TraceAnalyzer() {
                 </div>
               </div>
             )}
-      </div>
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

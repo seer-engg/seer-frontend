@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import React from "react";
 import { tracesAPI, type TraceSummary } from "@/lib/langfuse-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,14 +18,12 @@ import { formatDistanceToNow } from "date-fns";
 import { Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface TraceListProps {
-  onSelectTrace: (traceId: string) => void;
+  onSelectTrace: (traceId: string, projectName?: string) => void;
   selectedTraceId?: string;
 }
 
 export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
-  const [projectFilter, setProjectFilter] = useState<
-    "supervisor-v1" | "seer-v1"
-  >("supervisor-v1");
+  const [projectName, setProjectName] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<
     "15m" | "30m" | "1h" | "3h" | "1d" | "7d" | "30d" | "all"
   >("all");
@@ -49,19 +48,37 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
     return startTime.toISOString();
   };
 
+  // Fetch available projects
+  const {
+    data: projects,
+    isLoading: projectsLoading,
+  } = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => tracesAPI.listProjects(),
+    refetchInterval: 60000, // Refetch every minute
+  });
+
+  // Set first project as default when projects load
+  React.useEffect(() => {
+    if (projects && projects.length > 0 && !projectName) {
+      setProjectName(projects[0].project_name);
+    }
+  }, [projects, projectName]);
+
   const {
     data: traces,
     isLoading,
     error,
     refetch,
   } = useQuery({
-    queryKey: ["traces", projectFilter, dateRange],
+    queryKey: ["traces", projectName, dateRange],
     queryFn: () =>
       tracesAPI.listTraces({
-        project: projectFilter,
+        project_name: projectName || undefined,
         limit: 100,
         start_time: getStartTime(),
       }),
+    enabled: !!projectName, // Only fetch if project is selected
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
@@ -111,19 +128,26 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
           <div className="flex-1">
             <label className="text-sm font-medium mb-2 block">Project</label>
             <Select
-              value={projectFilter}
-              onValueChange={(value) =>
-                setProjectFilter(value as typeof projectFilter)
-              }
+              value={projectName || ""}
+              onValueChange={(value) => setProjectName(value)}
+              disabled={projectsLoading || !projects || projects.length === 0}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder={projectsLoading ? "Loading projects..." : projects?.length === 0 ? "No projects available" : "Select project"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="supervisor-v1">Supervisor v1</SelectItem>
-                <SelectItem value="seer-v1">Seer v1</SelectItem>
+                {projects?.map((project) => (
+                  <SelectItem key={project.project_name} value={project.project_name}>
+                    {project.project_name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {projects?.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                No projects registered. Register a project to view traces.
+              </p>
+            )}
           </div>
           <div className="flex-1">
             <label className="text-sm font-medium mb-2 block">Date Range</label>
@@ -194,7 +218,7 @@ export function TraceList({ onSelectTrace, selectedTraceId }: TraceListProps) {
               className={`cursor-pointer transition-all hover:border-primary/50 ${
                 selectedTraceId === trace.id ? "border-primary" : ""
               }`}
-              onClick={() => onSelectTrace(trace.id)}
+              onClick={() => onSelectTrace(trace.id, projectName || undefined)}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
