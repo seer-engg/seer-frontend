@@ -107,7 +107,7 @@ export interface DatasetDetail extends DatasetSummary {
 }
 
 export interface ListTracesParams {
-  project_name?: string; // Project name for metadata filtering (e.g., 'seer-v1', 'supervisor-v1')
+  project_name?: string; // Project name for metadata filtering (e.g., 'eval-v1', 'supervisor-v1', 'codex-v1')
   limit?: number;
   start_time?: string; // ISO 8601 format
 }
