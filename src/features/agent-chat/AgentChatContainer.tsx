@@ -142,19 +142,19 @@ function AgentChatContent({
       }
       console.log("[AgentChatContainer] Integration selection being passed:", JSON.stringify(integrationSelection, null, 2));
       
-      const context = {
+      const input_context = {
         ...contextBase,
         integrations: integrationSelection,
         user_id: userEmailForComposio, // Pass exact user email as user_id for Composio
         user_email: userEmailForComposio, // Also pass as user_email for compatibility
       };
       
-      console.log("[AgentChatContainer] Full context being sent:", JSON.stringify(context, null, 2));
+      console.log("[AgentChatContainer] Full context being sent:", JSON.stringify(input_context, null, 2));
 
       stream.submit(
         {
           messages: [...toolMessages, newHumanMessage],
-          context,
+          input_context,
         },
         {
           streamMode: ["values"],
@@ -162,7 +162,7 @@ function AgentChatContent({
           streamResumable: true,
           optimisticValues: (prev) => ({
             ...prev,
-            context,
+            input_context,
             messages: [
               ...(prev.messages ?? []),
               ...toolMessages,

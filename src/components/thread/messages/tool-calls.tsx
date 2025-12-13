@@ -108,11 +108,11 @@ export function ToolResult({ message }: { message: ToolMessage }) {
             ) : (
               <h3 className="font-medium text-gray-900">Tool Result</h3>
             )}
-            {message.tool_call_id && (
+            {/* {message.tool_call_id && (
               <code className="ml-2 rounded bg-gray-100 px-2 py-1 text-sm">
                 {message.tool_call_id}
               </code>
-            )}
+            )} */}
           </div>
         </div>
         <motion.div

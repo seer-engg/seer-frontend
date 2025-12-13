@@ -269,21 +269,21 @@ export function Thread() {
       artifactContext && Object.keys(artifactContext).length > 0
         ? artifactContext
         : undefined;
-    const context = {
+    const input_context = {
       ...(baseContext ?? {}),
       integrations: integrationSelection,
       user_id: user?.email,
     };
 
     stream.submit(
-      { messages: [...toolMessages, newHumanMessage], context },
+      { messages: [...toolMessages, newHumanMessage], input_context },
       {
         streamMode: ["values"],
         streamSubgraphs: true,
         streamResumable: true,
         optimisticValues: (prev) => ({
           ...prev,
-          context,
+          input_context,
           messages: [
             ...(prev.messages ?? []),
             ...toolMessages,
