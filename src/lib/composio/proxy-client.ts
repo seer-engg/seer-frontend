@@ -6,7 +6,7 @@
 const getProxyBaseUrl = (): string => {
   // Get Seer Backend URL from env or use default
   const seerBackendUrl = 
-    import.meta.env.VITE_BACKEND_API_URL || "http://localhost:9000";
+    import.meta.env.VITE_BACKEND_API_URL;
   
   return seerBackendUrl;
 };

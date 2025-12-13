@@ -164,6 +164,15 @@ export function Thread() {
   const stream = useStreamContext();
   const messages = stream.messages;
   const isLoading = stream.isLoading;
+  const progressUpdates: string[] = (() => {
+    const values = (stream as unknown as { values?: unknown }).values;
+    if (typeof values !== "object" || values === null) return [];
+    const rec = values as Record<string, unknown>;
+    const progress = rec.progress;
+    if (!Array.isArray(progress)) return [];
+    if (!progress.every((p) => typeof p === "string")) return [];
+    return progress;
+  })();
   const filteredMessages = messages.filter(
     (m) => !m.id?.startsWith(DO_NOT_RENDER_ID_PREFIX),
   );
@@ -196,7 +205,14 @@ export function Thread() {
       return;
     }
     try {
-      const message = (stream.error as any).message;
+      const err = stream.error as unknown;
+      const message =
+        typeof err === "object" &&
+        err !== null &&
+        "message" in err &&
+        typeof (err as Record<string, unknown>).message === "string"
+          ? ((err as Record<string, unknown>).message as string)
+          : undefined;
       if (!message || lastError.current === message) {
         // Message has already been logged. do not modify ref, return early.
         return;
@@ -481,6 +497,23 @@ export function Thread() {
                         )}
                       </CollapsibleContent>
                     </Collapsible>
+                  )}
+                  {progressUpdates.length > 0 && (
+                    <div className="rounded-2xl border border-border/60 bg-background/60 px-4 py-3">
+                      <div className="text-sm font-medium text-muted-foreground">
+                        Progress
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {progressUpdates.slice(-6).map((p, i) => (
+                          <div
+                            key={`${p}-${i}`}
+                            className="text-muted-foreground font-mono text-xs"
+                          >
+                            {p}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   {latestMessages.map((message, index) =>
                     renderMessage(message, index),
