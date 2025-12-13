@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, {
   createContext,
   useContext,
@@ -25,7 +26,13 @@ import { getApiKey } from "@/lib/api-key";
 import { useThreads } from "./Thread";
 import { toast } from "sonner";
 
-export type StateType = { messages: Message[]; ui?: UIMessage[] };
+export type StateType = { messages: Message[]; ui?: UIMessage[]; progress?: string[] };
+
+function isProgressCustomEvent(event: unknown): event is { progress: string } {
+  if (typeof event !== "object" || event === null) return false;
+  const rec = event as Record<string, unknown>;
+  return typeof rec.progress === "string";
+}
 
 const useTypedStream = useStream<
   StateType,
@@ -34,8 +41,9 @@ const useTypedStream = useStream<
       messages?: Message[] | Message | string;
       ui?: (UIMessage | RemoveUIMessage)[] | UIMessage | RemoveUIMessage;
       context?: Record<string, unknown>;
+      progress?: string[] | string;
     };
-    CustomEventType: UIMessage | RemoveUIMessage;
+    CustomEventType: UIMessage | RemoveUIMessage | { progress: string };
   }
 >;
 
@@ -90,6 +98,19 @@ const StreamSession = ({
         options.mutate((prev) => {
           const ui = uiMessageReducer(prev.ui ?? [], event);
           return { ...prev, ui };
+        });
+        return;
+      }
+
+      // Handle non-UI custom events emitted by LangGraph's stream writer.
+      // Example (python): writer({"progress": "Provisioning sandbox..."})
+      if (isProgressCustomEvent(event)) {
+        const progress = event.progress;
+        options.mutate((prev) => {
+          const next = [...(prev.progress ?? []), progress];
+          // Avoid unbounded growth in long sessions.
+          const capped = next.length > 200 ? next.slice(-200) : next;
+          return { ...prev, progress: capped };
         });
       }
     },
