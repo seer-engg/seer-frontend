@@ -73,6 +73,7 @@ function OrchestratorHero({ heroVisible, sendSuggestion }: AgentChatHeroProps) {
 export default function ToolOrchestrator() {
   return (
     <div data-tour="orchestrator-page">
+      Tool Orchestrator page
       <AgentChatContainer
         apiUrl={SUPERVISOR_URL}
         assistantId={SUPERVISOR_ASSISTANT_ID}

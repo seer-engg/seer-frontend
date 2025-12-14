@@ -12,6 +12,7 @@ import {
   LogOut,
   Sparkles,
   Database,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -33,6 +34,7 @@ const primaryNav = [
   { name: "Traces", href: "/trace", icon: Activity },
   { name: "Datasets", href: "/datasets", icon: Database },
   { name: "Tool Hub", href: "/tools", icon: Package },
+  { name: "Agents", href: "/agents", icon: Bot },
 ];
 
 const secondaryNav = [

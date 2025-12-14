@@ -14,6 +14,7 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import DatasetExplorer from "./pages/DatasetExplorer";
+import Agents from "./pages/Agents";
 
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
@@ -31,6 +32,13 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Navigate to="/tool-orchestrator" replace />} />
+            <Route path="/agents" element={
+              <ProtectedRoute>
+                <SeerLayout>
+                  <Agents />
+                </SeerLayout>
+              </ProtectedRoute>
+            } />
 
             <Route
               path="/sign-in/*"
