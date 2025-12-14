@@ -1,5 +1,4 @@
-import { Navigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, RedirectToSignIn } from "@clerk/clerk-react";
 import { Loader2 } from "lucide-react";
 
 interface ProtectedRouteProps {
@@ -7,9 +6,9 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { user, loading } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   
-  if (loading) {
+  if (!isLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-foreground" />
@@ -17,8 +16,8 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     );
   }
   
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  if (!isSignedIn) {
+    return <RedirectToSignIn />;
   }
 
   return <>{children}</>;

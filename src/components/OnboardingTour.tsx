@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Joyride, { ACTIONS, EVENTS, STATUS, Step, CallBackProps } from "react-joyride";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { useUser } from "@clerk/clerk-react";
 
-const STORAGE_KEY = "seer_onboarding_completed";
+const STORAGE_KEY_PREFIX = "seer:onboarding:completed:";
 
 // Tour steps configuration
 const getTourSteps = (): Step[] => [
@@ -119,52 +118,35 @@ interface OnboardingTourProps {
 }
 
 export function OnboardingTour({ onRestart }: OnboardingTourProps) {
-  const { user } = useAuth();
+  const { user, isLoaded } = useUser();
   const [run, setRun] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Check if user has completed onboarding
   const checkOnboardingStatus = useCallback(async () => {
+    if (!isLoaded) return;
     if (!user) {
       setLoading(false);
       return;
     }
 
-    // Check localStorage first (fast)
-    const localCompleted = localStorage.getItem(STORAGE_KEY);
+    const userEmail =
+      user.primaryEmailAddress?.emailAddress ??
+      user.emailAddresses?.[0]?.emailAddress ??
+      "unknown";
+    const storageKey = `${STORAGE_KEY_PREFIX}${userEmail}`;
+
+    // Check localStorage (fast)
+    const localCompleted = localStorage.getItem(storageKey);
     if (localCompleted === "true") {
       setLoading(false);
       return;
     }
 
-    // Check Supabase profile
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("has_completed_onboarding")
-        .eq("id", user.id)
-        .single();
-
-      if (error && error.code !== "PGRST116") {
-        // PGRST116 = no rows returned, which is fine for new users
-        console.error("Error checking onboarding status:", error);
-      }
-
-      if (data?.has_completed_onboarding) {
-        localStorage.setItem(STORAGE_KEY, "true");
-        setLoading(false);
-        return;
-      }
-
-      // First-time user - start tour
-      setRun(true);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error checking onboarding:", error);
-      // Fallback: if Supabase fails, check localStorage only
-      setLoading(false);
-    }
-  }, [user]);
+    // First-time user - start tour
+    setRun(true);
+    setLoading(false);
+  }, [isLoaded, user]);
 
   useEffect(() => {
     checkOnboardingStatus();
@@ -185,20 +167,11 @@ export function OnboardingTour({ onRestart }: OnboardingTourProps) {
       setRun(false);
 
       // Mark as completed
-      localStorage.setItem(STORAGE_KEY, "true");
-
-      // Update Supabase profile
-      if (user) {
-        try {
-          await supabase
-            .from("profiles")
-            .update({ has_completed_onboarding: true })
-            .eq("id", user.id);
-        } catch (error) {
-          console.error("Error updating onboarding status:", error);
-          // Continue anyway - localStorage is set
-        }
-      }
+      const userEmail =
+        user?.primaryEmailAddress?.emailAddress ??
+        user?.emailAddresses?.[0]?.emailAddress ??
+        "unknown";
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}${userEmail}`, "true");
     }
 
     // Handle tour restart
@@ -210,25 +183,12 @@ export function OnboardingTour({ onRestart }: OnboardingTourProps) {
   // Expose restart function globally for Settings page
   const restartTour = useCallback(() => {
     // Clear flags
-    localStorage.removeItem(STORAGE_KEY);
-    
-    if (user) {
-      // Clear Supabase flag
-      supabase
-        .from("profiles")
-        .update({ has_completed_onboarding: false })
-        .eq("id", user.id)
-        .then(() => {
-          setRun(true);
-        })
-        .catch((error) => {
-          console.error("Error clearing onboarding status:", error);
-          // Still start tour even if Supabase update fails
-          setRun(true);
-        });
-    } else {
-      setRun(true);
-    }
+    const userEmail =
+      user?.primaryEmailAddress?.emailAddress ??
+      user?.emailAddresses?.[0]?.emailAddress ??
+      "unknown";
+    localStorage.removeItem(`${STORAGE_KEY_PREFIX}${userEmail}`);
+    setRun(true);
   }, [user]);
 
   // Expose restart function globally for Settings page
@@ -239,7 +199,7 @@ export function OnboardingTour({ onRestart }: OnboardingTourProps) {
     };
   }, [restartTour]);
 
-  if (loading || !user) {
+  if (loading || !isLoaded || !user) {
     return null;
   }
 

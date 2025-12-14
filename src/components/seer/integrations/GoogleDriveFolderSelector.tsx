@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { RefreshCcw, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useUser } from "@clerk/clerk-react";
 
 type GoogleDriveFolder = {
   id: string;
@@ -24,8 +24,11 @@ export function GoogleDriveFolderSelector({
   connectedAccountId,
   onFolderSelected,
 }: GoogleDriveFolderSelectorProps) {
-  const { user } = useAuth();
-  const userEmail = user?.email ?? null;
+  const { user } = useUser();
+  const userEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    null;
 
   const [folders, setFolders] = useState<GoogleDriveFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string>("");

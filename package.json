@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.58.1",
     "@composio/core": "^0.2.6",
     "@hookform/resolvers": "^3.10.0",
     "@langchain/core": "^1.0.2",

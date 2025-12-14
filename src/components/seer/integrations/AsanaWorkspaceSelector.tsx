@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { RefreshCcw, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useUser } from "@clerk/clerk-react";
 
 type AsanaWorkspace = {
   gid: string;
@@ -39,9 +39,12 @@ export function AsanaWorkspaceSelector({
   initialWorkspaceGid,
   initialProjectGid,
 }: AsanaWorkspaceSelectorProps) {
-  const { user } = useAuth();
+  const { user } = useUser();
   const { toast } = useToast();
-  const userEmail = user?.email ?? null;
+  const userEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    null;
 
   const [workspaces, setWorkspaces] = useState<AsanaWorkspace[]>([]);
   const [projects, setProjects] = useState<AsanaProject[]>([]);

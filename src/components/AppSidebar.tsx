@@ -15,7 +15,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-import { useAuth } from "@/contexts/AuthContext";
+import { useClerk, useUser } from "@clerk/clerk-react";
 
 const items = [
   { title: "Projects", url: "/tool-orchestrator", icon: LayoutDashboard },
@@ -27,7 +27,12 @@ const items = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const { user, signOut } = useAuth();
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const userEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    "";
 
   const handleLogout = () => {
     signOut();
@@ -84,14 +89,14 @@ export function AppSidebar() {
           <div className="flex items-center gap-3 mb-3">
             <Avatar className="h-10 w-10 border-2 border-border">
               <AvatarFallback className="bg-primary text-primary-foreground font-bold">
-                {user?.user_metadata?.full_name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || "U"}
+                {(user?.fullName?.charAt(0) || userEmail?.charAt(0) || "U").toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-sidebar-foreground truncate">
-                {user?.user_metadata?.full_name || user?.email || "User"}
+                {user?.fullName || userEmail || "User"}
               </p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email || ""}</p>
+              <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
             </div>
           </div>
           <Button

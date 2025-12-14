@@ -7,14 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Settings2, Key, Building, User, Trash2, Eye, EyeOff, CheckCircle, PlayCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-import { supabase } from "@/integrations/supabase/client";
 import { restartOnboardingTour } from "@/components/OnboardingTour";
+import { useUser } from "@clerk/clerk-react";
+import { getApiKey } from "@/lib/api-key";
 
 export default function Settings() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoaded } = useUser();
   
   const [orgName, setOrgName] = useState("Demo Organization");
   const [openaiKey, setOpenaiKey] = useState("");
@@ -23,27 +23,19 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      loadProfile();
-    }
-  }, [user]);
-
-  const loadProfile = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("profiles")
-      .select("openai_api_key")
-      .eq("id", user.id)
-      .single();
-    
-    if (data?.openai_api_key) {
+    if (!isLoaded) return;
+    const existing = getApiKey();
+    if (existing) {
       setHasExistingKey(true);
       setOpenaiKey("sk-••••••••••••••••••••••••");
+    } else {
+      setHasExistingKey(false);
+      setOpenaiKey("");
     }
-  };
+  }, [isLoaded, user?.id]);
 
   const handleSaveApiKey = async () => {
-    if (!user || !openaiKey.startsWith("sk-")) {
+    if (!isLoaded || !user || !openaiKey.startsWith("sk-")) {
       toast({
         title: "Invalid API Key",
         description: "Please enter a valid OpenAI API key starting with 'sk-'",
@@ -53,17 +45,18 @@ export default function Settings() {
     }
 
     setIsSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ openai_api_key: openaiKey })
-      .eq("id", user.id);
-
+    let error: unknown = null;
+    try {
+      window.localStorage.setItem("lg:chat:apiKey", openaiKey);
+    } catch (e) {
+      error = e;
+    }
     setIsSaving(false);
 
     if (error) {
       toast({
         title: "Error",
-        description: "Failed to save API key. Please try again.",
+        description: "Failed to save API key to this browser. Please try again.",
         variant: "destructive",
       });
     } else {
@@ -72,20 +65,21 @@ export default function Settings() {
       setShowApiKey(false);
       toast({
         title: "API Key Saved",
-        description: "Your OpenAI API key has been saved successfully.",
+        description: "Your OpenAI API key has been saved in this browser.",
       });
     }
   };
 
   const handleRemoveApiKey = async () => {
-    if (!user) return;
+    if (!isLoaded || !user) return;
 
     setIsSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ openai_api_key: null })
-      .eq("id", user.id);
-
+    let error: unknown = null;
+    try {
+      window.localStorage.removeItem("lg:chat:apiKey");
+    } catch (e) {
+      error = e;
+    }
     setIsSaving(false);
 
     if (error) {
@@ -144,7 +138,7 @@ export default function Settings() {
                 <div className="space-y-2">
                   <Label>Name</Label>
                   <Input
-                    value={user?.user_metadata?.full_name || ""}
+                    value={user?.fullName || ""}
                     disabled
                     className="bg-secondary/50"
                   />
@@ -152,7 +146,7 @@ export default function Settings() {
                 <div className="space-y-2">
                   <Label>Email</Label>
                   <Input
-                    value={user?.email || ""}
+                    value={user?.primaryEmailAddress?.emailAddress || ""}
                     disabled
                     className="bg-secondary/50"
                   />

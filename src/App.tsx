@@ -4,8 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import { AuthProvider } from "@/contexts/AuthContext";
-import Auth from "./pages/Auth";
 import LiveRun from "./pages/LiveRun";
 import ToolOrchestrator from "./pages/ToolOrchestrator";
 import TraceAnalyzer from "./pages/TraceAnalyzer";
@@ -17,6 +15,11 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import DatasetExplorer from "./pages/DatasetExplorer";
 
+import './App.css'
+import { SignIn, SignUp } from "@clerk/clerk-react";
+
+
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -26,83 +29,98 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <AuthProvider>
-            <Routes>
-              <Route path="/" element={<Navigate to="/tool-orchestrator" replace />} />
-              <Route path="/login" element={<Auth />} />
-              <Route
-                path="/run/:id"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <LiveRun />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/tool-orchestrator"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <ToolOrchestrator />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/trace"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <TraceAnalyzer />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/datasets"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <DatasetExplorer />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/tools"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <ToolHub />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <Settings />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/eval"
-                element={
-                  <ProtectedRoute>
-                    <SeerLayout>
-                      <Evals />
-                    </SeerLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AuthProvider>
+          <Routes>
+            <Route path="/" element={<Navigate to="/tool-orchestrator" replace />} />
+
+            <Route
+              path="/sign-in/*"
+              element={
+                <div className="min-h-screen flex items-center justify-center bg-background p-4">
+                  <SignIn routing="path" path="/sign-in" />
+                </div>
+              }
+            />
+            <Route
+              path="/sign-up/*"
+              element={
+                <div className="min-h-screen flex items-center justify-center bg-background p-4">
+                  <SignUp routing="path" path="/sign-up" />
+                </div>
+              }
+            />
+
+            <Route
+              path="/run/:id"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <LiveRun />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tool-orchestrator"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <ToolOrchestrator />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/trace"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <TraceAnalyzer />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/datasets"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <DatasetExplorer />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tools"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <ToolHub />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <Settings />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/eval"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <Evals />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>

@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useMemo, useState, useEffect } from "react";
+import { useUser } from "@clerk/clerk-react";
+import { getApiKey } from "@/lib/api-key";
 
 const FREE_QUERY_LIMIT = 1000;
+const QUERY_COUNT_KEY_PREFIX = "seer:usage:query_count:";
 
 interface UsageGate {
   hasApiKey: boolean;
@@ -14,44 +15,59 @@ interface UsageGate {
 }
 
 export function useUsageGate(): UsageGate {
-  const { user } = useAuth();
+  const { user, isLoaded } = useUser();
   const [hasApiKey, setHasApiKey] = useState(false);
   const [queryCount, setQueryCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  const userEmail = useMemo(() => {
+    return (
+      user?.primaryEmailAddress?.emailAddress ??
+      user?.emailAddresses?.[0]?.emailAddress ??
+      null
+    );
+  }, [user]);
+
+  const queryCountKey = useMemo(() => {
+    if (!userEmail) return null;
+    return `${QUERY_COUNT_KEY_PREFIX}${userEmail}`;
+  }, [userEmail]);
+
   useEffect(() => {
-    if (!user) {
+    if (!isLoaded) return;
+
+    // API key is stored locally by the chat UI (see `src/lib/api-key.tsx`)
+    setHasApiKey(Boolean(getApiKey()));
+
+    if (!queryCountKey) {
+      setQueryCount(0);
       setIsLoading(false);
       return;
     }
 
-    const fetchProfile = async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("openai_api_key, query_count")
-        .eq("id", user.id)
-        .single();
-
-      if (data && !error) {
-        setHasApiKey(!!data.openai_api_key);
-        setQueryCount(data.query_count || 0);
-      }
+    try {
+      const raw = window.localStorage.getItem(queryCountKey);
+      const parsed = raw ? Number(raw) : 0;
+      setQueryCount(Number.isFinite(parsed) ? parsed : 0);
+    } catch {
+      setQueryCount(0);
+    } finally {
       setIsLoading(false);
-    };
-
-    fetchProfile();
-  }, [user]);
+    }
+  }, [isLoaded, queryCountKey]);
 
   const incrementQueryCount = async () => {
-    if (!user) return;
+    if (!queryCountKey) return;
 
-    const newCount = queryCount + 1;
-    setQueryCount(newCount);
-
-    await supabase
-      .from("profiles")
-      .update({ query_count: newCount })
-      .eq("id", user.id);
+    setQueryCount((prev) => {
+      const next = prev + 1;
+      try {
+        window.localStorage.setItem(queryCountKey, String(next));
+      } catch {
+        // no-op
+      }
+      return next;
+    });
   };
 
   const canQuery = hasApiKey || queryCount < FREE_QUERY_LIMIT;
@@ -61,7 +77,7 @@ export function useUsageGate(): UsageGate {
     hasApiKey,
     queryCount,
     canQuery,
-    isLoading,
+    isLoading: !isLoaded || isLoading,
     incrementQueryCount,
     remainingFreeQueries,
   };
