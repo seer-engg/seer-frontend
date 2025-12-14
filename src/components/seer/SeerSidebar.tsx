@@ -12,6 +12,7 @@ import {
   LogOut,
   Sparkles,
   Database,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -28,6 +29,7 @@ import { Key } from "lucide-react";
 import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
+  { name: "Agents", href: "/agents", icon: Bot },
   { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
   { name: "Evals", href: "/eval", icon: Sparkles },
   { name: "Traces", href: "/trace", icon: Activity },

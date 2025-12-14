@@ -4,7 +4,7 @@
 
 // Ensure we have a proper full URL (with protocol)
 function getApiBaseUrl(): string {
-  const envUrl = import.meta.env.VITE_TRACES_API_URL;
+  const envUrl = import.meta.env.VITE_BACKEND_API_URL;
   
   if (envUrl) {
     // If it already has a protocol, use it as-is
@@ -18,9 +18,7 @@ function getApiBaseUrl(): string {
     // For localhost, use http
     return `http://${envUrl}`;
   }
-  
-  // Default to localhost
-  return "http://localhost:8080";
+  throw new Error("VITE_BACKEND_API_URL is not set");
 }
 
 const API_BASE_URL = getApiBaseUrl();
