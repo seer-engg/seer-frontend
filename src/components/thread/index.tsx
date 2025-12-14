@@ -1,9 +1,9 @@
 import { v4 as uuidv4 } from "uuid";
-import { ReactNode, useEffect, useRef } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useStreamContext } from "@/providers/Stream";
-import { useState, FormEvent } from "react";
+import { FormEvent } from "react";
 import { Button } from "../ui/button";
 import { Checkpoint, Message } from "@langchain/langgraph-sdk";
 import { AssistantMessage, AssistantMessageLoading } from "./messages/ai";
@@ -52,7 +52,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useIntegrationContext } from "@/contexts/IntegrationContext";
-import { useAuth } from "@/contexts/AuthContext";
 
 function StickyToBottomContent(props: {
   content: ReactNode;
@@ -107,6 +106,43 @@ function AgentThinkingIndicator() {
   );
 }
 
+function ToolThinkingGroup({
+  id,
+  tools,
+  isOpen,
+  setOpen,
+  renderToolMessage,
+}: {
+  id: string;
+  tools: Message[];
+  isOpen: boolean;
+  setOpen: (open: boolean) => void;
+  renderToolMessage: (message: Message, index: number) => ReactNode;
+}) {
+  return (
+    <Collapsible
+      open={isOpen}
+      onOpenChange={setOpen}
+      className="rounded-2xl border border-border/60 bg-background/60 px-4 py-3"
+    >
+      <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium text-muted-foreground">
+        <span>{`Thinking (${tools.length})`}</span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 transition-transform",
+            isOpen ? "rotate-180" : "",
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-4 space-y-4">
+        {tools.map((m, i) => (
+          <div key={m.id ?? `${id}-${i}`}>{renderToolMessage(m, i)}</div>
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function OpenGitHubRepo() {
   return (
     <TooltipProvider>
@@ -145,7 +181,6 @@ export function Thread() {
     parseAsBoolean.withDefault(false),
   );
   const [input, setInput] = useState("");
-  const { user } = useAuth();
   const {
     contentBlocks,
     setContentBlocks,
@@ -158,7 +193,9 @@ export function Thread() {
   } = useFileUpload();
   const [firstTokenReceived, setFirstTokenReceived] = useState(false);
   const isLargeScreen = useMediaQuery("(min-width: 1024px)");
-  const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [thinkingOpenByGroup, setThinkingOpenByGroup] = useState<
+    Record<string, boolean>
+  >({});
   const { selection: integrationSelection } = useIntegrationContext();
 
   const stream = useStreamContext();
@@ -176,18 +213,6 @@ export function Thread() {
   const filteredMessages = messages.filter(
     (m) => !m.id?.startsWith(DO_NOT_RENDER_ID_PREFIX),
   );
-  const lastAiIndex = (() => {
-    for (let i = filteredMessages.length - 1; i >= 0; i -= 1) {
-      if (filteredMessages[i]?.type === "ai") {
-        return i;
-      }
-    }
-    return -1;
-  })();
-  const thinkingMessages =
-    lastAiIndex > 0 ? filteredMessages.slice(0, lastAiIndex) : [];
-  const latestMessages =
-    lastAiIndex >= 0 ? filteredMessages.slice(lastAiIndex) : filteredMessages;
 
   const lastError = useRef<string | undefined>(undefined);
 
@@ -331,6 +356,64 @@ export function Thread() {
         handleRegenerate={handleRegenerate}
       />
     );
+
+  const renderToolMessage = (message: Message, index: number) => (
+    <AssistantMessage
+      key={message.id || `${message.type}-${index}`}
+      message={message}
+      isLoading={isLoading}
+      handleRegenerate={handleRegenerate}
+    />
+  );
+
+  const renderItems: Array<
+    | { kind: "message"; message: Message; key: string }
+    | { kind: "tool_group"; tools: Message[]; key: string }
+  > = (() => {
+    const items: Array<
+      | { kind: "message"; message: Message; key: string }
+      | { kind: "tool_group"; tools: Message[]; key: string }
+    > = [];
+
+    let pendingTools: Message[] = [];
+
+    for (let i = 0; i < filteredMessages.length; i += 1) {
+      const m = filteredMessages[i];
+      if (m.type === "tool") {
+        pendingTools.push(m);
+        continue;
+      }
+
+      // Flush tools right before the next non-tool message (AI or human),
+      // so each conversation turn can have its own tool "thinking" block.
+      if (pendingTools.length > 0) {
+        const anchor = m.id ?? `${m.type}-${i}`;
+        items.push({
+          kind: "tool_group",
+          tools: pendingTools,
+          key: `tool-group-before-${anchor}`,
+        });
+        pendingTools = [];
+      }
+
+      items.push({
+        kind: "message",
+        message: m,
+        key: m.id ?? `${m.type}-${i}`,
+      });
+    }
+
+    // Trailing tools (if any) should still be visible at the end.
+    if (pendingTools.length > 0) {
+      items.push({
+        kind: "tool_group",
+        tools: pendingTools,
+        key: `tool-group-trailing-${filteredMessages.length}`,
+      });
+    }
+
+    return items;
+  })();
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -476,28 +559,6 @@ export function Thread() {
               contentClassName="pt-8 pb-16 max-w-3xl mx-auto flex flex-col gap-4 w-full"
               content={
                 <>
-                  {thinkingMessages.length > 0 && (
-                    <Collapsible
-                      open={thinkingOpen}
-                      onOpenChange={setThinkingOpen}
-                      className="rounded-2xl border border-border/60 bg-background/60 px-4 py-3"
-                    >
-                      <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium text-muted-foreground">
-                        <span>Thinking</span>
-                        <ChevronDown
-                          className={cn(
-                            "h-4 w-4 transition-transform",
-                            thinkingOpen ? "rotate-180" : "",
-                          )}
-                        />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-4 space-y-4">
-                        {thinkingMessages.map((message, index) =>
-                          renderMessage(message, index),
-                        )}
-                      </CollapsibleContent>
-                    </Collapsible>
-                  )}
                   {progressUpdates.length > 0 && (
                     <div className="rounded-2xl border border-border/60 bg-background/60 px-4 py-3">
                       <div className="text-sm font-medium text-muted-foreground">
@@ -515,9 +576,34 @@ export function Thread() {
                       </div>
                     </div>
                   )}
-                  {latestMessages.map((message, index) =>
-                    renderMessage(message, index),
-                  )}
+                  {renderItems.map((item, index) => {
+                    if (item.kind === "message") {
+                      return (
+                        <div key={item.key}>
+                          {renderMessage(item.message, index)}
+                        </div>
+                      );
+                    }
+
+                    if (hideToolCalls) return null;
+
+                    const isOpen = !!thinkingOpenByGroup[item.key];
+                    return (
+                      <ToolThinkingGroup
+                        key={item.key}
+                        id={item.key}
+                        tools={item.tools}
+                        isOpen={isOpen}
+                        setOpen={(open) =>
+                          setThinkingOpenByGroup((prev) => ({
+                            ...prev,
+                            [item.key]: open,
+                          }))
+                        }
+                        renderToolMessage={renderToolMessage}
+                      />
+                    );
+                  })}
                   {/* Special rendering case where there are no AI/tool messages, but there is an interrupt.
                     We need to render it outside of the messages list, since there are no messages to render */}
                   {hasNoAIOrToolMessages && !!stream.interrupt && (

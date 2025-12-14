@@ -14,7 +14,6 @@ import {
   Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useUsageGate } from "@/hooks/useUsageGate";
 import { Key } from "lucide-react";
+import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
   { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
@@ -41,9 +41,14 @@ const secondaryNav = [
 
 export function SeerSidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user } = useUser();
+  const { signOut } = useClerk();
   const location = useLocation();
   const { remainingFreeQueries, hasApiKey, isLoading: usageLoading } = useUsageGate();
+  const userEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    "";
 
   const NavItem = ({ item, isActive }: { item: typeof primaryNav[0]; isActive: boolean }) => (
     <Tooltip delayDuration={0}>
@@ -202,17 +207,17 @@ export function SeerSidebar() {
           collapsed ? "justify-center" : "px-2"
         )}>
           <Avatar className="h-8 w-8">
-            <AvatarImage src={user?.user_metadata?.avatar_url} />
+            <AvatarImage src={user?.imageUrl} />
             <AvatarFallback className="bg-accent text-xs">
-              {user?.email?.charAt(0).toUpperCase() || "U"}
+              {(userEmail?.charAt(0) || "U").toUpperCase()}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">
-                {user?.user_metadata?.full_name || user?.email?.split("@")[0]}
+                {user?.fullName || userEmail?.split("@")[0] || "User"}
               </p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+              <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
             </div>
           )}
           {!collapsed && (
@@ -220,7 +225,7 @@ export function SeerSidebar() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-              onClick={signOut}
+              onClick={() => signOut()}
             >
               <LogOut className="h-4 w-4" />
             </Button>

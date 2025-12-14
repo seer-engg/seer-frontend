@@ -20,7 +20,7 @@ import {
   IntegrationProvider,
   useIntegrationContext,
 } from "@/contexts/IntegrationContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useUser } from "@clerk/clerk-react";
 
 export interface AgentChatHeroProps {
   heroVisible: boolean;
@@ -98,7 +98,11 @@ function AgentChatContent({
   const heroEnabled = typeof renderHero === "function";
   const [heroVisible, setHeroVisible] = useState(heroEnabled);
   const { selection: integrationSelection } = useIntegrationContext();
-  const { user } = useAuth();
+  const { user } = useUser();
+  const userEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    undefined;
   
   // Debug: Log integration selection whenever it changes
   useEffect(() => {
@@ -134,7 +138,7 @@ function AgentChatContent({
       // Pass user email as user_id to Supervisor so it uses the correct Composio user
       // This ensures Supervisor uses the same user_id that was used when connecting accounts
       // IMPORTANT: Use the EXACT email that was used during connection (no modifications)
-      const userEmailForComposio = user?.email || undefined;
+      const userEmailForComposio = userEmail;
       
       // Debug logging to verify what email is being used
       if (userEmailForComposio) {

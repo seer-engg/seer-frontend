@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { RefreshCcw, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useUser } from "@clerk/clerk-react";
 
 type GithubRepo = {
   id: number | string;
@@ -52,9 +52,12 @@ interface GithubRepoSelectorProps {
 }
 
 export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: GithubRepoSelectorProps) {
-  const { user } = useAuth();
+  const { user } = useUser();
   const { toast } = useToast();
-  const userEmail = user?.email ?? null;
+  const userEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    null;
   const onRepoSelectedRef = useRef(onRepoSelected);
 
   const [repos, setRepos] = useState<GithubRepo[]>([]);

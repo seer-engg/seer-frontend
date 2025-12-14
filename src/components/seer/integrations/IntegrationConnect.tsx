@@ -3,7 +3,6 @@
  * Handles OAuth flow, connection status, and resource selection
  */
 
-import { useAuth } from "@/contexts/AuthContext";
 import { getAuthConfigId, IntegrationType } from "@/lib/composio/client";
 import { INTEGRATION_CONFIGS, ConnectionStatus, ConnectedAccount } from "@/lib/composio/integrations";
 import {
@@ -17,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useUser } from "@clerk/clerk-react";
 
 const CONNECTION_QUERY_KEYS = [
   "connected_account_id",
@@ -53,13 +53,17 @@ export function IntegrationConnect({
   onResourceSelected,
   children,
 }: IntegrationConnectProps) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, isLoaded } = useUser();
+  const authLoading = !isLoaded;
   const { toast } = useToast();
 
   const config = INTEGRATION_CONFIGS[type];
   const authConfigId = useMemo(() => getAuthConfigId(type), [type]);
 
-  const userEmail = user?.email ?? null;
+  const userEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    null;
   const missingAuthConfig = !authConfigId;
   // No longer need API key check - backend proxy handles it
   const canUseComposio = Boolean(authConfigId && userEmail && !missingAuthConfig);
