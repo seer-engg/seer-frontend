@@ -1,18 +1,22 @@
 import { cn } from '@/lib/utils';
-import { Project } from '@/types/workflow';
+import { AgentSummary } from '@/types/agent';
 import { Bot, MoreHorizontal } from 'lucide-react';
 
 interface AgentCardProps {
-  project: Project;
+  agent: AgentSummary;
   onClick: () => void;
 }
 
-export function AgentCard({ project, onClick }: AgentCardProps) {
+export function AgentCard({ agent, onClick }: AgentCardProps) {
   const statusColors = {
     draft: 'bg-muted text-muted-foreground',
     active: 'bg-primary/10 text-primary',
     complete: 'bg-green-500/10 text-green-600',
+    error: 'bg-destructive/10 text-destructive',
   };
+
+  const createdDate =
+    agent.createdAt instanceof Date ? agent.createdAt : new Date(agent.createdAt);
 
   return (
     <button
@@ -31,16 +35,21 @@ export function AgentCard({ project, onClick }: AgentCardProps) {
         </button>
       </div>
       
-      <h3 className="font-semibold text-foreground mb-1">{project.name}</h3>
+      <h3 className="font-semibold text-foreground mb-1">{agent.name}</h3>
       <p className="text-sm text-muted-foreground mb-3">
-        Created {project.createdAt.toLocaleDateString()}
+        Created {createdDate.toLocaleDateString()}
       </p>
+      {agent.repoFullName && (
+        <p className="text-xs text-muted-foreground mb-3 truncate">
+          {agent.repoFullName}
+        </p>
+      )}
       
       <span className={cn(
         'inline-flex px-2.5 py-1 rounded-full text-xs font-medium capitalize',
-        statusColors[project.status]
+        statusColors[agent.status] ?? statusColors.draft
       )}>
-        {project.status}
+        {agent.status}
       </span>
     </button>
   );

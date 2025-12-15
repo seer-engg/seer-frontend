@@ -45,6 +45,9 @@ export interface GitHubRepo {
   fullName: string;
   description: string;
   private: boolean;
+  htmlUrl?: string;
+  defaultBranch?: string;
+  owner?: string;
 }
 
 export interface Template {
