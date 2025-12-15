@@ -2,14 +2,7 @@
  * Composio Proxy Client
  * Calls backend proxy API instead of Composio SDK directly (fixes CORS)
  */
-
-const getProxyBaseUrl = (): string => {
-  // Get Seer Backend URL from env or use default
-  const seerBackendUrl = 
-    import.meta.env.VITE_BACKEND_API_URL;
-  
-  return seerBackendUrl;
-};
+import { backendApiClient } from "@/lib/api-client";
 
 export interface ConnectedAccount {
   id: string;
@@ -36,7 +29,7 @@ export interface WaitForConnectionResponse {
 }
 
 export interface ExecuteToolResponse {
-  data: any;
+  data: unknown;
   success: boolean;
 }
 
@@ -48,7 +41,6 @@ export async function listConnectedAccounts(params: {
   toolkitSlugs?: string[];
   authConfigIds?: string[];
 }): Promise<ListConnectedAccountsResponse> {
-  const baseUrl = getProxyBaseUrl();
   const searchParams = new URLSearchParams();
   
   if (params.userIds) {
@@ -61,21 +53,8 @@ export async function listConnectedAccounts(params: {
     params.authConfigIds.forEach(id => searchParams.append("auth_config_ids", id));
   }
   
-  const url = `${baseUrl}/api/composio/connected-accounts?${searchParams.toString()}`;
-  
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
+  const endpoint = `/api/composio/connected-accounts${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+  return backendApiClient.request<ListConnectedAccountsResponse>(endpoint);
 }
 
 /**
@@ -86,27 +65,14 @@ export async function initiateConnection(params: {
   authConfigId: string;
   callbackUrl?: string;
 }): Promise<ConnectResponse> {
-  const baseUrl = getProxyBaseUrl();
-  const url = `${baseUrl}/api/composio/connect`;
-  
-  const response = await fetch(url, {
+  return backendApiClient.request<ConnectResponse>("/api/composio/connect", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+    body: {
       user_id: params.userId,
       auth_config_id: params.authConfigId,
       callback_url: params.callbackUrl,
-    }),
+    },
   });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
 }
 
 /**
@@ -116,46 +82,22 @@ export async function waitForConnection(params: {
   connectionId: string;
   timeoutMs?: number;
 }): Promise<WaitForConnectionResponse> {
-  const baseUrl = getProxyBaseUrl();
-  const url = `${baseUrl}/api/composio/wait-for-connection`;
-  
-  const response = await fetch(url, {
+  return backendApiClient.request<WaitForConnectionResponse>("/api/composio/wait-for-connection", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+    body: {
       connection_id: params.connectionId,
       timeout_ms: params.timeoutMs || 120000,
-    }),
+    },
   });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
 }
 
 /**
  * Delete a connected account
  */
 export async function deleteConnectedAccount(accountId: string): Promise<void> {
-  const baseUrl = getProxyBaseUrl();
-  const url = `${baseUrl}/api/composio/connected-accounts/${accountId}`;
-  
-  const response = await fetch(url, {
+  await backendApiClient.request<void>(`/api/composio/connected-accounts/${accountId}`, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
-  }
 }
 
 /**
@@ -165,27 +107,14 @@ export async function executeTool(params: {
   toolSlug: string;
   userId: string;
   connectedAccountId?: string;
-  arguments?: Record<string, any>;
+  arguments?: Record<string, unknown>;
 }): Promise<ExecuteToolResponse> {
-  const baseUrl = getProxyBaseUrl();
-  const url = `${baseUrl}/api/composio/tools/execute/${params.toolSlug}`;
-  
-  const response = await fetch(url, {
+  return backendApiClient.request<ExecuteToolResponse>(`/api/composio/tools/execute/${params.toolSlug}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+    body: {
       user_id: params.userId,
       connected_account_id: params.connectedAccountId,
       arguments: params.arguments || {},
-    }),
+    },
   });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || error.error?.message || `HTTP ${response.status}`);
-  }
-  
-  return response.json();
 }
