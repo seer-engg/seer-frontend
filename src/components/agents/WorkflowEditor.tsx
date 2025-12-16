@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { WorkflowCanvas } from '@/components/canvas/WorkflowCanvas';
 import { AgentLogs } from '@/components/panels/AgentLogs';
@@ -9,6 +9,8 @@ import { AgentChatInput } from '@/components/panels/AgentChatInput';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { useAgentStream } from '@/hooks/useAgentStream';
 import { Button } from '@/components/ui/button';
+import { agentsApi } from '@/lib/agents-api';
+import type { SpecResponse, SpecItem } from '@/types/workflow';
 
 interface WorkflowEditorProps {
   projectName: string;
@@ -16,6 +18,40 @@ interface WorkflowEditorProps {
   agentId?: number;
   onBack: () => void;
 }
+
+// Helper function to convert SpecResponse to SpecItem array
+const convertSpecToItems = (spec: SpecResponse): SpecItem[] => {
+  const items: SpecItem[] = [];
+  
+  if (spec.langgraph_agent_id) {
+    items.push({
+      id: '1',
+      title: 'Agent ID',
+      description: spec.langgraph_agent_id,
+    });
+  }
+  
+  if (spec.mcp_services && spec.mcp_services.length > 0) {
+    items.push({
+      id: '2',
+      title: 'MCP Services',
+      description: spec.mcp_services.join(', '),
+    });
+  }
+  
+  if (spec.functional_requirements && spec.functional_requirements.length > 0) {
+    // Create individual items for each functional requirement
+    spec.functional_requirements.forEach((requirement, index) => {
+      items.push({
+        id: `3-${index}`,
+        title: `Requirement ${index + 1}`,
+        description: requirement,
+      });
+    });
+  }
+  
+  return items;
+};
 
 export function WorkflowEditor({ projectName, threadId, agentId, onBack }: WorkflowEditorProps) {
   const {
@@ -31,6 +67,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
   } = useWorkflow();
 
   const { messages, progress, isStreaming, error, submitSpec, stop } = useAgentStream(threadId);
+  const [isLoadingSpec, setIsLoadingSpec] = useState(false);
 
   // Update node status based on streaming state
   useEffect(() => {
@@ -43,22 +80,42 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
   useEffect(() => {
     const hasAIResponse = messages.some(m => m.type === 'ai');
     
-    if (hasAIResponse && !isStreaming) {
+    if (hasAIResponse && !isStreaming && threadId && !isLoadingSpec) {
       setNodeStatuses(prev => ({ 
         ...prev, 
         agentSpec: 'complete',
         evals: 'idle'
       }));
       
-      // Extract specs from stream if available (mock for now until backend sends structured data)
-      setSpecs([
-        { id: '1', title: 'Integration Points', description: 'Extracted from agent analysis' },
-        { id: '2', title: 'Trigger Event', description: 'Based on your requirements' },
-        { id: '3', title: 'Actions', description: 'Defined from agent specification' },
-        { id: '4', title: 'Error Handling', description: 'Retry logic and fallbacks' },
-      ]);
+      // Fetch specs from the API
+      const fetchSpecs = async () => {
+        try {
+          setIsLoadingSpec(true);
+          const specResponse = await agentsApi.getSpec(threadId);
+          const specItems = convertSpecToItems(specResponse);
+          
+          if (specItems.length > 0) {
+            setSpecs(specItems);
+          } else {
+            // Fallback to a message if no specs are available
+            setSpecs([
+              { id: '1', title: 'Specification', description: 'No specification data available yet' },
+            ]);
+          }
+        } catch (error) {
+          console.error('Failed to fetch specs:', error);
+          // Fallback to error message
+          setSpecs([
+            { id: '1', title: 'Error', description: 'Failed to load specification. Please try again.' },
+          ]);
+        } finally {
+          setIsLoadingSpec(false);
+        }
+      };
+      
+      fetchSpecs();
     }
-  }, [messages, isStreaming, setNodeStatuses, setSpecs]);
+  }, [messages, isStreaming, threadId, setNodeStatuses, setSpecs, isLoadingSpec]);
 
   const handleContinue = useCallback((nodeId: string) => {
     if (nodeId === 'evals') {

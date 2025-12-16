@@ -1,5 +1,6 @@
 import { backendApiClient } from "@/lib/api-client";
 import type { AgentRecord, AgentSummary } from "@/types/agent";
+import type { SpecResponse } from "@/types/workflow";
 
 interface ListAgentsResponse {
   agents: AgentRecord[];
@@ -53,6 +54,10 @@ export const agentsApi = {
       body,
     });
     return mapAgentRecord(record);
+  },
+
+  async getSpec(threadId: string): Promise<SpecResponse> {
+    return await backendApiClient.request<SpecResponse>(`/api/agents/spec/${threadId}`);
   },
 };
 

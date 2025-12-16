@@ -20,6 +20,12 @@ export interface SpecItem {
   description: string;
 }
 
+export interface SpecResponse {
+  langgraph_agent_id: string;
+  mcp_services: string[] | null;
+  functional_requirements: string[] | null;
+}
+
 export interface EvalCase {
   id: string;
   input: string;
