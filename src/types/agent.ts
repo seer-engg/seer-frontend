@@ -14,6 +14,7 @@ export interface AgentRecord {
   repo_html_url?: string | null;
   connected_account_id?: string | null;
   repo_id?: string | null;
+  thread_id?: string | null;
   metadata?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -27,6 +28,7 @@ export interface AgentSummary {
   repoFullName?: string | null;
   repoDescription?: string | null;
   repoPrivate?: boolean | null;
+  threadId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

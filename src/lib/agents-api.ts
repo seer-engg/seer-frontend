@@ -24,6 +24,7 @@ const mapAgentRecord = (record: AgentRecord): AgentSummary => ({
   repoFullName: record.repo_full_name ?? null,
   repoDescription: record.repo_description ?? null,
   repoPrivate: record.repo_private ?? null,
+  threadId: record.thread_id ?? null,
   createdAt: new Date(record.created_at),
   updatedAt: new Date(record.updated_at),
 });
