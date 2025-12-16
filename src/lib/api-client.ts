@@ -1,4 +1,4 @@
-type TokenProvider = () => Promise<string | null>;
+export type TokenProvider = () => Promise<string | null>;
 type JsonBody = Record<string, unknown> | unknown[];
 
 interface BackendAPIClientOptions {
@@ -58,6 +58,7 @@ const defaultTokenProvider: TokenProvider = async () => {
   }
 };
 
+export const backendTokenProvider = defaultTokenProvider;
 const shouldSerializeBody = (value: unknown): value is JsonBody => {
   if (value === null || typeof value !== "object") {
     return false;

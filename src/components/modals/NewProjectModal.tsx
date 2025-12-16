@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Github, LayoutTemplate, Loader2, RefreshCcw, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GitHubRepo, Template } from '@/types/workflow';
+import { AgentSummary } from '@/types/agent';
 import { Button } from '@/components/ui/button';
 import { IntegrationConnect } from '@/components/seer/integrations/IntegrationConnect';
 import { GithubRepoSelector, type GithubRepo as GithubRepoSelection } from '@/components/seer/integrations/GithubRepoSelector';
@@ -12,7 +13,7 @@ import { useToast } from '@/components/ui/use-toast';
 interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (type: 'github' | 'template', data: GitHubRepo | Template) => void;
+  onComplete: (type: 'github' | 'template', data: GitHubRepo | Template, agent?: AgentSummary) => void;
 }
 
 const templates: Template[] = [
@@ -67,7 +68,7 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
 
     setIsImporting(true);
     try {
-      await agentsApi.importFromGithub({
+      const agent = await agentsApi.importFromGithub({
         connectedAccountId,
         repoId: String(selectedRepo.id),
         repoFullName: selectedRepo.fullName ?? selectedRepo.name,
@@ -81,7 +82,8 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
         title: 'Repository imported',
         description: `${selectedRepo.fullName ?? selectedRepo.name} is now available in your dashboard.`,
       });
-      onComplete('github', selectedRepo);
+      // Pass the agent with threadId to the parent
+      onComplete('github', selectedRepo, agent);
       resetAndClose();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

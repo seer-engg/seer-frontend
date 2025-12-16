@@ -172,11 +172,16 @@ export function useWorkflow() {
 
   return {
     nodeStatuses,
+    setNodeStatuses,
     logs,
     specs,
+    setSpecs,
     evalCases,
+    setEvalCases,
     experimentResult,
+    setExperimentResult,
     currentStep,
+    setCurrentStep,
     processAgentSpec,
     processEvals,
     processExperiment,

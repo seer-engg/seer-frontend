@@ -1,31 +1,64 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { WorkflowCanvas } from '@/components/canvas/WorkflowCanvas';
-import { TerminalLogs } from '@/components/panels/TerminalLogs';
+import { AgentLogs } from '@/components/panels/AgentLogs';
 import { SpecPanel } from '@/components/panels/SpecPanel';
 import { EvalPanel } from '@/components/panels/EvalPanel';
 import { ExperimentPanel } from '@/components/panels/ExperimentPanel';
 import { AgentChatInput } from '@/components/panels/AgentChatInput';
 import { useWorkflow } from '@/hooks/useWorkflow';
+import { useAgentStream } from '@/hooks/useAgentStream';
 import { Button } from '@/components/ui/button';
 
 interface WorkflowEditorProps {
   projectName: string;
+  threadId: string | null;
+  agentId?: number;
   onBack: () => void;
 }
 
-export function WorkflowEditor({ projectName, onBack }: WorkflowEditorProps) {
+export function WorkflowEditor({ projectName, threadId, agentId, onBack }: WorkflowEditorProps) {
   const {
     nodeStatuses,
-    logs,
     specs,
     evalCases,
     experimentResult,
     currentStep,
-    processAgentSpec,
+    setNodeStatuses,
+    setSpecs,
     processEvals,
     processExperiment,
   } = useWorkflow();
+
+  const { messages, progress, isStreaming, error, submitSpec, stop } = useAgentStream(threadId);
+
+  // Update node status based on streaming state
+  useEffect(() => {
+    if (isStreaming) {
+      setNodeStatuses(prev => ({ ...prev, agentSpec: 'processing' }));
+    }
+  }, [isStreaming, setNodeStatuses]);
+
+  // Check for completion - when we have AI messages and streaming stopped
+  useEffect(() => {
+    const hasAIResponse = messages.some(m => m.type === 'ai');
+    
+    if (hasAIResponse && !isStreaming) {
+      setNodeStatuses(prev => ({ 
+        ...prev, 
+        agentSpec: 'complete',
+        evals: 'idle'
+      }));
+      
+      // Extract specs from stream if available (mock for now until backend sends structured data)
+      setSpecs([
+        { id: '1', title: 'Integration Points', description: 'Extracted from agent analysis' },
+        { id: '2', title: 'Trigger Event', description: 'Based on your requirements' },
+        { id: '3', title: 'Actions', description: 'Defined from agent specification' },
+        { id: '4', title: 'Error Handling', description: 'Retry logic and fallbacks' },
+      ]);
+    }
+  }, [messages, isStreaming, setNodeStatuses, setSpecs]);
 
   const handleContinue = useCallback((nodeId: string) => {
     if (nodeId === 'evals') {
@@ -36,8 +69,8 @@ export function WorkflowEditor({ projectName, onBack }: WorkflowEditorProps) {
   }, [processEvals, processExperiment]);
 
   const handleAgentSubmit = useCallback((message: string) => {
-    processAgentSpec(message);
-  }, [processAgentSpec]);
+    submitSpec(message);
+  }, [submitSpec]);
 
   const handleSpecFeedback = useCallback((feedback: string) => {
     console.log('Spec feedback:', feedback);
@@ -59,6 +92,11 @@ export function WorkflowEditor({ projectName, onBack }: WorkflowEditorProps) {
           </Button>
           <div className="h-6 w-px bg-border" />
           <h1 className="font-semibold text-foreground">{projectName}</h1>
+          {threadId && (
+            <span className="text-xs text-muted-foreground ml-2">
+              Thread: {threadId.slice(0, 8)}...
+            </span>
+          )}
         </header>
 
         {/* Canvas */}
@@ -79,7 +117,7 @@ export function WorkflowEditor({ projectName, onBack }: WorkflowEditorProps) {
           {showAgentInput && (
             <AgentChatInput
               onSubmit={handleAgentSubmit}
-              disabled={nodeStatuses.agentSpec === 'processing'}
+              disabled={isStreaming}
             />
           )}
 
@@ -102,9 +140,15 @@ export function WorkflowEditor({ projectName, onBack }: WorkflowEditorProps) {
           )}
         </div>
 
-        {/* Bottom Panel - Logs */}
-        <div className="h-64 p-4 pt-0">
-          <TerminalLogs logs={logs} />
+        {/* Bottom Panel - Agent Logs */}
+        <div className="h-72 p-4 pt-0">
+          <AgentLogs
+            messages={messages}
+            progress={progress}
+            isStreaming={isStreaming}
+            error={error}
+            onStop={stop}
+          />
         </div>
       </aside>
     </div>

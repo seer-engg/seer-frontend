@@ -5,6 +5,7 @@ import { AgentCard } from '@/components/agents/AgentCard';
 import { NewProjectCard } from '@/components/agents/NewProjectCard';
 import { NewProjectModal } from '@/components/modals/NewProjectModal';
 import { GitHubRepo, Template } from '@/types/workflow';
+import { AgentSummary } from '@/types/agent';
 import { agentsApi } from '@/lib/agents-api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -12,7 +13,11 @@ import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 
 interface DashboardProps {
-  onStartProject: (type: 'github' | 'template', data: GitHubRepo | Template) => void;
+  onStartProject: (
+    type: 'github' | 'template', 
+    data: GitHubRepo | Template,
+    agent?: AgentSummary
+  ) => void;
 }
 
 export function Dashboard({ onStartProject }: DashboardProps) {
@@ -30,10 +35,25 @@ export function Dashboard({ onStartProject }: DashboardProps) {
     queryFn: () => agentsApi.listAgents(),
   });
 
-  const handleNewProject = (type: 'github' | 'template', data: GitHubRepo | Template) => {
+  const handleNewProject = (type: 'github' | 'template', data: GitHubRepo | Template, agent?: AgentSummary) => {
     setIsModalOpen(false);
-    onStartProject(type, data);
+    // Refetch agents list in background
     queryClient.invalidateQueries({ queryKey: ['agents'] });
+    // Pass the agent data (includes threadId) directly from the import response
+    onStartProject(type, data, agent);
+  };
+
+  const handleAgentClick = (agent: AgentSummary) => {
+    // Create a GitHubRepo-like object from the agent data
+    const repoData: GitHubRepo = {
+      id: String(agent.id),
+      name: agent.name,
+      fullName: agent.repoFullName ?? agent.name,
+      description: agent.repoDescription ?? '',
+      private: agent.repoPrivate ?? false,
+    };
+    
+    onStartProject('github', repoData, agent);
   };
 
   return (
@@ -45,7 +65,7 @@ export function Dashboard({ onStartProject }: DashboardProps) {
         <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
           <div className="flex items-center justify-between h-16 px-8">
             <div>
-              <h1 className="text-xl font-semibold text-foreground">Agents This is a Mock UI..</h1>
+              <h1 className="text-xl font-semibold text-foreground">Agents</h1>
               <p className="text-sm text-muted-foreground">Manage your AI agents</p>
             </div>
           </div>
@@ -82,7 +102,7 @@ export function Dashboard({ onStartProject }: DashboardProps) {
                     <AgentCard
                       key={agent.id}
                       agent={agent}
-                      onClick={() => {}}
+                      onClick={() => handleAgentClick(agent)}
                     />
                   ))}
                   <NewProjectCard onClick={() => setIsModalOpen(true)} />
