@@ -25,6 +25,7 @@ export function useAgentStream(threadId: string | null) {
       UpdateType: {
         messages?: Message[] | Message | string;
         progress?: string[] | string;
+        step?: string;
       };
       CustomEventType: { progress: string };
     }
@@ -44,19 +45,33 @@ export function useAgentStream(threadId: string | null) {
     },
   });
 
-  const submitSpec = (userInput: string) => {
+  const submitSpec = (userInput: string, step?: string) => {
     const newMessage: Message = {
       type: 'human',
       content: userInput,
     };
 
     stream.submit(
-      { messages: [newMessage] },
+      { messages: [newMessage], step },
       {
         streamMode: ['values'],
         optimisticValues: (prev) => ({
           ...prev,
           messages: [...(prev.messages ?? []), newMessage],
+        }),
+      }
+    );
+  };
+
+  const submitStep = (step: string) => {
+    // Clear progress before starting new step
+    stream.submit(
+      { step },
+      {
+        streamMode: ['values'],
+        optimisticValues: (prev) => ({
+          ...prev,
+          progress: [],
         }),
       }
     );
@@ -71,6 +86,7 @@ export function useAgentStream(threadId: string | null) {
     isStreaming: stream.isLoading,
     error: stream.error ? (stream.error as Error).message : null,
     submitSpec,
+    submitStep,
     stop: stream.stop,
   };
 }

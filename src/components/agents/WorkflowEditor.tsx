@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { WorkflowCanvas } from '@/components/canvas/WorkflowCanvas';
 import { AgentLogs } from '@/components/panels/AgentLogs';
@@ -66,21 +66,29 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
     processExperiment,
   } = useWorkflow();
 
-  const { messages, progress, isStreaming, error, submitSpec, stop } = useAgentStream(threadId);
+  const { messages, progress, isStreaming, error, submitSpec, submitStep, stop } = useAgentStream(threadId);
   const hasLoadedSpecsRef = useRef(false);
+  const currentStreamingStepRef = useRef<'spec' | 'plan' | null>(null);
 
   // Update node status based on streaming state
   useEffect(() => {
     if (isStreaming) {
-      setNodeStatuses(prev => ({ ...prev, agentSpec: 'processing' }));
+      const step = currentStreamingStepRef.current;
+      if (step === 'spec') {
+        setNodeStatuses(prev => ({ ...prev, agentSpec: 'processing' }));
+      } else if (step === 'plan') {
+        setNodeStatuses(prev => ({ ...prev, evals: 'processing' }));
+      }
     }
   }, [isStreaming, setNodeStatuses]);
 
   // Check for completion - when we have AI messages and streaming stopped
   useEffect(() => {
     const hasAIResponse = messages.some(m => m.type === 'ai');
+    const currentStep = currentStreamingStepRef.current;
     
-    if (hasAIResponse && !isStreaming && threadId && !hasLoadedSpecsRef.current) {
+    // Handle spec step completion
+    if (hasAIResponse && !isStreaming && threadId && !hasLoadedSpecsRef.current && currentStep === 'spec') {
       setNodeStatuses(prev => ({ 
         ...prev, 
         agentSpec: 'complete',
@@ -113,19 +121,34 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
       };
       
       fetchSpecs();
+      currentStreamingStepRef.current = null;
     }
-  }, [messages, isStreaming, threadId, setNodeStatuses, setSpecs]);
+    
+    // Handle plan step completion
+    if (!isStreaming && currentStep === 'plan' && nodeStatuses.evals === 'processing') {
+      setNodeStatuses(prev => ({ 
+        ...prev, 
+        evals: 'complete',
+        experiment: 'idle'
+      }));
+      currentStreamingStepRef.current = null;
+    }
+  }, [messages, isStreaming, threadId, setNodeStatuses, setSpecs, nodeStatuses.evals]);
 
   const handleContinue = useCallback((nodeId: string) => {
     if (nodeId === 'evals') {
-      processEvals();
+      // Start the plan step by submitting step: "plan" to the agent stream
+      currentStreamingStepRef.current = 'plan';
+      setNodeStatuses(prev => ({ ...prev, evals: 'processing' }));
+      submitStep('plan');
     } else if (nodeId === 'experiment') {
       processExperiment();
     }
-  }, [processEvals, processExperiment]);
+  }, [submitStep, setNodeStatuses, processExperiment]);
 
   const handleAgentSubmit = useCallback((message: string) => {
-    submitSpec(message);
+    currentStreamingStepRef.current = 'spec';
+    submitSpec(message, 'alignment');
   }, [submitSpec]);
 
   const handleSpecFeedback = useCallback((feedback: string) => {
