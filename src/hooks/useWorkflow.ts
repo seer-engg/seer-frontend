@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { NodeStatus, LogEntry, SpecItem, EvalCase, ExperimentResult } from '@/types/workflow';
+import { NodeStatus, LogEntry, SpecItem, EvalCase, ExperimentResult, ExperimentRun } from '@/types/workflow';
 
 export function useWorkflow() {
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, NodeStatus>>({
@@ -13,6 +13,7 @@ export function useWorkflow() {
   const [specs, setSpecs] = useState<SpecItem[]>([]);
   const [evalCases, setEvalCases] = useState<EvalCase[]>([]);
   const [experimentResult, setExperimentResult] = useState<ExperimentResult | null>(null);
+  const [experimentRuns, setExperimentRuns] = useState<ExperimentRun[]>([]);
   const [currentStep, setCurrentStep] = useState<string>('agentSpec');
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
@@ -179,6 +180,8 @@ export function useWorkflow() {
     evalCases,
     setEvalCases,
     experimentResult,
+    experimentRuns,
+    setExperimentRuns,
     setExperimentResult,
     currentStep,
     setCurrentStep,

@@ -10,7 +10,7 @@ import { useWorkflow } from '@/hooks/useWorkflow';
 import { useAgentStream } from '@/hooks/useAgentStream';
 import { Button } from '@/components/ui/button';
 import { agentsApi } from '@/lib/agents-api';
-import type { SpecResponse, SpecItem } from '@/types/workflow';
+import type { SpecResponse, SpecItem, ExperimentRun } from '@/types/workflow';
 import { datasetExampleToEvalCase } from '@/types/workflow';
 
 interface WorkflowEditorProps {
@@ -54,25 +54,36 @@ const convertSpecToItems = (spec: SpecResponse): SpecItem[] => {
   return items;
 };
 
+const summarizeExperimentLogs = (runs: ExperimentRun[]): string[] => {
+  if (!runs?.length) return [];
+  return runs.map(run => {
+    const score = (run.analysis.score * 100).toFixed(0);
+    const status = run.passed ? 'PASS' : 'FAIL';
+    return `Case ${run.datasetExample.example_id}: ${status} — score ${score}%`;
+  });
+};
+
 export function WorkflowEditor({ projectName, threadId, agentId, onBack }: WorkflowEditorProps) {
   const {
     nodeStatuses,
     specs,
     evalCases,
     experimentResult,
+    experimentRuns,
     currentStep,
     setNodeStatuses,
     setSpecs,
     setEvalCases,
-    processEvals,
-    processExperiment,
+    setExperimentResult,
+    setExperimentRuns,
   } = useWorkflow();
 
   const { messages, progress, isStreaming, error, submitSpec, submitStep, stop } = useAgentStream(threadId);
   const hasLoadedSpecsRef = useRef(false);
   const hasLoadedEvalCasesRef = useRef(false);
+  const hasLoadedExperimentsRef = useRef(false);
   const hasInitializedRef = useRef(false);
-  const currentStreamingStepRef = useRef<'spec' | 'plan' | null>(null);
+  const currentStreamingStepRef = useRef<'spec' | 'plan' | 'testing' | null>(null);
   
   // Track which node is selected for displaying the corresponding panel
   const [selectedNode, setSelectedNode] = useState<string | null>('agentSpec');
@@ -113,6 +124,31 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
                 experiment: 'idle'
               }));
               setSelectedNode('evals');
+
+              try {
+                const experiments = await agentsApi.getExperiments(threadId);
+                if (experiments.length > 0) {
+                  hasLoadedExperimentsRef.current = true;
+                  setExperimentRuns(experiments);
+                  setExperimentResult({
+                    provision: { status: 'complete', logs: ['Restored previous run'] },
+                    invoke: { status: 'complete', logs: ['Testing completed'] },
+                    assert: {
+                      status: 'complete',
+                      logs: summarizeExperimentLogs(experiments),
+                      passed: experiments.every(exp => exp.passed),
+                    },
+                  });
+                  setNodeStatuses(prev => ({
+                    ...prev,
+                    experiment: 'complete',
+                    codex: 'idle',
+                  }));
+                  setSelectedNode('experiment');
+                }
+              } catch {
+                console.log('No existing experiments found for this thread yet');
+              }
             }
           } catch {
             // Dataset doesn't exist yet - that's fine, evals step not completed
@@ -126,7 +162,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
     };
     
     initializeWorkflowState();
-  }, [threadId, setSpecs, setEvalCases, setNodeStatuses]);
+  }, [threadId, setSpecs, setEvalCases, setNodeStatuses, setExperimentResult, setExperimentRuns]);
 
   // Update node status based on streaming state
   useEffect(() => {
@@ -136,6 +172,8 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
         setNodeStatuses(prev => ({ ...prev, agentSpec: 'processing' }));
       } else if (step === 'plan') {
         setNodeStatuses(prev => ({ ...prev, evals: 'processing' }));
+      } else if (step === 'testing') {
+        setNodeStatuses(prev => ({ ...prev, experiment: 'processing' }));
       }
     }
   }, [isStreaming, setNodeStatuses]);
@@ -211,7 +249,59 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
       fetchEvalCases();
       currentStreamingStepRef.current = null;
     }
-  }, [messages, isStreaming, threadId, setNodeStatuses, setSpecs, setEvalCases, nodeStatuses.evals]);
+
+    // Handle testing step completion (experiments)
+    if (
+      !isStreaming &&
+      currentStep === 'testing' &&
+      nodeStatuses.experiment === 'processing' &&
+      !hasLoadedExperimentsRef.current
+    ) {
+      const fetchExperiments = async () => {
+        if (!threadId) return;
+
+        try {
+          hasLoadedExperimentsRef.current = true;
+          const experiments = await agentsApi.getExperiments(threadId);
+          setExperimentRuns(experiments);
+          setExperimentResult({
+            provision: { status: 'complete', logs: ['Sandbox prepared'] },
+            invoke: { status: 'complete', logs: ['Testing completed'] },
+            assert: {
+              status: 'complete',
+              logs: summarizeExperimentLogs(experiments),
+              passed: experiments.every(exp => exp.passed),
+            },
+          });
+          setNodeStatuses(prev => ({
+            ...prev,
+            experiment: 'complete',
+            codex: 'idle',
+          }));
+          setSelectedNode('experiment');
+        } catch (error) {
+          console.error('Failed to fetch experiments:', error);
+          hasLoadedExperimentsRef.current = false;
+          setNodeStatuses(prev => ({ ...prev, experiment: 'idle' }));
+        } finally {
+          currentStreamingStepRef.current = null;
+        }
+      };
+
+      fetchExperiments();
+    }
+  }, [
+    messages,
+    isStreaming,
+    threadId,
+    setNodeStatuses,
+    setSpecs,
+    setEvalCases,
+    nodeStatuses.evals,
+    nodeStatuses.experiment,
+    setExperimentResult,
+    setExperimentRuns,
+  ]);
 
   const handleContinue = useCallback((nodeId: string) => {
     if (nodeId === 'evals') {
@@ -221,10 +311,19 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
       setSelectedNode('evals');
       submitStep('plan');
     } else if (nodeId === 'experiment') {
+      currentStreamingStepRef.current = 'testing';
+      hasLoadedExperimentsRef.current = false;
       setSelectedNode('experiment');
-      processExperiment();
+      setNodeStatuses(prev => ({ ...prev, experiment: 'processing' }));
+      setExperimentRuns([]);
+      setExperimentResult({
+        provision: { status: 'processing', logs: [] },
+        invoke: { status: 'idle', logs: [] },
+        assert: { status: 'idle', logs: [], passed: false },
+      });
+      submitStep('testing');
     }
-  }, [submitStep, setNodeStatuses, processExperiment]);
+  }, [submitStep, setNodeStatuses, setExperimentResult, setExperimentRuns]);
 
   const handleNodeSelect = useCallback((nodeId: string) => {
     setSelectedNode(nodeId);
@@ -242,7 +341,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
   const showAgentInput = nodeStatuses.agentSpec === 'idle' && selectedNode === 'agentSpec';
   const showSpecPanel = selectedNode === 'agentSpec' && specs.length > 0;
   const showEvalPanel = selectedNode === 'evals' && evalCases.length > 0;
-  const showExperimentPanel = selectedNode === 'experiment' && experimentResult !== null;
+  const showExperimentPanel = selectedNode === 'experiment' && (experimentResult !== null || experimentRuns.length > 0);
   
   // Show a placeholder message when a node is selected but has no data yet
   const showEmptyState = !showAgentInput && !showSpecPanel && !showEvalPanel && !showExperimentPanel;
@@ -303,7 +402,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
 
           {showExperimentPanel && (
             <div className="flex-1 min-h-0">
-              <ExperimentPanel result={experimentResult} />
+              <ExperimentPanel result={experimentResult} runs={experimentRuns} />
             </div>
           )}
 
