@@ -135,7 +135,7 @@ export function AgentLogs({ messages, progress, isStreaming, error, onStop }: Ag
               
               return (
                 <div
-                  key={message.id || `msg-${index}`}
+                  key={`${message.id || 'msg'}-${index}`}
                   className={cn(
                     'flex items-start gap-2 animate-fade-in',
                     getMessageColorClass(message.type)

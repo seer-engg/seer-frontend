@@ -43,6 +43,16 @@ export function useAgentStream(threadId: string | null) {
         });
       }
     },
+    onError: (error: unknown) => {
+      // Log merge errors but don't crash - these occur when tool messages
+      // have undefined properties that can't be merged
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('Cannot merge two undefined')) {
+        console.warn('Tool message merge warning (non-fatal):', errorMessage);
+        return; // Don't propagate this error
+      }
+      console.error('Stream error:', error);
+    },
   });
 
   const submitSpec = (userInput: string, step?: string) => {
@@ -54,7 +64,7 @@ export function useAgentStream(threadId: string | null) {
     stream.submit(
       { messages: [newMessage], step },
       {
-        streamMode: ['values'],
+        streamMode: ['values','messages-tuple', 'custom'],
         optimisticValues: (prev) => ({
           ...prev,
           messages: [...(prev.messages ?? []), newMessage],
@@ -68,7 +78,7 @@ export function useAgentStream(threadId: string | null) {
     stream.submit(
       { step },
       {
-        streamMode: ['values'],
+        streamMode: ['values', 'messages-tuple', 'custom'],
         optimisticValues: (prev) => ({
           ...prev,
           progress: [],
