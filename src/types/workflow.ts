@@ -58,6 +58,21 @@ export const datasetExampleToEvalCase = (example: DatasetExample): EvalCase => (
   expectedOutput: example.expected_output.expected_action,
 });
 
+export interface FailureAnalysis {
+  score: number;
+  judgeReasoning: string;
+}
+
+export interface ExperimentRun {
+  id: string;
+  datasetExample: DatasetExample;
+  actualOutput: string;
+  passed: boolean;
+  analysis: FailureAnalysis;
+  startedAt: string;
+  completedAt: string;
+}
+
 export interface ExperimentResult {
   provision: { status: NodeStatus; logs: string[] };
   invoke: { status: NodeStatus; logs: string[] };

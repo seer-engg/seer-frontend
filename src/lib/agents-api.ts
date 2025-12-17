@@ -1,6 +1,6 @@
 import { backendApiClient } from "@/lib/api-client";
 import type { AgentRecord, AgentSummary } from "@/types/agent";
-import type { SpecResponse, DatasetExample } from "@/types/workflow";
+import type { SpecResponse, DatasetExample, ExperimentRun } from "@/types/workflow";
 
 interface ListAgentsResponse {
   agents: AgentRecord[];
@@ -28,6 +28,32 @@ const mapAgentRecord = (record: AgentRecord): AgentSummary => ({
   threadId: record.thread_id ?? null,
   createdAt: new Date(record.created_at),
   updatedAt: new Date(record.updated_at),
+});
+
+interface ExperimentResultResponse {
+  thread_id: string;
+  dataset_example: DatasetExample;
+  actual_output: string;
+  analysis: {
+    score: number;
+    judge_reasoning: string;
+  };
+  passed: boolean;
+  started_at: string;
+  completed_at: string;
+}
+
+const mapExperimentResult = (result: ExperimentResultResponse): ExperimentRun => ({
+  id: `${result.dataset_example?.example_id ?? result.started_at}`,
+  datasetExample: result.dataset_example,
+  actualOutput: result.actual_output,
+  passed: result.passed,
+  analysis: {
+    score: result.analysis.score,
+    judgeReasoning: result.analysis.judge_reasoning,
+  },
+  startedAt: result.started_at,
+  completedAt: result.completed_at,
 });
 
 export const agentsApi = {
@@ -62,6 +88,13 @@ export const agentsApi = {
 
   async getDataset(threadId: string): Promise<DatasetExample[]> {
     return await backendApiClient.request<DatasetExample[]>(`/api/agents/datasets/${threadId}`);
+  },
+
+  async getExperiments(threadId: string): Promise<ExperimentRun[]> {
+    const response = await backendApiClient.request<ExperimentResultResponse[]>(
+      `/api/agents/experiments/${threadId}`,
+    );
+    return Array.isArray(response) ? response.map(mapExperimentResult) : [];
   },
 };
 
