@@ -11,6 +11,7 @@ import { useAgentStream } from '@/hooks/useAgentStream';
 import { Button } from '@/components/ui/button';
 import { agentsApi } from '@/lib/agents-api';
 import type { SpecResponse, SpecItem } from '@/types/workflow';
+import { datasetExampleToEvalCase } from '@/types/workflow';
 
 interface WorkflowEditorProps {
   projectName: string;
@@ -62,12 +63,14 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
     currentStep,
     setNodeStatuses,
     setSpecs,
+    setEvalCases,
     processEvals,
     processExperiment,
   } = useWorkflow();
 
   const { messages, progress, isStreaming, error, submitSpec, submitStep, stop } = useAgentStream(threadId);
   const hasLoadedSpecsRef = useRef(false);
+  const hasLoadedEvalCasesRef = useRef(false);
   const currentStreamingStepRef = useRef<'spec' | 'plan' | null>(null);
 
   // Update node status based on streaming state
@@ -125,15 +128,35 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
     }
     
     // Handle plan step completion
-    if (!isStreaming && currentStep === 'plan' && nodeStatuses.evals === 'processing') {
+    if (!isStreaming && currentStep === 'plan' && nodeStatuses.evals === 'processing' && !hasLoadedEvalCasesRef.current) {
       setNodeStatuses(prev => ({ 
         ...prev, 
         evals: 'complete',
         experiment: 'idle'
       }));
+      
+      // Fetch eval cases from the API
+      const fetchEvalCases = async () => {
+        if (!threadId) return;
+        
+        try {
+          hasLoadedEvalCasesRef.current = true; // Mark as loading to prevent duplicate calls
+          const datasetExamples = await agentsApi.getDataset(threadId);
+          const evalCasesData = datasetExamples.map(datasetExampleToEvalCase);
+          
+          if (evalCasesData.length > 0) {
+            setEvalCases(evalCasesData);
+          }
+        } catch (error) {
+          console.error('Failed to fetch eval cases:', error);
+          hasLoadedEvalCasesRef.current = false; // Reset on error to allow retry
+        }
+      };
+      
+      fetchEvalCases();
       currentStreamingStepRef.current = null;
     }
-  }, [messages, isStreaming, threadId, setNodeStatuses, setSpecs, nodeStatuses.evals]);
+  }, [messages, isStreaming, threadId, setNodeStatuses, setSpecs, setEvalCases, nodeStatuses.evals]);
 
   const handleContinue = useCallback((nodeId: string) => {
     if (nodeId === 'evals') {

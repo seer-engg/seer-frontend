@@ -1,6 +1,6 @@
 import { backendApiClient } from "@/lib/api-client";
 import type { AgentRecord, AgentSummary } from "@/types/agent";
-import type { SpecResponse } from "@/types/workflow";
+import type { SpecResponse, DatasetExample } from "@/types/workflow";
 
 interface ListAgentsResponse {
   agents: AgentRecord[];
@@ -58,6 +58,10 @@ export const agentsApi = {
 
   async getSpec(threadId: string): Promise<SpecResponse> {
     return await backendApiClient.request<SpecResponse>(`/api/agents/spec/${threadId}`);
+  },
+
+  async getDataset(threadId: string): Promise<DatasetExample[]> {
+    return await backendApiClient.request<DatasetExample[]>(`/api/agents/datasets/${threadId}`);
   },
 };
 
