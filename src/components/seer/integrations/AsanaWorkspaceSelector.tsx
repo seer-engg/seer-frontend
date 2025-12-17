@@ -27,7 +27,7 @@ type AsanaProject = {
 interface AsanaWorkspaceSelectorProps {
   connectedAccountId: string;
   onWorkspaceSelected?: (workspaceGid: string, workspaceName: string) => void;
-  onProjectSelected?: (projectGid: string, projectName: string) => void;
+  onProjectSelected?: (projectGid: string, projectName: string, workspaceGid?: string) => void;
   initialWorkspaceGid?: string; // Persisted workspace GID from previous selection
   initialProjectGid?: string; // Persisted project GID from previous selection
 }

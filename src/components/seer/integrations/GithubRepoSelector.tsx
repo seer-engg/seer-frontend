@@ -10,13 +10,14 @@ import { RefreshCcw, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 
-type GithubRepo = {
+export type GithubRepo = {
   id: number | string;
   name: string;
   full_name?: string;
   html_url?: string;
   description?: string | null;
   private?: boolean;
+  default_branch?: string | null;
   owner?: {
     login?: string;
   };
@@ -49,9 +50,10 @@ function extractRepos(payload: unknown): GithubRepo[] {
 interface GithubRepoSelectorProps {
   connectedAccountId: string;
   onRepoSelected?: (repoId: string, repoName: string) => void;
+  onRepoResolved?: (repo: GithubRepo) => void;
 }
 
-export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: GithubRepoSelectorProps) {
+export function GithubRepoSelector({ connectedAccountId, onRepoSelected, onRepoResolved }: GithubRepoSelectorProps) {
   const { user } = useUser();
   const { toast } = useToast();
   const userEmail =
@@ -59,6 +61,7 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
     user?.emailAddresses?.[0]?.emailAddress ??
     null;
   const onRepoSelectedRef = useRef(onRepoSelected);
+  const onRepoResolvedRef = useRef(onRepoResolved);
 
   const [repos, setRepos] = useState<GithubRepo[]>([]);
   const [repoError, setRepoError] = useState<string | null>(null);
@@ -69,6 +72,9 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
   useEffect(() => {
     onRepoSelectedRef.current = onRepoSelected;
   }, [onRepoSelected]);
+  useEffect(() => {
+    onRepoResolvedRef.current = onRepoResolved;
+  }, [onRepoResolved]);
 
   const fetchRepositories = useCallback(async () => {
     if (!connectedAccountId || !userEmail) return;
@@ -90,10 +96,11 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
       const normalized = extractRepos(response.data);
       setRepos(normalized);
       if (normalized.length > 0) {
-        const firstRepoId = String(normalized[0].id ?? normalized[0].full_name ?? normalized[0].name);
-        setSelectedRepoId(firstRepoId);
         const firstRepo = normalized[0];
+        const firstRepoId = String(firstRepo.id ?? firstRepo.full_name ?? firstRepo.name);
+        setSelectedRepoId(firstRepoId);
         onRepoSelectedRef.current?.(firstRepoId, firstRepo.full_name ?? firstRepo.name);
+        onRepoResolvedRef.current?.(firstRepo);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -151,6 +158,7 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected }: Githu
           const repo = repos.find((r) => String(r.id ?? r.full_name ?? r.name) === value);
           if (repo) {
             onRepoSelectedRef.current?.(value, repo.full_name ?? repo.name);
+            onRepoResolvedRef.current?.(repo);
           }
         }}
       >

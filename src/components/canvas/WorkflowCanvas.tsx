@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -6,6 +6,7 @@ import {
   Controls,
   Node,
   Edge,
+  NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Play, Zap, CheckCircle } from 'lucide-react';
@@ -18,7 +19,9 @@ interface WorkflowCanvasProps {
   nodeStatuses: Record<string, NodeStatus>;
   currentStep: string;
   experimentResult: ExperimentResult | null;
+  selectedNode: string | null;
   onContinue: (nodeId: string) => void;
+  onNodeSelect: (nodeId: string) => void;
 }
 
 const nodeTypes = {
@@ -34,20 +37,34 @@ export function WorkflowCanvas({
   nodeStatuses,
   currentStep,
   experimentResult,
+  selectedNode,
   onContinue,
+  onNodeSelect,
 }: WorkflowCanvasProps) {
   const nodes: Node[] = useMemo(() => [
     {
       id: 'agentSpec',
       type: 'workflow',
       position: { x: 100, y: 200 },
-      data: { label: 'AgentSpec', status: nodeStatuses.agentSpec, type: 'agentSpec' },
+      data: { 
+        label: 'AgentSpec', 
+        status: nodeStatuses.agentSpec, 
+        type: 'agentSpec',
+        selected: selectedNode === 'agentSpec',
+        onSelect: () => onNodeSelect('agentSpec'),
+      },
     },
     {
       id: 'evals',
       type: 'workflow',
       position: { x: 400, y: 200 },
-      data: { label: 'Evals', status: nodeStatuses.evals, type: 'evals' },
+      data: { 
+        label: 'Evals', 
+        status: nodeStatuses.evals, 
+        type: 'evals',
+        selected: selectedNode === 'evals',
+        onSelect: () => onNodeSelect('evals'),
+      },
     },
     {
       id: 'experiment',
@@ -62,15 +79,23 @@ export function WorkflowCanvas({
           { id: 'invoke', label: 'Invoke Target', status: experimentResult?.invoke.status || 'idle', icon: Zap },
           { id: 'assert', label: 'Assert', status: experimentResult?.assert.status || 'idle', icon: CheckCircle },
         ],
+        selected: selectedNode === 'experiment',
+        onSelect: () => onNodeSelect('experiment'),
       },
     },
     {
       id: 'codex',
       type: 'workflow',
       position: { x: 1050, y: 200 },
-      data: { label: 'Codex', status: nodeStatuses.codex, type: 'codex' },
+      data: { 
+        label: 'Codex', 
+        status: nodeStatuses.codex, 
+        type: 'codex',
+        selected: selectedNode === 'codex',
+        onSelect: () => onNodeSelect('codex'),
+      },
     },
-  ], [nodeStatuses, experimentResult]);
+  ], [nodeStatuses, experimentResult, selectedNode, onNodeSelect]);
 
   const edges: Edge[] = useMemo(() => [
     {
@@ -105,6 +130,11 @@ export function WorkflowCanvas({
     },
   ], [nodeStatuses, onContinue]);
 
+  // Handle node clicks using ReactFlow's built-in handler
+  const handleNodeClick: NodeMouseHandler = useCallback((event, node) => {
+    onNodeSelect(node.id);
+  }, [onNodeSelect]);
+
   return (
     <div className="w-full h-full bg-[hsl(var(--canvas-bg))]">
       <ReactFlow
@@ -112,15 +142,17 @@ export function WorkflowCanvas({
         edges={edges}
         nodeTypes={nodeTypes as any}
         edgeTypes={edgeTypes as any}
+        onNodeClick={handleNodeClick}
         fitView
         fitViewOptions={{ padding: 0.2 }}
-        nodesDraggable={false}
+        nodesDraggable={true}
         nodesConnectable={false}
-        elementsSelectable={false}
-        panOnDrag
+        elementsSelectable={true}
+        panOnDrag={[1, 2]}
         zoomOnScroll
         minZoom={0.5}
         maxZoom={1.5}
+        selectNodesOnDrag={false}
       >
         <Background
           variant={BackgroundVariant.Dots}

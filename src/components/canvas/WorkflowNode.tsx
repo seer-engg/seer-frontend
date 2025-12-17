@@ -8,6 +8,8 @@ interface WorkflowNodeData {
   label: string;
   status: NodeStatus;
   type: 'agentSpec' | 'evals' | 'experiment' | 'codex';
+  selected?: boolean;
+  onSelect?: () => void;
 }
 
 const icons = {
@@ -20,15 +22,17 @@ const icons = {
 function WorkflowNodeComponent({ data }: { data: WorkflowNodeData }) {
   const Icon = icons[data.type];
   const status = data.status;
+  const isSelected = data.selected;
 
   return (
     <div
       className={cn(
-        'relative px-6 py-4 rounded-xl border-2 min-w-[180px] transition-all duration-300',
+        'relative px-6 py-4 rounded-xl border-2 min-w-[180px] transition-all duration-300 cursor-pointer',
         status === 'idle' && 'bg-card border-primary shadow-md',
         status === 'processing' && 'bg-card border-green-500 node-processing',
         status === 'complete' && 'bg-card border-green-500 shadow-md',
-        status === 'disabled' && 'bg-muted/50 border-border opacity-60'
+        status === 'disabled' && 'bg-muted/50 border-border opacity-60',
+        isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background'
       )}
     >
       <Handle

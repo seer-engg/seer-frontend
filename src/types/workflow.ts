@@ -20,11 +20,43 @@ export interface SpecItem {
   description: string;
 }
 
+export interface SpecResponse {
+  langgraph_agent_id: string;
+  mcp_services: string[] | null;
+  functional_requirements: string[] | null;
+}
+
 export interface EvalCase {
   id: string;
   input: string;
   expectedOutput: string;
 }
+
+// Backend dataset example response types
+export interface ServiceInstructions {
+  service_name: string;
+  instructions: string[];
+}
+
+export interface ExpectedOutput {
+  create_test_data: ServiceInstructions[];
+  assert_final_state: ServiceInstructions[];
+  expected_action: string;
+}
+
+export interface DatasetExample {
+  example_id: string;
+  input_message: string;
+  expected_output: ExpectedOutput;
+  status: 'active' | 'retired';
+}
+
+// Helper to convert DatasetExample to EvalCase
+export const datasetExampleToEvalCase = (example: DatasetExample): EvalCase => ({
+  id: example.example_id,
+  input: example.input_message,
+  expectedOutput: example.expected_output.expected_action,
+});
 
 export interface ExperimentResult {
   provision: { status: NodeStatus; logs: string[] };
@@ -45,6 +77,9 @@ export interface GitHubRepo {
   fullName: string;
   description: string;
   private: boolean;
+  htmlUrl?: string;
+  defaultBranch?: string;
+  owner?: string;
 }
 
 export interface Template {

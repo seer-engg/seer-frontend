@@ -1,21 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Github, LayoutTemplate, Check, Loader2 } from 'lucide-react';
+import { X, Github, LayoutTemplate, Loader2, RefreshCcw, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GitHubRepo, Template } from '@/types/workflow';
+import { AgentSummary } from '@/types/agent';
 import { Button } from '@/components/ui/button';
+import { IntegrationConnect } from '@/components/seer/integrations/IntegrationConnect';
+import { GithubRepoSelector, type GithubRepo as GithubRepoSelection } from '@/components/seer/integrations/GithubRepoSelector';
+import { agentsApi } from '@/lib/agents-api';
+import { useToast } from '@/components/ui/use-toast';
 
 interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (type: 'github' | 'template', data: GitHubRepo | Template) => void;
+  onComplete: (type: 'github' | 'template', data: GitHubRepo | Template, agent?: AgentSummary) => void;
 }
-
-const mockRepos: GitHubRepo[] = [
-  { id: '1', name: 'trading-agent', fullName: 'dan/trading-agent', description: 'Automated trading bot', private: false },
-  { id: '2', name: 'github-asana-sync', fullName: 'dan/github-asana-sync', description: 'GitHub to Asana sync tool', private: true },
-  { id: '3', name: 'slack-bot', fullName: 'dan/slack-bot', description: 'Custom Slack automation', private: false },
-];
 
 const templates: Template[] = [
   { id: '1', name: 'GitHub Integration', description: 'Connect to GitHub webhooks and APIs', icon: '🔗', category: 'Integration' },
@@ -30,24 +29,71 @@ type Step = 'choose' | 'github-auth' | 'github-select' | 'template-select';
 
 export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModalProps) {
   const [step, setStep] = useState<Step>('choose');
-  const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const { toast } = useToast();
 
-  const handleGitHubAuth = async () => {
-    setIsAuthorizing(true);
-    await new Promise(r => setTimeout(r, 2000));
-    setIsAuthorizing(false);
-    setStep('github-select');
+  useEffect(() => {
+    if (connectedAccountId && step === 'github-auth') {
+      setStep('github-select');
+    }
+  }, [connectedAccountId, step]);
+
+  useEffect(() => {
+    if (!connectedAccountId) {
+      setSelectedRepo(null);
+    }
+  }, [connectedAccountId]);
+
+  const handleRepoResolved = (repo: GithubRepoSelection) => {
+    const idValue = String(repo.id ?? repo.full_name ?? repo.name);
+    const fallbackName = repo.full_name ?? repo.name ?? 'repository';
+    setSelectedRepo({
+      id: idValue,
+      name: repo.name ?? fallbackName,
+      fullName: fallbackName,
+      description: repo.description ?? '',
+      private: Boolean(repo.private),
+      htmlUrl: repo.html_url ?? undefined,
+      defaultBranch: repo.default_branch ?? undefined,
+      owner: repo.owner?.login,
+    });
   };
 
-  const handleRepoSelect = (repo: GitHubRepo) => {
-    setSelectedRepo(repo);
-  };
+  const handleImportRepository = async () => {
+    if (!selectedRepo || !connectedAccountId) {
+      return;
+    }
 
-  const handleConfirmRepo = () => {
-    if (selectedRepo) {
-      onComplete('github', selectedRepo);
+    setIsImporting(true);
+    try {
+      const agent = await agentsApi.importFromGithub({
+        connectedAccountId,
+        repoId: String(selectedRepo.id),
+        repoFullName: selectedRepo.fullName ?? selectedRepo.name,
+        repoDescription: selectedRepo.description,
+        repoPrivate: selectedRepo.private,
+        repoDefaultBranch: selectedRepo.defaultBranch,
+        repoHtmlUrl: selectedRepo.htmlUrl,
+        name: selectedRepo.fullName ?? selectedRepo.name,
+      });
+      toast({
+        title: 'Repository imported',
+        description: `${selectedRepo.fullName ?? selectedRepo.name} is now available in your dashboard.`,
+      });
+      // Pass the agent with threadId to the parent
+      onComplete('github', selectedRepo, agent);
       resetAndClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast({
+        title: 'Failed to import repository',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -59,8 +105,109 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
   const resetAndClose = () => {
     setStep('choose');
     setSelectedRepo(null);
+    setConnectedAccountId(null);
+    setIsImporting(false);
     onClose();
   };
+
+  const renderGithubConnectionCard = () => (
+    <IntegrationConnect
+      type="github"
+      onConnected={(accountId) => setConnectedAccountId(accountId ?? null)}
+    >
+      {({ status, connectedAccountId: activeAccountId, isLoading, onAuthorize, onRefresh, onCancel }) => {
+        const isConnected = status === 'connected' && Boolean(activeAccountId);
+        return (
+          <div className="space-y-3 border border-border rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-foreground">GitHub Authorization</p>
+                <p className="text-xs text-muted-foreground">Connect via Composio to import repositories.</p>
+              </div>
+              <span
+                className={cn(
+                  'text-xs px-2 py-0.5 rounded-full capitalize',
+                  status === 'connected' && 'bg-emerald-500/10 text-emerald-600',
+                  status === 'pending' && 'bg-blue-500/10 text-blue-600',
+                  status === 'needs-auth' && 'bg-yellow-500/10 text-yellow-600',
+                  status === 'error' && 'bg-destructive/10 text-destructive',
+                  status === 'unknown' && 'bg-muted text-muted-foreground',
+                )}
+              >
+                {status.replace('-', ' ')}
+              </span>
+            </div>
+
+            {status === 'needs-auth' && (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAuthorize();
+                }}
+                disabled={isLoading}
+                className="w-full"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Authorizing...
+                  </>
+                ) : (
+                  <>
+                    <Github className="h-4 w-4 mr-2" />
+                    Authorize GitHub
+                  </>
+                )}
+              </Button>
+            )}
+
+            {status === 'pending' && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  disabled={isLoading}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRefresh();
+                  }}
+                >
+                  {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCcw className="h-4 w-4 mr-2" />}
+                  Refresh
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="flex-1"
+                  disabled={isLoading}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCancel();
+                    setConnectedAccountId(null);
+                    setStep('github-auth');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+
+            {status === 'error' && (
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <span>Authorization failed. Try again.</span>
+              </div>
+            )}
+
+            {isConnected && (
+              <div className="text-xs text-muted-foreground">
+                Connected account: {activeAccountId}
+              </div>
+            )}
+          </div>
+        );
+      }}
+    </IntegrationConnect>
+  );
 
   return (
     <AnimatePresence>
@@ -107,7 +254,7 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
                       <Github className="w-7 h-7 text-background" />
                     </div>
                     <div className="text-center">
-                      <p className="font-medium text-foreground">Export Existing</p>
+                      <p className="font-medium text-foreground">Import Existing</p>
                       <p className="text-sm text-muted-foreground mt-1">Import from GitHub</p>
                     </div>
                   </button>
@@ -128,62 +275,60 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
               )}
 
               {step === 'github-auth' && (
-                <div className="text-center py-6">
-                  <div className="w-16 h-16 rounded-full bg-foreground flex items-center justify-center mx-auto mb-4">
-                    <Github className="w-8 h-8 text-background" />
-                  </div>
-                  <h3 className="font-semibold text-foreground mb-2">Authorize GitHub</h3>
-                  <p className="text-muted-foreground mb-6">
-                    Connect your GitHub account to import repositories
+                <div className="space-y-4">
+                  {renderGithubConnectionCard()}
+                  <p className="text-xs text-muted-foreground text-center">
+                    Once connected, you&apos;ll be able to choose a repository to import.
                   </p>
-                  <Button
-                    onClick={handleGitHubAuth}
-                    disabled={isAuthorizing}
-                    className="w-full"
-                  >
-                    {isAuthorizing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Authorizing...
-                      </>
-                    ) : (
-                      'Authorize GitHub'
-                    )}
-                  </Button>
                 </div>
               )}
 
               {step === 'github-select' && (
-                <div className="space-y-3">
-                  {mockRepos.map((repo) => (
-                    <button
-                      key={repo.id}
-                      onClick={() => handleRepoSelect(repo)}
-                      className={cn(
-                        'w-full flex items-center gap-4 p-4 rounded-xl border transition-all text-left',
-                        selectedRepo?.id === repo.id
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
+                <div className="space-y-4">
+                  {renderGithubConnectionCard()}
+                  {connectedAccountId ? (
+                    <>
+                      <GithubRepoSelector
+                        connectedAccountId={connectedAccountId}
+                        onRepoResolved={handleRepoResolved}
+                      />
+                      {selectedRepo && (
+                        <div className="text-xs text-muted-foreground border border-border rounded-lg p-3">
+                          <p className="font-medium text-foreground">{selectedRepo.fullName}</p>
+                          {selectedRepo.description && (
+                            <p className="mt-1">{selectedRepo.description}</p>
+                          )}
+                        </div>
                       )}
-                    >
-                      <Github className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">{repo.fullName}</p>
-                        <p className="text-sm text-muted-foreground truncate">{repo.description}</p>
-                      </div>
-                      {selectedRepo?.id === repo.id && (
-                        <Check className="w-5 h-5 text-primary flex-shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                  
-                  <Button
-                    onClick={handleConfirmRepo}
-                    disabled={!selectedRepo}
-                    className="w-full mt-4"
-                  >
-                    Import Repository
-                  </Button>
+                      <Button
+                        onClick={handleImportRepository}
+                        disabled={!selectedRepo || isImporting}
+                        className="w-full mt-2"
+                      >
+                        {isImporting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Importing...
+                          </>
+                        ) : (
+                          'Import Repository'
+                        )}
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted-foreground flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>
+                        GitHub account disconnected.{' '}
+                        <button
+                          className="underline"
+                          onClick={() => setStep('github-auth')}
+                        >
+                          Re-authorize.
+                        </button>
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 

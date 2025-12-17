@@ -184,8 +184,17 @@ interface IntegrationCommandItemProps {
   isSelected: boolean;
   onSelect: () => void;
   onResourceSelected: (id: string, name: string) => void;
+  onConnected: (connectedAccountId: string) => void;
   onUseSandbox: () => void;
-  selectedResource: { id: string; name: string } | null;
+  selectedResource: {
+    id: string;
+    name: string;
+    mode?: string;
+    workspaceGid?: string;
+    projectGid?: string;
+    repoId?: string;
+    folderId?: string;
+  } | null;
 }
 
 function IntegrationCommandItem({
@@ -198,6 +207,7 @@ function IntegrationCommandItem({
   selectedResource,
 }: IntegrationCommandItemProps) {
   const config = INTEGRATION_CONFIGS[type];
+  const { selection: selectedResources, updateSelection } = useIntegrationContext();
   const isSandboxMode = selectedResource?.id === "sandbox" || selectedResource?.mode === "sandbox";
 
   return (
