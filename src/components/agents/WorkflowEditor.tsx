@@ -10,7 +10,7 @@ import { useWorkflow } from '@/hooks/useWorkflow';
 import { useAgentStream } from '@/hooks/useAgentStream';
 import { Button } from '@/components/ui/button';
 import { agentsApi } from '@/lib/agents-api';
-import type { SpecResponse, SpecItem, ExperimentRun } from '@/types/workflow';
+import type { SpecResponse, ExperimentRun } from '@/types/workflow';
 import { datasetExampleToEvalCase } from '@/types/workflow';
 
 interface WorkflowEditorProps {
@@ -20,38 +20,13 @@ interface WorkflowEditorProps {
   onBack: () => void;
 }
 
-// Helper function to convert SpecResponse to SpecItem array
-const convertSpecToItems = (spec: SpecResponse): SpecItem[] => {
-  const items: SpecItem[] = [];
-  
-  if (spec.langgraph_agent_id) {
-    items.push({
-      id: '1',
-      title: 'Agent ID',
-      description: spec.langgraph_agent_id,
-    });
-  }
-  
-  if (spec.mcp_services && spec.mcp_services.length > 0) {
-    items.push({
-      id: '2',
-      title: 'MCP Services',
-      description: spec.mcp_services.join(', '),
-    });
-  }
-  
-  if (spec.functional_requirements && spec.functional_requirements.length > 0) {
-    // Create individual items for each functional requirement
-    spec.functional_requirements.forEach((requirement, index) => {
-      items.push({
-        id: `3-${index}`,
-        title: `Requirement ${index + 1}`,
-        description: requirement,
-      });
-    });
-  }
-  
-  return items;
+const hasSpecData = (spec: SpecResponse | null) => {
+  if (!spec) return false;
+  return Boolean(
+    spec.langgraph_agent_id?.trim() ||
+      spec.mcp_services?.length ||
+      spec.functional_requirements?.length,
+  );
 };
 
 const summarizeExperimentLogs = (runs: ExperimentRun[]): string[] => {
@@ -66,13 +41,13 @@ const summarizeExperimentLogs = (runs: ExperimentRun[]): string[] => {
 export function WorkflowEditor({ projectName, threadId, agentId, onBack }: WorkflowEditorProps) {
   const {
     nodeStatuses,
-    specs,
+    spec,
     evalCases,
     experimentResult,
     experimentRuns,
     currentStep,
     setNodeStatuses,
-    setSpecs,
+    setSpec,
     setEvalCases,
     setExperimentResult,
     setExperimentRuns,
@@ -80,6 +55,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
 
   const { messages, progress, isStreaming, error, submitSpec, submitStep, stop } = useAgentStream(threadId);
   const hasLoadedSpecsRef = useRef(false);
+  const [specStatusMessage, setSpecStatusMessage] = useState<{ type: 'info' | 'error'; message: string } | null>(null);
   const hasLoadedEvalCasesRef = useRef(false);
   const hasLoadedExperimentsRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -98,62 +74,61 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
       // Try to fetch existing spec
       try {
         const specResponse = await agentsApi.getSpec(threadId);
-        const specItems = convertSpecToItems(specResponse);
-        
-        if (specItems.length > 0) {
-          hasLoadedSpecsRef.current = true;
-          setSpecs(specItems);
-          setNodeStatuses(prev => ({ 
-            ...prev, 
-            agentSpec: 'complete',
-            evals: 'idle'
-          }));
-          
-          // If spec exists, try to fetch existing dataset/eval cases
-          try {
-            const datasetExamples = await agentsApi.getDataset(threadId);
-            const evalCasesData = datasetExamples.map(datasetExampleToEvalCase);
-            
-            if (evalCasesData.length > 0) {
-              hasLoadedEvalCasesRef.current = true;
-              setEvalCases(evalCasesData);
-              setNodeStatuses(prev => ({ 
-                ...prev, 
-                agentSpec: 'complete',
-                evals: 'complete',
-                experiment: 'idle'
-              }));
-              setSelectedNode('evals');
+        if (!hasSpecData(specResponse)) return;
 
-              try {
-                const experiments = await agentsApi.getExperiments(threadId);
-                if (experiments.length > 0) {
-                  hasLoadedExperimentsRef.current = true;
-                  setExperimentRuns(experiments);
-                  setExperimentResult({
-                    provision: { status: 'complete', logs: ['Restored previous run'] },
-                    invoke: { status: 'complete', logs: ['Testing completed'] },
-                    assert: {
-                      status: 'complete',
-                      logs: summarizeExperimentLogs(experiments),
-                      passed: experiments.every(exp => exp.passed),
-                    },
-                  });
-                  setNodeStatuses(prev => ({
-                    ...prev,
-                    experiment: 'complete',
-                    codex: 'idle',
-                  }));
-                  setSelectedNode('experiment');
-                }
-              } catch {
-                console.log('No existing experiments found for this thread yet');
+        hasLoadedSpecsRef.current = true;
+        setSpec(specResponse);
+        setSpecStatusMessage(null);
+        setNodeStatuses(prev => ({ 
+          ...prev, 
+          agentSpec: 'complete',
+          evals: 'idle'
+        }));
+        
+        // If spec exists, try to fetch existing dataset/eval cases
+        try {
+          const datasetExamples = await agentsApi.getDataset(threadId);
+          const evalCasesData = datasetExamples.map(datasetExampleToEvalCase);
+          
+          if (evalCasesData.length > 0) {
+            hasLoadedEvalCasesRef.current = true;
+            setEvalCases(evalCasesData);
+            setNodeStatuses(prev => ({ 
+              ...prev, 
+              agentSpec: 'complete',
+              evals: 'complete',
+              experiment: 'idle'
+            }));
+            setSelectedNode('evals');
+
+            try {
+              const experiments = await agentsApi.getExperiments(threadId);
+              if (experiments.length > 0) {
+                hasLoadedExperimentsRef.current = true;
+                setExperimentRuns(experiments);
+                setExperimentResult({
+                  provision: { status: 'complete', logs: ['Restored previous run'] },
+                  invoke: { status: 'complete', logs: ['Testing completed'] },
+                  assert: {
+                    status: 'complete',
+                    logs: summarizeExperimentLogs(experiments),
+                    passed: experiments.every(exp => exp.passed),
+                  },
+                });
+                setNodeStatuses(prev => ({
+                  ...prev,
+                  experiment: 'complete',
+                  codex: 'idle',
+                }));
+                setSelectedNode('experiment');
               }
+            } catch {
+              console.log('No existing experiments found for this thread yet');
             }
-          } catch {
-            // Dataset doesn't exist yet - that's fine, evals step not completed
-            console.log('No existing dataset found, evals step not yet completed');
           }
+        } catch {
+          // Dataset doesn't exist yet - that's fine, evals step not completed
+          console.log('No existing dataset found, evals step not yet completed');
         }
       } catch {
         // Spec doesn't exist yet - fresh workflow
@@ -162,7 +137,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
     };
     
     initializeWorkflowState();
-  }, [threadId, setSpecs, setEvalCases, setNodeStatuses, setExperimentResult, setExperimentRuns]);
+  }, [threadId, setSpec, setEvalCases, setNodeStatuses, setExperimentResult, setExperimentRuns]);
 
   // Update node status based on streaming state
   useEffect(() => {
@@ -196,22 +171,23 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
         try {
           hasLoadedSpecsRef.current = true; // Mark as loading to prevent duplicate calls
           const specResponse = await agentsApi.getSpec(threadId);
-          const specItems = convertSpecToItems(specResponse);
-          
-          if (specItems.length > 0) {
-            setSpecs(specItems);
+          if (hasSpecData(specResponse)) {
+            setSpec(specResponse);
+            setSpecStatusMessage(null);
           } else {
-            // Fallback to a message if no specs are available
-            setSpecs([
-              { id: '1', title: 'Specification', description: 'No specification data available yet' },
-            ]);
+            setSpec(null);
+            setSpecStatusMessage({
+              type: 'info',
+              message: 'No specification data available yet.',
+            });
           }
         } catch (error) {
           console.error('Failed to fetch specs:', error);
-          // Fallback to error message
-          setSpecs([
-            { id: '1', title: 'Error', description: 'Failed to load specification. Please try again.' },
-          ]);
+          setSpec(null);
+          setSpecStatusMessage({
+            type: 'error',
+            message: 'Failed to load specification. Please try again.',
+          });
           hasLoadedSpecsRef.current = false; // Reset on error to allow retry
         }
       };
@@ -295,7 +271,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
     isStreaming,
     threadId,
     setNodeStatuses,
-    setSpecs,
+    setSpec,
     setEvalCases,
     nodeStatuses.evals,
     nodeStatuses.experiment,
@@ -339,7 +315,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
   }, []);
 
   const showAgentInput = nodeStatuses.agentSpec === 'idle' && selectedNode === 'agentSpec';
-  const showSpecPanel = selectedNode === 'agentSpec' && specs.length > 0;
+  const showSpecPanel = selectedNode === 'agentSpec' && (Boolean(spec) || Boolean(specStatusMessage));
   const showEvalPanel = selectedNode === 'evals' && evalCases.length > 0;
   const showExperimentPanel = selectedNode === 'experiment' && (experimentResult !== null || experimentRuns.length > 0);
   
@@ -378,7 +354,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
       </div>
 
       {/* Right Sidebar Panels */}
-      <aside className="w-96 border-l border-border bg-card flex flex-col">
+      <aside className="w-2/4 border-l border-border bg-card flex flex-col">
         {/* Top Panel - Chat or Spec */}
         <div className="flex-1 p-4 overflow-hidden flex flex-col gap-4">
           {showAgentInput && (
@@ -390,7 +366,7 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
 
           {showSpecPanel && (
             <div className="flex-1 min-h-0">
-              <SpecPanel specs={specs} onFeedback={handleSpecFeedback} />
+              <SpecPanel spec={spec} statusMessage={specStatusMessage} onFeedback={handleSpecFeedback} />
             </div>
           )}
 

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { NodeStatus, LogEntry, SpecItem, EvalCase, ExperimentResult, ExperimentRun } from '@/types/workflow';
+import { NodeStatus, LogEntry, SpecResponse, EvalCase, ExperimentResult, ExperimentRun } from '@/types/workflow';
 
 export function useWorkflow() {
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, NodeStatus>>({
@@ -10,7 +10,7 @@ export function useWorkflow() {
   });
   
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [specs, setSpecs] = useState<SpecItem[]>([]);
+  const [spec, setSpec] = useState<SpecResponse | null>(null);
   const [evalCases, setEvalCases] = useState<EvalCase[]>([]);
   const [experimentResult, setExperimentResult] = useState<ExperimentResult | null>(null);
   const [experimentRuns, setExperimentRuns] = useState<ExperimentRun[]>([]);
@@ -49,12 +49,16 @@ export function useWorkflow() {
       addLog(log.msg, log.msg.includes('✓') ? 'success' : 'info');
     }
 
-    setSpecs([
-      { id: '1', title: 'Integration Points', description: 'GitHub PR webhooks, Asana API' },
-      { id: '2', title: 'Trigger Event', description: 'PR merge detection' },
-      { id: '3', title: 'Action', description: 'Update/close linked Asana tasks' },
-      { id: '4', title: 'Error Handling', description: 'Retry logic with exponential backoff' },
-    ]);
+    setSpec({
+      langgraph_agent_id: 'agent-spec-001',
+      mcp_services: ['GitHub', 'Asana'],
+      functional_requirements: [
+        'Detect merged pull requests and locate linked Asana tasks',
+        'Update task status to complete with merge metadata',
+        'Handle missing task links gracefully with informative logging',
+        'Retry transient API errors with exponential backoff',
+      ],
+    });
 
     setNodeStatuses(prev => ({ 
       ...prev, 
@@ -175,8 +179,8 @@ export function useWorkflow() {
     nodeStatuses,
     setNodeStatuses,
     logs,
-    specs,
-    setSpecs,
+    spec,
+    setSpec,
     evalCases,
     setEvalCases,
     experimentResult,
