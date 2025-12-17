@@ -71,10 +71,62 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
   const { messages, progress, isStreaming, error, submitSpec, submitStep, stop } = useAgentStream(threadId);
   const hasLoadedSpecsRef = useRef(false);
   const hasLoadedEvalCasesRef = useRef(false);
+  const hasInitializedRef = useRef(false);
   const currentStreamingStepRef = useRef<'spec' | 'plan' | null>(null);
   
   // Track which node is selected for displaying the corresponding panel
   const [selectedNode, setSelectedNode] = useState<string | null>('agentSpec');
+
+  // Initialize workflow state from existing data on mount
+  useEffect(() => {
+    if (!threadId || hasInitializedRef.current) return;
+    
+    const initializeWorkflowState = async () => {
+      hasInitializedRef.current = true;
+      
+      // Try to fetch existing spec
+      try {
+        const specResponse = await agentsApi.getSpec(threadId);
+        const specItems = convertSpecToItems(specResponse);
+        
+        if (specItems.length > 0) {
+          hasLoadedSpecsRef.current = true;
+          setSpecs(specItems);
+          setNodeStatuses(prev => ({ 
+            ...prev, 
+            agentSpec: 'complete',
+            evals: 'idle'
+          }));
+          
+          // If spec exists, try to fetch existing dataset/eval cases
+          try {
+            const datasetExamples = await agentsApi.getDataset(threadId);
+            const evalCasesData = datasetExamples.map(datasetExampleToEvalCase);
+            
+            if (evalCasesData.length > 0) {
+              hasLoadedEvalCasesRef.current = true;
+              setEvalCases(evalCasesData);
+              setNodeStatuses(prev => ({ 
+                ...prev, 
+                agentSpec: 'complete',
+                evals: 'complete',
+                experiment: 'idle'
+              }));
+              setSelectedNode('evals');
+            }
+          } catch {
+            // Dataset doesn't exist yet - that's fine, evals step not completed
+            console.log('No existing dataset found, evals step not yet completed');
+          }
+        }
+      } catch {
+        // Spec doesn't exist yet - fresh workflow
+        console.log('No existing spec found, starting fresh workflow');
+      }
+    };
+    
+    initializeWorkflowState();
+  }, [threadId, setSpecs, setEvalCases, setNodeStatuses]);
 
   // Update node status based on streaming state
   useEffect(() => {
