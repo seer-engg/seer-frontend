@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { WorkflowCanvas } from '@/components/canvas/WorkflowCanvas';
 import { AgentLogs } from '@/components/panels/AgentLogs';
@@ -72,6 +72,9 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
   const hasLoadedSpecsRef = useRef(false);
   const hasLoadedEvalCasesRef = useRef(false);
   const currentStreamingStepRef = useRef<'spec' | 'plan' | null>(null);
+  
+  // Track which node is selected for displaying the corresponding panel
+  const [selectedNode, setSelectedNode] = useState<string | null>('agentSpec');
 
   // Update node status based on streaming state
   useEffect(() => {
@@ -163,11 +166,17 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
       // Start the plan step by submitting step: "plan" to the agent stream
       currentStreamingStepRef.current = 'plan';
       setNodeStatuses(prev => ({ ...prev, evals: 'processing' }));
+      setSelectedNode('evals');
       submitStep('plan');
     } else if (nodeId === 'experiment') {
+      setSelectedNode('experiment');
       processExperiment();
     }
   }, [submitStep, setNodeStatuses, processExperiment]);
+
+  const handleNodeSelect = useCallback((nodeId: string) => {
+    setSelectedNode(nodeId);
+  }, []);
 
   const handleAgentSubmit = useCallback((message: string) => {
     currentStreamingStepRef.current = 'spec';
@@ -178,10 +187,13 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
     console.log('Spec feedback:', feedback);
   }, []);
 
-  const showAgentInput = nodeStatuses.agentSpec === 'idle';
-  const showSpecPanel = specs.length > 0;
-  const showEvalPanel = evalCases.length > 0;
-  const showExperimentPanel = experimentResult !== null;
+  const showAgentInput = nodeStatuses.agentSpec === 'idle' && selectedNode === 'agentSpec';
+  const showSpecPanel = selectedNode === 'agentSpec' && specs.length > 0;
+  const showEvalPanel = selectedNode === 'evals' && evalCases.length > 0;
+  const showExperimentPanel = selectedNode === 'experiment' && experimentResult !== null;
+  
+  // Show a placeholder message when a node is selected but has no data yet
+  const showEmptyState = !showAgentInput && !showSpecPanel && !showEvalPanel && !showExperimentPanel;
 
   return (
     <div className="flex h-screen bg-background">
@@ -207,7 +219,9 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
             nodeStatuses={nodeStatuses}
             currentStep={currentStep}
             experimentResult={experimentResult}
+            selectedNode={selectedNode}
             onContinue={handleContinue}
+            onNodeSelect={handleNodeSelect}
           />
         </div>
       </div>
@@ -238,6 +252,19 @@ export function WorkflowEditor({ projectName, threadId, agentId, onBack }: Workf
           {showExperimentPanel && (
             <div className="flex-1 min-h-0">
               <ExperimentPanel result={experimentResult} />
+            </div>
+          )}
+
+          {showEmptyState && selectedNode && (
+            <div className="flex-1 min-h-0 flex items-center justify-center">
+              <div className="text-center text-muted-foreground p-6">
+                <p className="text-sm">
+                  {selectedNode === 'agentSpec' && 'Processing agent specification...'}
+                  {selectedNode === 'evals' && 'No evaluation cases yet. Continue from AgentSpec to generate evals.'}
+                  {selectedNode === 'experiment' && 'No experiment results yet. Continue from Evals to run experiments.'}
+                  {selectedNode === 'codex' && 'Codex generation coming soon.'}
+                </p>
+              </div>
             </div>
           )}
         </div>

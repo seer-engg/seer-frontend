@@ -4,9 +4,9 @@ import { NodeStatus, LogEntry, SpecItem, EvalCase, ExperimentResult } from '@/ty
 export function useWorkflow() {
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, NodeStatus>>({
     agentSpec: 'idle',
-    evals: 'disabled',
-    experiment: 'disabled',
-    codex: 'disabled',
+    evals: 'idle',
+    experiment: 'idle',
+    codex: 'idle',
   });
   
   const [logs, setLogs] = useState<LogEntry[]>([]);

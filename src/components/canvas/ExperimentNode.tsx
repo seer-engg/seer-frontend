@@ -16,21 +16,25 @@ interface ExperimentNodeData {
   status: NodeStatus;
   expanded: boolean;
   subNodes: SubNode[];
+  selected?: boolean;
+  onSelect?: () => void;
 }
 
 function ExperimentNodeComponent({ data }: { data: ExperimentNodeData }) {
   const status = data.status;
   const isExpanded = data.expanded && (status === 'processing' || status === 'complete');
+  const isSelected = data.selected;
 
   return (
     <div
       className={cn(
-        'relative rounded-xl border-2 transition-all duration-500',
+        'relative rounded-xl border-2 transition-all duration-500 cursor-pointer',
         status === 'idle' && 'bg-card border-primary shadow-md',
         status === 'processing' && 'bg-card border-green-500 node-processing',
         status === 'complete' && 'bg-card border-green-500 shadow-md',
         status === 'disabled' && 'bg-muted/50 border-border opacity-60',
-        isExpanded ? 'p-4' : 'px-6 py-4'
+        isExpanded ? 'p-4' : 'px-6 py-4',
+        isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background'
       )}
     >
       <Handle
