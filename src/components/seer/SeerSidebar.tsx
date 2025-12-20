@@ -13,6 +13,7 @@ import {
   Sparkles,
   Database,
   Bot,
+  Lock, // Add Lock icon for coming soon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -29,17 +30,25 @@ import { Key } from "lucide-react";
 import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
-  { name: "Agents", href: "/agents", icon: Bot },
+  { name: "Agents", href: "/agents", icon: Bot, comingSoon: true }, // Add comingSoon flag
   { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
   { name: "Evals", href: "/eval", icon: Sparkles },
   { name: "Traces", href: "/trace", icon: Activity },
   { name: "Datasets", href: "/datasets", icon: Database },
   { name: "Tool Hub", href: "/tools", icon: Package },
-];
+] as const;
 
 const secondaryNav = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
+
+// Update the NavItem type to handle comingSoon
+type NavItemType = {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  comingSoon?: boolean;
+};
 
 export function SeerSidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -52,38 +61,82 @@ export function SeerSidebar() {
     user?.emailAddresses?.[0]?.emailAddress ??
     "";
 
-  const NavItem = ({ item, isActive }: { item: typeof primaryNav[0]; isActive: boolean }) => (
-    <Tooltip delayDuration={0}>
-      <TooltipTrigger asChild>
-        <NavLink
-          to={item.href}
-          className={cn(
-            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-            isActive
-              ? "bg-accent text-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-          )}
-        >
-          <item.icon className="h-4 w-4 shrink-0" />
-          {!collapsed && (
-            <motion.span
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: "auto" }}
-              exit={{ opacity: 0, width: 0 }}
-              className="whitespace-nowrap"
+  const NavItem = ({ item, isActive }: { item: NavItemType; isActive: boolean }) => {
+    // Handle coming soon items
+    if (item.comingSoon) {
+      return (
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-not-allowed opacity-60",
+                "text-muted-foreground"
+              )}
             >
-              {item.name}
-            </motion.span>
+              <item.icon className="h-4 w-4 shrink-0" />
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="whitespace-nowrap flex items-center gap-2"
+                >
+                  {item.name}
+                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
+                    Soon
+                  </Badge>
+                </motion.span>
+              )}
+            </div>
+          </TooltipTrigger>
+          {collapsed && (
+            <TooltipContent side="right" className="font-medium">
+              {item.name} - Coming Soon
+            </TooltipContent>
           )}
-        </NavLink>
-      </TooltipTrigger>
-      {collapsed && (
-        <TooltipContent side="right" className="font-medium">
-          {item.name}
-        </TooltipContent>
-      )}
-    </Tooltip>
-  );
+          {!collapsed && (
+            <TooltipContent side="right" className="font-medium">
+              Coming Soon
+            </TooltipContent>
+          )}
+        </Tooltip>
+      );
+    }
+
+    // Existing NavItem code for non-coming-soon items
+    return (
+      <Tooltip delayDuration={0}>
+        <TooltipTrigger asChild>
+          <NavLink
+            to={item.href}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+              isActive
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+            )}
+          >
+            <item.icon className="h-4 w-4 shrink-0" />
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: "auto" }}
+                exit={{ opacity: 0, width: 0 }}
+                className="whitespace-nowrap"
+              >
+                {item.name}
+              </motion.span>
+            )}
+          </NavLink>
+        </TooltipTrigger>
+        {collapsed && (
+          <TooltipContent side="right" className="font-medium">
+            {item.name}
+          </TooltipContent>
+        )}
+      </Tooltip>
+    );
+  };
 
   return (
     <motion.aside
