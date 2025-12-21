@@ -23,6 +23,7 @@ const CONNECTION_QUERY_KEYS = [
   "connection_id",
   "composio_connected_account_id",
   "connectedAccountId",
+  "connected"
 ];
 
 const STATUS_BADGE_STYLES: Record<ConnectionStatus, string> = {
@@ -64,9 +65,8 @@ export function IntegrationConnect({
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
     null;
-  const missingAuthConfig = !authConfigId;
-  // No longer need API key check - backend proxy handles it
-  const canUseComposio = Boolean(authConfigId && userEmail && !missingAuthConfig);
+  // Custom auth implementation doesn't need auth config ID
+  const canUseComposio = Boolean(userEmail);
   const isSandbox = type === "sandbox";
 
   // Sandbox is always connected and doesn't need OAuth
@@ -95,7 +95,6 @@ export function IntegrationConnect({
       const response = await listConnectedAccounts({
         userIds: [userEmail],
         toolkitSlugs: [config.toolkitSlug],
-        authConfigIds: authConfigId ? [authConfigId] : undefined,
       });
 
       const items = response.items ?? [];
@@ -132,7 +131,7 @@ export function IntegrationConnect({
   }, [canUseComposio, authConfigId, config.toolkitSlug, resetConnectionState, userEmail]);
 
   const handleAuthorize = useCallback(async () => {
-    if (!authConfigId || !userEmail) return;
+    if (!userEmail) return;
     setAuthorizeLoading(true);
     setConnectionError(null);
 
@@ -140,8 +139,9 @@ export function IntegrationConnect({
       const callbackUrl = `${window.location.origin}${window.location.pathname}`;
       const connectionRequest = await initiateConnection({
         userId: userEmail,
-        authConfigId,
+        authConfigId: authConfigId || "dummy",
         callbackUrl,
+        provider: type,
       });
 
       if (!connectionRequest.redirectUrl) {
@@ -170,7 +170,7 @@ export function IntegrationConnect({
     setConnectionError(null);
 
     try {
-      await deleteConnectedAccount(connectedAccountId);
+      await deleteConnectedAccount(connectedAccountId, userEmail || undefined);
       toast({
         title: `${config.displayName} connection cancelled`,
         description: "The pending connection has been cancelled. You can connect again anytime.",
