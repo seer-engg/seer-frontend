@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { backendApiClient } from '@/lib/api-client';
 import { listConnectedAccounts, initiateConnection, ConnectedAccount } from '@/lib/tools/proxy-client';
 import { IntegrationType, formatScopes, getRequiredScopes } from '@/lib/integrations/client';
-import { useDefaultUser } from './useDefaultUser';
+import { useUser } from '@clerk/clerk-react';
 
 /**
  * Tool metadata from backend
@@ -69,8 +69,13 @@ function getIntegrationTypeFromToolName(toolName: string): IntegrationType | nul
  * Hook for managing integration tools and their authorization status
  */
 export function useIntegrationTools() {
-  const { email: userEmail, isLoaded, isAuthenticated } = useDefaultUser();
+  const { user, isLoaded } = useUser();
   const queryClient = useQueryClient();
+    
+  const userEmail = user?.primaryEmailAddress?.emailAddress ?? 
+                   user?.emailAddresses?.[0]?.emailAddress ?? 
+                   null;
+
 
   // Fetch available tools from backend
   const { 
@@ -81,13 +86,14 @@ export function useIntegrationTools() {
   } = useQuery({
     queryKey: ['integration-tools'],
     queryFn: async () => {
+      if (!userEmail) return [];
       const response = await backendApiClient.request<{ tools: ToolMetadata[] }>(
         '/api/tools',
         { method: 'GET' }
       );
       return response.tools;
     },
-    enabled: isLoaded,
+    enabled: isLoaded && !!userEmail,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -220,6 +226,10 @@ export function useIntegrationTools() {
    * Initiate OAuth connection for an integration
    */
   const connectIntegration = useCallback(async (type: IntegrationType): Promise<string | null> => {
+    if (!userEmail) { 
+      console.error(`[useIntegrationTools] No user email found`);
+      return null; 
+    }
     // Get required scopes for this integration
     const scopes = getRequiredScopes(type);
     if (scopes.length === 0 && type !== 'sandbox') {
@@ -262,7 +272,7 @@ export function useIntegrationTools() {
     
     // User info
     userEmail,
-    isAuthenticated,
+    isAuthenticated: isLoaded && !!user,
     
     // Methods
     getToolIntegrationStatus,
