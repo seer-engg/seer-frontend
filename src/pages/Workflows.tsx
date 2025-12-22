@@ -13,9 +13,12 @@ import { WorkflowChatAssistant } from '@/components/workflows/WorkflowChatAssist
 import { ExecutionPanel } from '@/components/workflows/ExecutionPanel';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
 import { Button } from '@/components/ui/button';
-import { Play, Save } from 'lucide-react';
+import { Play, Save, Trash2, FileEdit, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 export default function Workflows() {
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
@@ -26,11 +29,14 @@ export default function Workflows() {
   
   const {
     workflows,
+    isLoading: isLoadingWorkflows,
     createWorkflow,
     updateWorkflow,
+    deleteWorkflow,
     executeWorkflow,
     isCreating,
     isExecuting,
+    isDeleting,
   } = useWorkflowBuilder();
 
   const selectedNode = useMemo(
@@ -114,6 +120,42 @@ export default function Workflows() {
     }
   }, [selectedWorkflowId, executeWorkflow]);
 
+  const handleLoadWorkflow = useCallback((workflow: typeof workflows[0]) => {
+    setSelectedWorkflowId(workflow.id);
+    setWorkflowName(workflow.name);
+    if (workflow.graph_data) {
+      setNodes(workflow.graph_data.nodes || []);
+      setEdges(workflow.graph_data.edges || []);
+    }
+  }, []);
+
+  const handleDeleteWorkflow = useCallback(async (workflowId: number) => {
+    if (!confirm('Are you sure you want to delete this workflow?')) {
+      return;
+    }
+    try {
+      await deleteWorkflow(workflowId);
+      // Clear canvas if the deleted workflow was selected
+      if (selectedWorkflowId === workflowId) {
+        setSelectedWorkflowId(null);
+        setWorkflowName('My Workflow');
+        setNodes([]);
+        setEdges([]);
+      }
+    } catch (error) {
+      console.error('Failed to delete workflow:', error);
+      alert('Failed to delete workflow');
+    }
+  }, [deleteWorkflow, selectedWorkflowId]);
+
+  const handleNewWorkflow = useCallback(() => {
+    setSelectedWorkflowId(null);
+    setWorkflowName('My Workflow');
+    setNodes([]);
+    setEdges([]);
+    setSelectedNodeId(null);
+  }, []);
+
   return (
     <div className="flex h-screen bg-background">
       {/* Left Sidebar - Tool Palette */}
@@ -164,19 +206,120 @@ export default function Workflows() {
       {/* Right Sidebar */}
       <div className="w-80 border-l border-border flex flex-col">
         {/* Top Panel - Chat Assistant or Block Config */}
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {selectedNode ? (
             <BlockConfigPanel
               node={selectedNode}
               onUpdate={handleNodeUpdate}
             />
           ) : (
-            <div className="p-4">
+            <div className="p-4 flex-1 overflow-hidden flex flex-col">
               <WorkflowChatAssistant
                 onWorkflowGenerated={handleWorkflowGenerated}
               />
             </div>
           )}
+        </div>
+
+        {/* Saved Workflows Panel */}
+        <div className="border-t flex flex-col max-h-72">
+          <div className="p-3 border-b bg-muted/30 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Saved Workflows</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleNewWorkflow}
+              className="h-7 text-xs"
+            >
+              + New
+            </Button>
+          </div>
+          <ScrollArea className="flex-1">
+            <div className="p-2 space-y-2">
+              {isLoadingWorkflows ? (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  Loading workflows...
+                </div>
+              ) : workflows.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No saved workflows yet
+                </div>
+              ) : (
+                workflows.map((workflow) => (
+                  <Card
+                    key={workflow.id}
+                    className={cn(
+                      'cursor-pointer hover:bg-accent/50 transition-colors',
+                      selectedWorkflowId === workflow.id && 'ring-2 ring-primary bg-accent/30'
+                    )}
+                    onClick={() => handleLoadWorkflow(workflow)}
+                  >
+                    <CardContent className="p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {workflow.name}
+                          </p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                            <Clock className="w-3 h-3" />
+                            <span>
+                              {new Date(workflow.updated_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLoadWorkflow(workflow);
+                            }}
+                            title="Edit workflow"
+                          >
+                            <FileEdit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await executeWorkflow(workflow.id, {}, false);
+                                alert('Workflow execution started!');
+                              } catch (error) {
+                                console.error('Failed to execute workflow:', error);
+                                alert('Failed to execute workflow');
+                              }
+                            }}
+                            disabled={isExecuting}
+                            title="Run workflow"
+                          >
+                            <Play className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteWorkflow(workflow.id);
+                            }}
+                            disabled={isDeleting}
+                            title="Delete workflow"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </ScrollArea>
         </div>
 
         {/* Bottom Panel - Execution History */}
