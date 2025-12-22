@@ -1,6 +1,5 @@
 /**
- * Integration Client
- * Replaces Composio Proxy Client with custom Authlib integration
+ * Tool execution and OAuth connection management client for custom tool system
  */
 import { backendApiClient } from "@/lib/api-client";
 
@@ -25,12 +24,13 @@ export interface ConnectResponse {
 
 export interface WaitForConnectionResponse {
   status: string;
-  connectedAccountId: string;
+  connectionId: string;
 }
 
 export interface ExecuteToolResponse {
   data: unknown;
   success: boolean;
+  error?: string;
 }
 
 /**
@@ -68,25 +68,30 @@ export async function listConnectedAccounts(params: {
 
 /**
  * Initiate OAuth connection
+ * CRITICAL: Frontend must always pass scope parameter
  */
 export async function initiateConnection(params: {
   userId: string;
-  authConfigId?: string; 
-  provider?: string;
+  provider: string;
+  scope: string; // REQUIRED - OAuth scopes (frontend controls)
   callbackUrl?: string; 
 }): Promise<ConnectResponse> {
-  const provider = params.provider || "google"; // Default or fallback
+  const provider = params.provider;
   
   const searchParams = new URLSearchParams();
   searchParams.append("user_id", params.userId);
+  searchParams.append("scope", params.scope); // Always pass scope
   
-  // We can't really get the redirect URL without calling the backend?
-  // Actually, we can just construct it.
+  if (params.callbackUrl) {
+    searchParams.append("redirect_to", params.callbackUrl);
+  }
+  
+  // Redirect to backend OAuth endpoint with scope
   const redirectUrl = `/api/integrations/${provider}/connect?${searchParams.toString()}`;
   
   return {
     redirectUrl,
-    connectionId: "mock-init-id"
+    connectionId: "init-id" // Will be set by backend after redirect
   };
 }
 
@@ -97,8 +102,8 @@ export async function waitForConnection(params: {
   connectionId: string;
   timeoutMs?: number;
 }): Promise<WaitForConnectionResponse> {
-  // Polling logic
-  return { status: "ACTIVE", connectedAccountId: "mock" };
+  // Polling logic - TODO: implement actual polling
+  return { status: "ACTIVE", connectionId: params.connectionId };
 }
 
 export async function deleteConnectedAccount(accountId: string, userId?: string): Promise<void> {
@@ -108,15 +113,34 @@ export async function deleteConnectedAccount(accountId: string, userId?: string)
   });
 }
 
+/**
+ * Execute a tool
+ */
 export async function executeTool(params: {
   toolSlug: string;
   userId: string;
-  connectedAccountId?: string;
+  connectionId?: string;
   arguments?: Record<string, unknown>;
 }): Promise<ExecuteToolResponse> {
-  console.log("Mock executing tool:", params);
-  return {
-    success: true,
-    data: { message: "Mock tool execution successful" }
-  };
+  const endpoint = `/api/tools/${params.toolSlug}/execute`;
+  
+  try {
+    const response = await backendApiClient.request<ExecuteToolResponse>(endpoint, {
+      method: "POST",
+      body: {
+        user_id: params.userId,
+        connection_id: params.connectionId,
+        arguments: params.arguments || {},
+      },
+    });
+    
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      data: null,
+      error: error.message || "Tool execution failed",
+    };
+  }
 }
+

@@ -1,7 +1,7 @@
 /**
  * Tool Palette Component
  * 
- * Displays available tools from Composio and built-in blocks.
+ * Displays available tools and built-in blocks.
  * Supports drag-and-drop to canvas.
  */
 import { useState, useEffect } from 'react';
@@ -82,13 +82,13 @@ export function ToolPalette({ onBlockSelect, className }: ToolPaletteProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedToolkit, setSelectedToolkit] = useState<string | null>(null);
 
-  // Fetch Composio tools
+  // Fetch tools
   const { data: toolsData, isLoading } = useQuery({
-    queryKey: ['composio-tools', selectedToolkit],
+    queryKey: ['tools', selectedToolkit],
     queryFn: async () => {
       const url = selectedToolkit
-        ? `/api/composio/tools?toolkit=${selectedToolkit}`
-        : '/api/composio/tools';
+        ? `/api/tools?integration_type=${selectedToolkit}`
+        : '/api/tools';
       const response = await backendApiClient.request<{ tools: Tool[] }>(url, {
         method: 'GET',
       });
@@ -188,12 +188,12 @@ export function ToolPalette({ onBlockSelect, className }: ToolPaletteProps) {
             </div>
           </div>
 
-          {/* Composio Tools */}
+          {/* Integration Tools */}
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading tools...</div>
           ) : (
             <div>
-              <h3 className="text-sm font-medium mb-2">Composio Tools</h3>
+              <h3 className="text-sm font-medium mb-2">Integration Tools</h3>
               {toolkits.length > 0 && (
                 <div className="flex gap-2 mb-3 flex-wrap">
                   <Badge

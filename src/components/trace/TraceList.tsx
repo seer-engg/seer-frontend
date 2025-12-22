@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import React from "react";
-import { tracesAPI, type TraceSummary } from "@/lib/langfuse-api";
+import { tracesAPI, type TraceSummary } from "@/lib/traces-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

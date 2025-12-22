@@ -1,5 +1,6 @@
 /**
- * API client for fetching traces from the traces-api backend
+ * API client for fetching traces from MLflow via the backend API.
+ * The backend queries MLflow traces and returns them in a standardized format.
  */
 import { backendApiClient, BackendAPIError } from "./api-client";
 
@@ -46,57 +47,10 @@ export interface TraceDetail {
   children: RunNode[];
 }
 
-export interface DatasetSummary {
-  id: string;
-  name: string;
-  description: string | null;
-  data_type: string | null;
-  created_at: string | null;
-  modified_at: string | null;
-  example_count: number | null;
-  session_count: number | null;
-  last_session_start_time: string | null;
-}
-
-export interface DatasetExample {
-  id: string;
-  created_at: string | null;
-  inputs: Record<string, unknown>;
-  outputs: Record<string, unknown> | null;
-  metadata: Record<string, unknown> | null;
-}
-
-export interface ExperimentSummary {
-  id: string;
-  name: string;
-  description: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  metadata: Record<string, unknown> | null;
-  tenant_id: string | null;
-}
-
-export interface DatasetDetail extends DatasetSummary {
-  inputs_schema: Record<string, unknown> | null;
-  outputs_schema: Record<string, unknown> | null;
-  transformations: Record<string, unknown>[] | null;
-  examples: DatasetExample[];
-  experiments: ExperimentSummary[];
-}
-
 export interface ListTracesParams {
   project_name?: string; // Project name for metadata filtering (e.g., 'eval-v1', 'supervisor-v1', 'codex-v1')
   limit?: number;
   start_time?: string; // ISO 8601 format
-}
-
-export interface ListDatasetsParams {
-  limit?: number;
-}
-
-export interface GetDatasetDetailParams {
-  exampleLimit?: number;
-  experimentLimit?: number;
 }
 
 export { BackendAPIError as TracesAPIError };
@@ -138,41 +92,11 @@ export const tracesAPI = {
   },
 
   /**
-   * Get detailed trace with nested runs
+   * Get detailed trace with nested runs from MLflow
    */
   async getTraceDetail(traceId: string, projectName?: string): Promise<TraceDetail> {
     const params = projectName ? `?project_name=${encodeURIComponent(projectName)}` : "";
     return backendApiClient.request<TraceDetail>(`/api/traces/${traceId}${params}`);
-  },
-
-  /**
-   * List datasets from Langfuse (via backend proxy)
-   */
-  async listDatasets(params: ListDatasetsParams = {}): Promise<DatasetSummary[]> {
-    const searchParams = new URLSearchParams();
-    if (params.limit) {
-      searchParams.append("limit", params.limit.toString());
-    }
-    const endpoint = `/api/datasets${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-    return backendApiClient.request<DatasetSummary[]>(endpoint);
-  },
-
-  /**
-   * Get dataset metadata, sample examples, and connected experiments
-   */
-  async getDatasetDetail(
-    datasetId: string,
-    params: GetDatasetDetailParams = {}
-  ): Promise<DatasetDetail> {
-    const searchParams = new URLSearchParams();
-    if (params.exampleLimit) {
-      searchParams.append("example_limit", params.exampleLimit.toString());
-    }
-    if (params.experimentLimit) {
-      searchParams.append("experiment_limit", params.experimentLimit.toString());
-    }
-    const suffix = searchParams.toString() ? `?${searchParams.toString()}` : "";
-    return backendApiClient.request<DatasetDetail>(`/api/datasets/${datasetId}${suffix}`);
   },
 
   /**

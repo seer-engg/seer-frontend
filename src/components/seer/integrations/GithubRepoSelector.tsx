@@ -2,7 +2,7 @@
  * Resource selector for GitHub repositories
  */
 
-import { executeTool } from "@/lib/composio/proxy-client";
+import { executeTool } from "@/lib/tools/proxy-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -48,12 +48,12 @@ function extractRepos(payload: unknown): GithubRepo[] {
 }
 
 interface GithubRepoSelectorProps {
-  connectedAccountId: string;
+  connectionId: string;
   onRepoSelected?: (repoId: string, repoName: string) => void;
   onRepoResolved?: (repo: GithubRepo) => void;
 }
 
-export function GithubRepoSelector({ connectedAccountId, onRepoSelected, onRepoResolved }: GithubRepoSelectorProps) {
+export function GithubRepoSelector({ connectionId, onRepoSelected, onRepoResolved }: GithubRepoSelectorProps) {
   const { user } = useUser();
   const { toast } = useToast();
   const userEmail =
@@ -77,7 +77,7 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected, onRepoR
   }, [onRepoResolved]);
 
   const fetchRepositories = useCallback(async () => {
-    if (!connectedAccountId || !userEmail) return;
+    if (!connectionId || !userEmail) return;
 
     setReposLoading(true);
     setRepoError(null);
@@ -86,7 +86,7 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected, onRepoR
       const response = await executeTool({
         toolSlug: "GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER",
         userId: userEmail,
-        connectedAccountId,
+        connectionId,
         arguments: {
           per_page: 50,
           sort: "updated",
@@ -113,13 +113,13 @@ export function GithubRepoSelector({ connectedAccountId, onRepoSelected, onRepoR
     } finally {
       setReposLoading(false);
     }
-  }, [connectedAccountId, toast, userEmail]);
+  }, [connectionId, toast, userEmail]);
 
   useEffect(() => {
-    if (connectedAccountId) {
+    if (connectionId) {
       fetchRepositories();
     }
-  }, [connectedAccountId, fetchRepositories]);
+  }, [connectionId, fetchRepositories]);
 
   const selectedRepo = repos.find(
     (repo) => String(repo.id ?? repo.full_name ?? repo.name) === selectedRepoId,

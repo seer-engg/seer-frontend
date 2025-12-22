@@ -2,7 +2,7 @@ export type TokenProvider = () => Promise<string | null>;
 type JsonBody = Record<string, unknown> | unknown[];
 
 interface BackendAPIClientOptions {
-  baseUrl: string;
+  baseUrl: string | (() => string);
   tokenProvider?: TokenProvider;
 }
 
@@ -34,7 +34,13 @@ const ensureAbsoluteUrl = (url: string): string => {
   return `https://${url}`;
 };
 
-const getBackendBaseUrl = (): string => {
+/**
+ * Gets the backend base URL dynamically.
+ * Checks for 'backend' query parameter first, then falls back to VITE_BACKEND_API_URL env var.
+ * If neither is set, falls back to http://localhost:8000 (Docker default).
+ * @returns The backend base URL
+ */
+export const getBackendBaseUrl = (): string => {
   // Check for backend URL in query parameter (for self-hosted backend)
   if (typeof window !== "undefined") {
     const urlParams = new URLSearchParams(window.location.search);
@@ -46,10 +52,19 @@ const getBackendBaseUrl = (): string => {
   
   // Fall back to environment variable
   const envUrl = import.meta.env.VITE_BACKEND_API_URL;
-  if (!envUrl) {
-    throw new Error("VITE_BACKEND_API_URL is not set and no backend parameter provided in URL");
+  if (envUrl) {
+    return ensureAbsoluteUrl(envUrl);
   }
-  return ensureAbsoluteUrl(envUrl);
+  
+  // Final fallback to Docker default port (matches docker-compose.yml)
+  const fallbackUrl = "http://localhost:8000";
+  if (typeof window !== "undefined") {
+    console.warn(
+      `[BackendAPIClient] No backend URL configured. Using fallback: ${fallbackUrl}. ` +
+      `Set VITE_BACKEND_API_URL or use ?backend=<url> query parameter.`
+    );
+  }
+  return fallbackUrl;
 };
 
 const defaultTokenProvider: TokenProvider = async () => {
@@ -90,12 +105,24 @@ const shouldSerializeBody = (value: unknown): value is JsonBody => {
 };
 
 export class BackendAPIClient {
-  private baseUrl: string;
+  private baseUrl: string | (() => string);
   private tokenProvider?: TokenProvider;
 
   constructor(options: BackendAPIClientOptions) {
-    this.baseUrl = ensureAbsoluteUrl(options.baseUrl);
+    // Support both static URL and dynamic getter function
+    this.baseUrl = typeof options.baseUrl === "function" 
+      ? options.baseUrl 
+      : ensureAbsoluteUrl(options.baseUrl);
     this.tokenProvider = options.tokenProvider;
+  }
+
+  /**
+   * Gets the current base URL, resolving it dynamically if it's a function
+   */
+  private getBaseUrl(): string {
+    return typeof this.baseUrl === "function" 
+      ? this.baseUrl() 
+      : this.baseUrl;
   }
 
   setTokenProvider(provider: TokenProvider) {
@@ -109,7 +136,7 @@ export class BackendAPIClient {
 
   private toAbsoluteUrl(endpoint: string): string {
     const normalized = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
-    return `${this.baseUrl}${normalized}`;
+    return `${this.getBaseUrl()}${normalized}`;
   }
 
   async request<T>(endpoint: string, options: BackendRequestInit = {}): Promise<T> {
@@ -190,8 +217,9 @@ export class BackendAPIClient {
   }
 }
 
+// Create client with dynamic URL resolution - reads URL from query param or env var on each request
 export const backendApiClient = new BackendAPIClient({
-  baseUrl: getBackendBaseUrl(),
+  baseUrl: getBackendBaseUrl, // Pass function reference for dynamic resolution
 });
 
 interface WindowWithClerk extends Window {

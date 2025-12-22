@@ -135,22 +135,21 @@ function AgentChatContent({
           ? artifactContext
           : undefined;
       
-      // Pass user email as user_id to Supervisor so it uses the correct Composio user
+      // Pass user email as user_id to Supervisor
       // This ensures Supervisor uses the same user_id that was used when connecting accounts
-      // IMPORTANT: Use the EXACT email that was used during connection (no modifications)
-      const userEmailForComposio = userEmail;
+      const userEmailForContext = userEmail;
       
       // Debug logging to verify what email is being used
-      if (userEmailForComposio) {
-        console.log("[AgentChatContainer] Passing user_id to Supervisor:", userEmailForComposio);
+      if (userEmailForContext) {
+        console.log("[AgentChatContainer] Passing user_id to Supervisor:", userEmailForContext);
       }
       console.log("[AgentChatContainer] Integration selection being passed:", JSON.stringify(integrationSelection, null, 2));
       
       const input_context = {
         ...contextBase,
         integrations: integrationSelection,
-        user_id: userEmailForComposio, // Pass exact user email as user_id for Composio
-        user_email: userEmailForComposio, // Also pass as user_email for compatibility
+        user_id: userEmailForContext, // Pass user email as user_id
+        user_email: userEmailForContext, // Also pass as user_email for compatibility
       };
       
       console.log("[AgentChatContainer] Full context being sent:", JSON.stringify(input_context, null, 2));

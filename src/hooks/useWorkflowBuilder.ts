@@ -6,7 +6,7 @@
 import { useState, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Node, Edge } from '@xyflow/react';
-import { backendApiClient } from '@/lib/api-client';
+import { backendApiClient, getBackendBaseUrl } from '@/lib/api-client';
 import { WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
 
 export interface Workflow {
@@ -110,9 +110,10 @@ export function useWorkflowBuilder() {
         : `/workflows/${workflowId}/execute`;
       
       if (stream) {
-        // Handle streaming execution
+        // Handle streaming execution - use dynamic backend URL
+        const baseUrl = getBackendBaseUrl();
         const response = await fetch(
-          `${import.meta.env.VITE_BACKEND_API_URL}${endpoint}`,
+          `${baseUrl}${endpoint}`,
           {
             method: 'POST',
             headers: {
