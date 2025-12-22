@@ -4,7 +4,7 @@
  * Supports drag-and-drop blocks, custom node types, and connection validation.
  * Based on ReactFlow (@xyflow/react).
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -87,6 +87,15 @@ export function WorkflowCanvas({
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
 
+  // Sync with parent state changes
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
   // Update nodes when selectedNodeId changes
   useMemo(() => {
     setNodes((nds) =>
@@ -112,9 +121,16 @@ export function WorkflowCanvas({
           if (change.type === 'add') {
             return [...acc, change.item];
           }
-          if (change.type === 'position' || change.type === 'dimensions') {
+          if (change.type === 'position' && change.position) {
             return acc.map((n) =>
-              n.id === change.id ? { ...n, ...change } : n
+              n.id === change.id ? { ...n, position: change.position } : n
+            );
+          }
+          if (change.type === 'dimensions' && change.dimensions) {
+            return acc.map((n) =>
+              n.id === change.id
+                ? { ...n, measured: change.dimensions }
+                : n
             );
           }
           return acc;
