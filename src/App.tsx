@@ -13,8 +13,8 @@ import Evals from "./pages/Evals";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
-import DatasetExplorer from "./pages/DatasetExplorer";
 import Agents from "./pages/Agents";
+import Workflows from "./pages/Workflows";
 
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
@@ -88,16 +88,6 @@ const App = () => (
               }
             />
             <Route
-              path="/datasets"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <DatasetExplorer />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/tools"
               element={
                 <ProtectedRoute>
@@ -123,6 +113,16 @@ const App = () => (
                 <ProtectedRoute>
                   <SeerLayout>
                     <Evals />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <Workflows />
                   </SeerLayout>
                 </ProtectedRoute>
               }

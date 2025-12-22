@@ -7,8 +7,8 @@ import { IntegrationConnect } from "./IntegrationConnect";
 import { GithubRepoSelector } from "./GithubRepoSelector";
 import { GoogleDriveFolderSelector } from "./GoogleDriveFolderSelector";
 import { AsanaWorkspaceSelector } from "./AsanaWorkspaceSelector";
-import { INTEGRATION_CONFIGS } from "@/lib/composio/integrations";
-import type { IntegrationType } from "@/lib/composio/client";
+import { INTEGRATION_CONFIGS } from "@/lib/integrations/config";
+import type { IntegrationType } from "@/lib/integrations/client";
 import {
   Popover,
   PopoverContent,
@@ -55,33 +55,23 @@ export function IntegrationSelector() {
 
   const handleResourceSelected =
     (type: IntegrationType) => (id: string, name: string, extraData?: { workspaceGid?: string; projectGid?: string }) => {
-      // CRITICAL: Preserve the Composio connected_account_id when selecting resources
-      // The 'id' parameter here is usually a resource ID (workspace GID, repo ID, etc.), NOT the connected_account_id
+      // Preserve the OAuthConnection.id when selecting resources
+      // The 'id' parameter here is usually a resource ID (workspace GID, repo ID, etc.), NOT the connection_id
       const current = selectedResources[type];
       
-      // Check if 'id' looks like a Composio connected_account_id (starts with 'ca_')
-      const isComposioAccountId = id.startsWith('ca_');
-      
-      // Determine the correct connected_account_id to use
-      let connectedAccountId: string;
-      if (isComposioAccountId) {
-        // The 'id' parameter IS a connected_account_id, use it
-        connectedAccountId = id;
+      // Determine the correct connection_id to use
+      let connectionId: string;
+      if (current?.id && !id.includes(':')) {
+        // Use existing connection_id from current selection
+        connectionId = current.id;
       } else {
         // The 'id' parameter is a resource ID (workspace GID, etc.)
-        // Use existing connected_account_id from current selection, or fallback to id if none exists
-        // BUT: if current?.id also doesn't start with 'ca_', we need to find the actual connected_account_id
-        if (current?.id && current.id.startsWith('ca_')) {
-          connectedAccountId = current.id; // Preserve existing connected_account_id
-        } else {
-          // No valid connected_account_id found - this shouldn't happen, but use id as fallback
-          console.warn(`[IntegrationSelector] No connected_account_id found for ${type}, using id: ${id}`);
-          connectedAccountId = id;
-        }
+        // Use existing connection_id from current selection, or fallback to id if none exists
+        connectionId = current?.id || id;
       }
       
       updateSelection(type, {
-        id: connectedAccountId, // Always use the connected_account_id
+        id: connectionId, // Always use the OAuthConnection.id
         name,
         mode: current?.mode || "connected",
         // Store resource-specific IDs separately
@@ -90,14 +80,14 @@ export function IntegrationSelector() {
       });
     };
 
-  const handleConnected = useCallback((type: IntegrationType, connectedAccountId: string) => {
-    // Store connected account ID in IntegrationContext
-    // The ID is the Composio connected_account_id
-    console.log(`[IntegrationSelector] handleConnected called for ${type} with account ID: ${connectedAccountId}`);
+  const handleConnected = useCallback((type: IntegrationType, connectionId: string) => {
+    // Store connection ID in IntegrationContext
+    // The ID is the OAuthConnection.id
+    console.log(`[IntegrationSelector] handleConnected called for ${type} with connection ID: ${connectionId}`);
     const current = selectedResources[type];
     // Preserve existing resource IDs (workspaceGid, projectGid, etc.) if they exist
     updateSelection(type, {
-      id: connectedAccountId,
+      id: connectionId,
       name: current?.name || "", // Preserve existing name if set, otherwise empty
       mode: "connected",
       // Preserve all resource IDs
@@ -106,7 +96,7 @@ export function IntegrationSelector() {
       ...(current?.repoId && { repoId: current.repoId }),
       ...(current?.folderId && { folderId: current.folderId }),
     });
-    console.log(`[IntegrationSelector] Updated selection for ${type}:`, { id: connectedAccountId, mode: "connected", preserved: current });
+    console.log(`[IntegrationSelector] Updated selection for ${type}:`, { id: connectionId, mode: "connected", preserved: current });
   }, [updateSelection, selectedResources]);
 
   const handleUseSandbox = useCallback((type: IntegrationType) => {
@@ -165,7 +155,7 @@ export function IntegrationSelector() {
                     isSelected={selectedIntegration === type}
                     onSelect={() => handleIntegrationSelect(type)}
                     onResourceSelected={handleResourceSelected(type)}
-                    onConnected={(connectedAccountId) => handleConnected(type, connectedAccountId)}
+                    onConnected={(connectionId) => handleConnected(type, connectionId)}
                     onUseSandbox={() => handleUseSandbox(type)}
                     selectedResource={selectedResources[type]}
                   />
@@ -184,7 +174,7 @@ interface IntegrationCommandItemProps {
   isSelected: boolean;
   onSelect: () => void;
   onResourceSelected: (id: string, name: string) => void;
-  onConnected: (connectedAccountId: string) => void;
+  onConnected: (connectionId: string) => void;
   onUseSandbox: () => void;
   selectedResource: {
     id: string;
@@ -215,7 +205,7 @@ function IntegrationCommandItem({
       type={type}
       onConnected={onConnected}
     >
-      {({ status, connectedAccountId, isLoading, onAuthorize, onRefresh, onCancel }) => (
+      {({ status, connectionId, isLoading, onAuthorize, onRefresh, onCancel }) => (
         <div className="space-y-1">
           <CommandItem
             onSelect={onSelect}
@@ -395,55 +385,40 @@ function IntegrationCommandItem({
               )}
 
               {/* Resource Selection */}
-              {status === "connected" && connectedAccountId && !isSandboxMode && (
+              {status === "connected" && connectionId && !isSandboxMode && (
                 <div className="space-y-2">
                   {type === "github" && (
                     <GithubRepoSelector
-                      connectedAccountId={connectedAccountId}
+                      connectionId={connectionId}
                       onRepoSelected={onResourceSelected}
                     />
                   )}
                   {type === "googledrive" && (
                     <GoogleDriveFolderSelector
-                      connectedAccountId={connectedAccountId}
+                      connectionId={connectionId}
                       onFolderSelected={onResourceSelected}
                     />
                   )}
                   {type === "asana" && (
                     <AsanaWorkspaceSelector
-                      connectedAccountId={connectedAccountId}
+                      connectionId={connectionId}
                       initialWorkspaceGid={selectedResources[type]?.workspaceGid}
                       initialProjectGid={selectedResources[type]?.projectGid}
                       onWorkspaceSelected={(workspaceGid, workspaceName) => {
-                        // CRITICAL: Pass workspace info but ALWAYS preserve the connected_account_id
-                        // connectedAccountId prop comes from IntegrationConnect and is the Composio connected_account_id (ca_*)
+                        // Preserve the OAuthConnection.id when selecting workspace
                         // workspaceGid is the Asana workspace GID (numeric)
-                        // We MUST use connectedAccountId prop, NOT the workspaceGid, for the 'id' field
+                        // We MUST use connectionId prop (OAuthConnection.id), NOT the workspaceGid, for the 'id' field
                         const current = selectedResources[type];
                         
-                        // Determine the correct connected_account_id to use
-                        // Priority: 1) connectedAccountId prop (most reliable - comes from IntegrationConnect), 
-                        //           2) current?.id if it's a Composio ID (ca_*), 
-                        //           3) fallback
-                        let finalConnectedAccountId: string;
-                        if (connectedAccountId && connectedAccountId.startsWith('ca_')) {
-                          // Use prop first - it's the source of truth from IntegrationConnect
-                          finalConnectedAccountId = connectedAccountId;
-                        } else if (current?.id && current.id.startsWith('ca_')) {
-                          // Fallback to current selection if prop is invalid
-                          finalConnectedAccountId = current.id;
-                        } else {
-                          // Fallback - shouldn't happen, but log warning
-                          console.warn(`[IntegrationSelector] No valid connected_account_id found for ${type}. Current: ${current?.id}, Prop: ${connectedAccountId}`);
-                          finalConnectedAccountId = connectedAccountId || current?.id || '';
-                        }
+                        // Use connectionId prop (OAuthConnection.id) or current selection
+                        const finalConnectionId = connectionId || current?.id || '';
                         
-                        console.log(`[IntegrationSelector] Workspace selected for ${type}: workspaceGid=${workspaceGid}, connectedAccountId prop=${connectedAccountId}, preserving connected_account_id=${finalConnectedAccountId}`);
+                        console.log(`[IntegrationSelector] Workspace selected for ${type}: workspaceGid=${workspaceGid}, connectionId=${finalConnectionId}`);
                         
-                        // Update selection with workspace info, preserving connected_account_id
+                        // Update selection with workspace info, preserving connection_id
                         // IMPORTANT: Preserve all existing fields (like workspaceGid if already set)
                         updateSelection(type, {
-                          id: finalConnectedAccountId, // ALWAYS use Composio connected_account_id, never workspace GID
+                          id: finalConnectionId, // Use OAuthConnection.id, never workspace GID
                           name: workspaceName,
                           mode: current?.mode || "connected",
                           workspaceGid: workspaceGid, // Store workspace GID separately
@@ -452,28 +427,24 @@ function IntegrationCommandItem({
                           ...(current?.repoId && { repoId: current.repoId }),
                           ...(current?.folderId && { folderId: current.folderId }),
                         });
-                        console.log(`[IntegrationSelector] Updated selection with workspaceGid:`, { type, id: finalConnectedAccountId, workspaceGid, name: workspaceName });
+                        console.log(`[IntegrationSelector] Updated selection with workspaceGid:`, { type, id: finalConnectionId, workspaceGid, name: workspaceName });
                       }}
                       onProjectSelected={(projectGid, projectName, workspaceGid) => {
-                        // CRITICAL: Pass project info but ALWAYS preserve the connected_account_id
+                        // Preserve the OAuthConnection.id when selecting project
                         const current = selectedResources[type];
                         
-                        // Determine the correct connected_account_id to use
-                        let finalConnectedAccountId: string;
-                        if (current?.id && current.id.startsWith('ca_')) {
-                          finalConnectedAccountId = current.id;
-                        } else if (connectedAccountId && connectedAccountId.startsWith('ca_')) {
-                          finalConnectedAccountId = connectedAccountId;
-                        } else {
-                          console.warn(`[IntegrationSelector] No valid connected_account_id found for ${type} project selection`);
-                          finalConnectedAccountId = connectedAccountId || current?.id || '';
+                        // Use connectionId prop (OAuthConnection.id) or current selection
+                        const finalConnectionId = connectionId || current?.id || '';
+                        
+                        if (!finalConnectionId) {
+                          console.warn(`[IntegrationSelector] No valid connection_id found for ${type} project selection`);
                         }
                         
-                        console.log(`[IntegrationSelector] Project selected for ${type}: projectGid=${projectGid}, preserving connected_account_id=${finalConnectedAccountId}`);
+                        console.log(`[IntegrationSelector] Project selected for ${type}: projectGid=${projectGid}, preserving connection_id=${finalConnectionId}`);
                         
-                        // Update selection with project info, preserving connected_account_id
+                        // Update selection with project info, preserving connection_id
                         updateSelection(type, {
-                          id: finalConnectedAccountId, // ALWAYS use Composio connected_account_id
+                          id: finalConnectionId, // Use OAuthConnection.id
                           name: projectName,
                           mode: current?.mode || "connected",
                           workspaceGid: workspaceGid,
@@ -500,7 +471,7 @@ function IntegrationCommandItem({
               {/* Error/unknown messages */}
               {status === "unknown" && (
                 <div className="text-xs text-muted-foreground">
-                  Auth config not set. Add <code className="text-xs bg-muted px-1 py-0.5 rounded">VITE_COMPOSIO_{type === "googledrive" ? "GOOGLEDRIVE" : type.toUpperCase()}_AUTH_CONFIG_ID</code> to your .env file.
+                  OAuth connection not available. Please connect your {config.displayName} account.
                 </div>
               )}
               {status === "error" && (

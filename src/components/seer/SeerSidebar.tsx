@@ -11,7 +11,6 @@ import {
   ChevronRight,
   LogOut,
   Sparkles,
-  Database,
   Bot,
   Lock, // Add Lock icon for coming soon
 } from "lucide-react";
@@ -34,7 +33,6 @@ const primaryNav = [
   { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
   { name: "Evals", href: "/eval", icon: Sparkles },
   { name: "Traces", href: "/trace", icon: Activity },
-  { name: "Datasets", href: "/datasets", icon: Database },
   { name: "Tool Hub", href: "/tools", icon: Package },
 ] as const;
 

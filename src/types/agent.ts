@@ -12,7 +12,7 @@ export interface AgentRecord {
   repo_private?: boolean | null;
   repo_default_branch?: string | null;
   repo_html_url?: string | null;
-  connected_account_id?: string | null;
+  connection_id?: string | null;
   repo_id?: string | null;
   thread_id?: string | null;
   metadata?: Record<string, unknown> | null;

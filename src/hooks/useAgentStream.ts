@@ -1,9 +1,16 @@
 import { useStream } from '@langchain/langgraph-sdk/react';
 import { type Message } from '@langchain/langgraph-sdk';
 import { createClient } from '@/providers/client';
-const AGENT_URL = import.meta.env.VITE_BACKEND_API_URL + '/api/agents';
+import { getBackendBaseUrl } from '@/lib/api-client';
 
 const AGENT_SPEC_ASSISTANT_ID = 'eval_agent';
+
+/**
+ * Gets the agent API URL dynamically based on backend query parameter or env var
+ */
+const getAgentUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/agents`;
+};
 
 // State type for the agent spec workflow
 export type AgentStreamState = {
@@ -18,7 +25,9 @@ function isProgressCustomEvent(event: unknown): event is { progress: string } {
 }
 
 export function useAgentStream(threadId: string | null) {
-  const client = createClient(AGENT_URL, undefined);
+  // Get agent URL dynamically to support backend query parameter
+  const agentUrl = getAgentUrl();
+  const client = createClient(agentUrl, undefined);
   const stream = useStream<
     AgentStreamState,
     {

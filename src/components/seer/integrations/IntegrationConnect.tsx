@@ -1,16 +1,17 @@
 /**
- * Generic component for connecting Composio integrations
+ * Generic component for connecting integrations
  * Handles OAuth flow, connection status, and resource selection
+ * Frontend controls OAuth scopes (read-only is core differentiation)
  */
 
-import { getAuthConfigId, IntegrationType } from "@/lib/composio/client";
-import { INTEGRATION_CONFIGS, ConnectionStatus, ConnectedAccount } from "@/lib/composio/integrations";
+import { IntegrationType, formatScopes } from "@/lib/integrations/client";
+import { INTEGRATION_CONFIGS, ConnectionStatus, ConnectedAccount } from "@/lib/integrations/config";
 import {
   listConnectedAccounts,
   initiateConnection,
   waitForConnection,
   deleteConnectedAccount,
-} from "@/lib/composio/proxy-client";
+} from "@/lib/tools/proxy-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -19,10 +20,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 
 const CONNECTION_QUERY_KEYS = [
-  "connected_account_id",
+  "connected_account_id", // Legacy support
   "connection_id",
-  "composio_connected_account_id",
-  "connectedAccountId",
+  "connectedAccountId", // Legacy support
   "connected"
 ];
 
@@ -36,11 +36,11 @@ const STATUS_BADGE_STYLES: Record<ConnectionStatus, string> = {
 
 interface IntegrationConnectProps {
   type: IntegrationType;
-  onConnected?: (connectedAccountId: string) => void;
+  onConnected?: (connectionId: string) => void;
   onResourceSelected?: (resourceId: string, resourceName: string) => void;
   children?: (props: {
     status: ConnectionStatus;
-    connectedAccountId: string | null;
+    connectionId: string | null;
     isLoading: boolean;
     onAuthorize: () => void;
     onRefresh: () => void;
@@ -59,31 +59,31 @@ export function IntegrationConnect({
   const { toast } = useToast();
 
   const config = INTEGRATION_CONFIGS[type];
-  const authConfigId = useMemo(() => getAuthConfigId(type), [type]);
+  // Get required scopes for this integration
+  const requiredScopes = config.requiredScopes;
 
   const userEmail =
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
     null;
-  // Custom auth implementation doesn't need auth config ID
-  const canUseComposio = Boolean(userEmail);
+  const canConnect = Boolean(userEmail);
   const isSandbox = type === "sandbox";
 
   // Sandbox is always connected and doesn't need OAuth
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(isSandbox ? "connected" : "unknown");
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
   const [authorizeLoading, setAuthorizeLoading] = useState(false);
 
   const resetConnectionState = useCallback(() => {
-    setConnectedAccountId(null);
+    setConnectionId(null);
     setConnectionStatus("needs-auth");
     setConnectionError(null);
   }, []);
 
   const fetchConnections = useCallback(async () => {
-    if (!canUseComposio || !userEmail) {
+    if (!canConnect || !userEmail) {
       resetConnectionState();
       return;
     }
@@ -108,13 +108,13 @@ export function IntegrationConnect({
         if (activeAccount.user_id) {
           console.log(`[IntegrationConnect] Account user_id format:`, activeAccount.user_id);
         }
-        setConnectedAccountId(activeAccount.id);
+        setConnectionId(activeAccount.id);
         setConnectionStatus("connected");
         // Call onConnected callback - don't include it in deps to avoid loops
         onConnected?.(activeAccount.id);
       } else if (items.length) {
         console.log(`[IntegrationConnect] Found ${items.length} account(s) but none ACTIVE for ${type}`);
-        setConnectedAccountId(items[0].id);
+        setConnectionId(items[0].id);
         setConnectionStatus("pending");
       } else {
         console.log(`[IntegrationConnect] No accounts found for ${type}`);
@@ -128,20 +128,33 @@ export function IntegrationConnect({
       setConnectionLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseComposio, authConfigId, config.toolkitSlug, resetConnectionState, userEmail]);
+  }, [canConnect, config.toolkitSlug, resetConnectionState, userEmail]);
 
   const handleAuthorize = useCallback(async () => {
     if (!userEmail) return;
+    
+    // CRITICAL: Frontend must always pass scopes
+    if (requiredScopes.length === 0 && !isSandbox) {
+      toast({
+        title: "Configuration error",
+        description: `No OAuth scopes configured for ${config.displayName}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setAuthorizeLoading(true);
     setConnectionError(null);
 
     try {
       const callbackUrl = `${window.location.origin}${window.location.pathname}`;
+      const scopeString = formatScopes(requiredScopes);
+      
       const connectionRequest = await initiateConnection({
         userId: userEmail,
-        authConfigId: authConfigId || "dummy",
-        callbackUrl,
         provider: type,
+        scope: scopeString, // Always pass scopes - frontend controls permissions
+        callbackUrl,
       });
 
       if (!connectionRequest.redirectUrl) {
@@ -161,16 +174,16 @@ export function IntegrationConnect({
     } finally {
       setAuthorizeLoading(false);
     }
-  }, [authConfigId, toast, userEmail, config.displayName]);
+  }, [toast, userEmail, config.displayName, type, requiredScopes, isSandbox]);
 
   const handleCancel = useCallback(async () => {
-    if (!connectedAccountId) return;
+    if (!connectionId) return;
     
     setConnectionLoading(true);
     setConnectionError(null);
 
     try {
-      await deleteConnectedAccount(connectedAccountId, userEmail || undefined);
+      await deleteConnectedAccount(connectionId, userEmail || undefined);
       toast({
         title: `${config.displayName} connection cancelled`,
         description: "The pending connection has been cancelled. You can connect again anytime.",
@@ -187,7 +200,7 @@ export function IntegrationConnect({
     } finally {
       setConnectionLoading(false);
     }
-  }, [connectedAccountId, toast, config.displayName, resetConnectionState]);
+  }, [connectionId, toast, config.displayName, resetConnectionState, userEmail]);
 
   useEffect(() => {
     // Sandbox is always connected, no need to fetch
@@ -202,16 +215,16 @@ export function IntegrationConnect({
       return;
     }
 
-    if (canUseComposio && !authLoading) {
+    if (canConnect && !authLoading) {
       fetchConnections();
     }
     // Only re-fetch when these core dependencies change, not when fetchConnections callback changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, canUseComposio, userEmail, isSandbox]);
+  }, [authLoading, canConnect, userEmail, isSandbox]);
 
   // Handle OAuth callback - use a ref to prevent re-running
   useEffect(() => {
-    if (!canUseComposio) return;
+    if (!canConnect) return;
 
     const params = new URLSearchParams(window.location.search);
     const matchedValue = CONNECTION_QUERY_KEYS.map((key) => params.get(key)).find(Boolean);
@@ -248,14 +261,14 @@ export function IntegrationConnect({
           timeoutMs: 120000,
         });
         
-        // Store the connected account ID
-        if (result.connectedAccountId) {
-          setConnectedAccountId(result.connectedAccountId);
+        // Store the connection ID
+        if (result.connectionId) {
+          setConnectionId(result.connectionId);
           setConnectionStatus("connected");
-          onConnected?.(result.connectedAccountId);
+          onConnected?.(result.connectionId);
           toast({
             title: `${config.displayName} connected`,
-            description: "Composio confirmed the authorization.",
+            description: "Authorization confirmed.",
           });
         }
         // Refresh connections to get latest status
@@ -276,9 +289,9 @@ export function IntegrationConnect({
         sessionStorage.removeItem(processingKey);
       }
     })();
-    // Only depend on canUseComposio - don't include callbacks to avoid loops
+    // Only depend on canConnect - don't include callbacks to avoid loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseComposio]);
+  }, [canConnect]);
 
   // Render using children function if provided
   if (children) {
@@ -286,7 +299,7 @@ export function IntegrationConnect({
       <>
         {children({
           status: connectionStatus,
-          connectedAccountId,
+          connectionId,
           isLoading: connectionLoading || authorizeLoading,
           onAuthorize: handleAuthorize,
           onRefresh: fetchConnections,

@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { INTEGRATION_CONFIGS } from "@/lib/composio/integrations";
+import { INTEGRATION_CONFIGS } from "@/lib/integrations/config";
 
 const SUPPORTED_INTEGRATIONS = [
   {

@@ -1,10 +1,11 @@
 /**
- * Integration configuration and types for Composio integrations
+ * Integration configuration and types
  */
 
 import type { IntegrationType } from "./client";
 import { Github, FolderOpen, CheckSquare2, Sparkles, Mail } from "lucide-react";
 import { LucideIcon } from "lucide-react";
+import { getRequiredScopes } from "./client";
 
 export interface IntegrationConfig {
   type: IntegrationType;
@@ -13,6 +14,7 @@ export interface IntegrationConfig {
   toolkitSlug: string;
   requiresResourceSelection: boolean;
   resourceLabel?: string; // e.g., "Repository", "Folder", "Workspace"
+  requiredScopes: string[]; // OAuth scopes required for this integration
 }
 
 export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
@@ -23,6 +25,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     toolkitSlug: "sandbox",
     requiresResourceSelection: false,
     resourceLabel: undefined,
+    requiredScopes: [], // No OAuth needed
   },
   github: {
     type: "github",
@@ -31,6 +34,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     toolkitSlug: "github",
     requiresResourceSelection: true,
     resourceLabel: "Repository",
+    requiredScopes: getRequiredScopes("github"),
   },
   googledrive: {
     type: "googledrive",
@@ -39,6 +43,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     toolkitSlug: "googledrive",
     requiresResourceSelection: false, // Optional
     resourceLabel: "Folder",
+    requiredScopes: getRequiredScopes("googledrive"),
   },
   asana: {
     type: "asana",
@@ -47,6 +52,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     toolkitSlug: "asana",
     requiresResourceSelection: true,
     resourceLabel: "Workspace",
+    requiredScopes: getRequiredScopes("asana"),
   },
   gmail: {
     type: "gmail",
@@ -55,6 +61,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     toolkitSlug: "gmail",
     requiresResourceSelection: false,
     resourceLabel: "Mailbox",
+    requiredScopes: getRequiredScopes("gmail"),
   },
 };
 
