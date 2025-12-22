@@ -16,8 +16,6 @@ export {
 export { useWorkflowBuilder, type Workflow, type WorkflowExecution } from './useWorkflowBuilder';
 export { useWorkflow } from './useWorkflow';
 
-// User/Auth
-export { useDefaultUser, DEFAULT_USER, type DefaultUserInfo } from './useDefaultUser';
 
 // UI hooks
 export { useToast } from './use-toast';
