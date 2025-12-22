@@ -35,9 +35,19 @@ const ensureAbsoluteUrl = (url: string): string => {
 };
 
 const getBackendBaseUrl = (): string => {
+  // Check for backend URL in query parameter (for self-hosted backend)
+  if (typeof window !== "undefined") {
+    const urlParams = new URLSearchParams(window.location.search);
+    const backendParam = urlParams.get("backend");
+    if (backendParam) {
+      return ensureAbsoluteUrl(backendParam);
+    }
+  }
+  
+  // Fall back to environment variable
   const envUrl = import.meta.env.VITE_BACKEND_API_URL;
   if (!envUrl) {
-    throw new Error("VITE_BACKEND_API_URL is not set");
+    throw new Error("VITE_BACKEND_API_URL is not set and no backend parameter provided in URL");
   }
   return ensureAbsoluteUrl(envUrl);
 };
