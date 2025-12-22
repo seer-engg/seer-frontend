@@ -31,7 +31,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Navigate to="/agents" replace />} />
+            <Route path="/" element={<Navigate to="/workflows" replace />} />
             <Route path="/agents" element={
               <ProtectedRoute>
                 <SeerLayout>

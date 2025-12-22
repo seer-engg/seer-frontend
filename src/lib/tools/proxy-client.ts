@@ -1,7 +1,7 @@
 /**
  * Tool execution and OAuth connection management client for custom tool system
  */
-import { backendApiClient } from "@/lib/api-client";
+import { backendApiClient, getBackendBaseUrl } from "@/lib/api-client";
 
 export interface ConnectedAccount {
   id: string;
@@ -69,6 +69,8 @@ export async function listConnectedAccounts(params: {
 /**
  * Initiate OAuth connection
  * CRITICAL: Frontend must always pass scope parameter
+ * 
+ * Returns full backend URL for OAuth redirect - browser navigates directly to backend
  */
 export async function initiateConnection(params: {
   userId: string;
@@ -86,8 +88,11 @@ export async function initiateConnection(params: {
     searchParams.append("redirect_to", params.callbackUrl);
   }
   
-  // Redirect to backend OAuth endpoint with scope
-  const redirectUrl = `/api/integrations/${provider}/connect?${searchParams.toString()}`;
+  // Build full backend URL for OAuth redirect
+  // The browser will navigate directly to the backend OAuth endpoint
+  const backendUrl = getBackendBaseUrl();
+  const redirectUrl = `${backendUrl}/api/integrations/${provider}/connect?${searchParams.toString()}`;
+  console.log("redirectUrl", redirectUrl);
   
   return {
     redirectUrl,

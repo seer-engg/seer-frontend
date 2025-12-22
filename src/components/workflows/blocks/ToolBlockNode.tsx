@@ -1,22 +1,219 @@
-import { memo } from 'react';
-import { Wrench } from 'lucide-react';
-import { BaseBlockNode } from './BaseBlockNode';
-import { NodeProps } from '@xyflow/react';
+/**
+ * Tool Block Node Component
+ * 
+ * Displays integration tool blocks with OAuth connection status.
+ * Shows connect button for tools requiring authorization.
+ */
+import { memo, useCallback, useMemo } from 'react';
+import { Handle, Position, NodeProps } from '@xyflow/react';
+import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../WorkflowCanvas';
+import { useToolIntegration } from '@/hooks/useIntegrationTools';
+import { 
+  Wrench, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Loader2,
+  ExternalLink,
+  Mail,
+  FolderOpen,
+  Github,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { IntegrationType } from '@/lib/integrations/client';
+
+/**
+ * Get icon for integration type
+ */
+function getIntegrationIcon(integrationType: IntegrationType | null) {
+  switch (integrationType) {
+    case 'gmail':
+      return <Mail className="w-4 h-4" />;
+    case 'googledrive':
+      return <FolderOpen className="w-4 h-4" />;
+    case 'github':
+      return <Github className="w-4 h-4" />;
+    default:
+      return <Wrench className="w-4 h-4" />;
+  }
+}
+
+/**
+ * Get display name for integration type
+ */
+function getIntegrationDisplayName(integrationType: IntegrationType | null): string {
+  switch (integrationType) {
+    case 'gmail':
+      return 'Gmail';
+    case 'googledrive':
+      return 'Google Drive';
+    case 'github':
+      return 'GitHub';
+    case 'asana':
+      return 'Asana';
+    case 'sandbox':
+      return 'Sandbox';
+    default:
+      return 'Tool';
+  }
+}
 
 export const ToolBlockNode = memo(function ToolBlockNode(
   props: NodeProps<WorkflowNodeData>
 ) {
+  const { data, selected } = props;
+  
+  // Get tool name from config (if available) or use a default
+  const toolName = data.config?.tool_name || data.config?.toolName || '';
+  
+  // Get integration status for this tool
+  const { status, isLoading, initiateAuth } = useToolIntegration(toolName);
+
+  // Handle connect button click
+  const handleConnect = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent node selection
+    const redirectUrl = await initiateAuth();
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+    }
+  }, [initiateAuth]);
+
+  // Determine integration status display
+  const { icon, statusBadge, needsAuth } = useMemo(() => {
+    if (!toolName || isLoading) {
+      return {
+        icon: <Wrench className="w-4 h-4 text-primary" />,
+        statusBadge: null,
+        needsAuth: false,
+      };
+    }
+
+    if (!status) {
+      return {
+        icon: <Wrench className="w-4 h-4 text-primary" />,
+        statusBadge: null,
+        needsAuth: false,
+      };
+    }
+
+    const intIcon = getIntegrationIcon(status.integrationType);
+    const displayName = getIntegrationDisplayName(status.integrationType);
+
+    // No OAuth required
+    if (!status.integrationType) {
+      return {
+        icon: intIcon,
+        statusBadge: null,
+        needsAuth: false,
+      };
+    }
+
+    // Connected
+    if (status.isConnected) {
+      return {
+        icon: intIcon,
+        statusBadge: (
+          <Badge 
+            variant="secondary" 
+            className="flex items-center gap-1 text-[10px] px-1.5 py-0 h-5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+          >
+            <CheckCircle2 className="w-3 h-3" />
+            {displayName}
+          </Badge>
+        ),
+        needsAuth: false,
+      };
+    }
+
+    // Needs authorization
+    return {
+      icon: intIcon,
+      statusBadge: (
+        <Badge 
+          variant="secondary" 
+          className="flex items-center gap-1 text-[10px] px-1.5 py-0 h-5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+        >
+          <AlertTriangle className="w-3 h-3" />
+          Not connected
+        </Badge>
+      ),
+      needsAuth: true,
+    };
+  }, [toolName, status, isLoading]);
+
   return (
-    <BaseBlockNode
-      {...props}
-      icon={<Wrench className="w-4 h-4 text-primary" />}
-      color="primary"
-      handles={{
-        inputs: ['input'],
-        outputs: ['output'],
-      }}
-    />
+    <div
+      className={cn(
+        'relative px-4 py-3 rounded-lg border-2 min-w-[180px] transition-all duration-200 cursor-pointer',
+        selected
+          ? 'border-primary shadow-lg ring-2 ring-primary ring-offset-2'
+          : 'border-border bg-card hover:border-primary/50',
+        needsAuth && !selected && 'border-amber-500/50',
+      )}
+    >
+      {/* Input handle */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="input"
+        style={{ left: -8, top: 24 }}
+        className="!w-3 !h-3 !bg-border !border-2 !border-background"
+      />
+
+      {/* Block content */}
+      <div className="flex flex-col gap-2">
+        {/* Header row */}
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'w-8 h-8 rounded flex items-center justify-center',
+              needsAuth ? 'bg-amber-500/10' : 'bg-primary/10',
+            )}
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            ) : (
+              <div className={cn(needsAuth ? 'text-amber-600 dark:text-amber-400' : 'text-primary')}>
+                {icon}
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">{data.label}</p>
+            <p className="text-xs text-muted-foreground">
+              {toolName || 'Integration Tool'}
+            </p>
+          </div>
+        </div>
+
+        {/* Status row */}
+        {(statusBadge || needsAuth) && (
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
+            {statusBadge}
+            {needsAuth && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                onClick={handleConnect}
+              >
+                Connect
+                <ExternalLink className="w-3 h-3 ml-1" />
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Output handle */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="output"
+        style={{ right: -8, top: 24 }}
+        className="!w-3 !h-3 !bg-border !border-2 !border-background"
+      />
+    </div>
   );
 });
-

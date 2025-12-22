@@ -44,14 +44,34 @@ export type BlockType =
   | 'input'
   | 'output';
 
+export interface ToolBlockConfig {
+  tool_name?: string;
+  toolName?: string;  // Legacy support
+  connection_id?: string;
+  arguments?: Record<string, any>;
+}
+
 export interface WorkflowNodeData {
   type: BlockType;
   label: string;
-  config?: Record<string, any>;
+  config?: Record<string, any> | ToolBlockConfig;
   python_code?: string;
   oauth_scope?: string;
   selected?: boolean;
   onSelect?: () => void;
+}
+
+/**
+ * Extract tool names from workflow nodes
+ */
+export function getToolNamesFromNodes(nodes: Node<WorkflowNodeData>[]): string[] {
+  return nodes
+    .filter(node => node.data.type === 'tool')
+    .map(node => {
+      const config = node.data.config as ToolBlockConfig | undefined;
+      return config?.tool_name || config?.toolName || '';
+    })
+    .filter(Boolean);
 }
 
 const nodeTypes = {
