@@ -29,22 +29,22 @@ type Step = 'choose' | 'github-auth' | 'github-select' | 'template-select';
 
 export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModalProps) {
   const [step, setStep] = useState<Step>('choose');
-  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (connectedAccountId && step === 'github-auth') {
+    if (connectionId && step === 'github-auth') {
       setStep('github-select');
     }
-  }, [connectedAccountId, step]);
+  }, [connectionId, step]);
 
   useEffect(() => {
-    if (!connectedAccountId) {
+    if (!connectionId) {
       setSelectedRepo(null);
     }
-  }, [connectedAccountId]);
+  }, [connectionId]);
 
   const handleRepoResolved = (repo: GithubRepoSelection) => {
     const idValue = String(repo.id ?? repo.full_name ?? repo.name);
@@ -62,14 +62,14 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
   };
 
   const handleImportRepository = async () => {
-    if (!selectedRepo || !connectedAccountId) {
+    if (!selectedRepo || !connectionId) {
       return;
     }
 
     setIsImporting(true);
     try {
       const agent = await agentsApi.importFromGithub({
-        connectedAccountId,
+        connectionId,
         repoId: String(selectedRepo.id),
         repoFullName: selectedRepo.fullName ?? selectedRepo.name,
         repoDescription: selectedRepo.description,
@@ -113,16 +113,16 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
   const renderGithubConnectionCard = () => (
     <IntegrationConnect
       type="github"
-      onConnected={(accountId) => setConnectedAccountId(accountId ?? null)}
+      onConnected={(accountId) => setConnectionId(accountId ?? null)}
     >
-      {({ status, connectedAccountId: activeAccountId, isLoading, onAuthorize, onRefresh, onCancel }) => {
-        const isConnected = status === 'connected' && Boolean(activeAccountId);
+      {({ status, connectionId: activeConnectionId, isLoading, onAuthorize, onRefresh, onCancel }) => {
+        const isConnected = status === 'connected' && Boolean(activeConnectionId);
         return (
           <div className="space-y-3 border border-border rounded-xl p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-foreground">GitHub Authorization</p>
-                <p className="text-xs text-muted-foreground">Connect via Composio to import repositories.</p>
+                <p className="text-xs text-muted-foreground">Connect GitHub to import repositories.</p>
               </div>
               <span
                 className={cn(
@@ -200,7 +200,7 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
 
             {isConnected && (
               <div className="text-xs text-muted-foreground">
-                Connected account: {activeAccountId}
+                Connected account: {activeConnectionId}
               </div>
             )}
           </div>
@@ -286,10 +286,10 @@ export function NewProjectModal({ isOpen, onClose, onComplete }: NewProjectModal
               {step === 'github-select' && (
                 <div className="space-y-4">
                   {renderGithubConnectionCard()}
-                  {connectedAccountId ? (
+                  {connectionId ? (
                     <>
                       <GithubRepoSelector
-                        connectedAccountId={connectedAccountId}
+                        connectionId={connectionId}
                         onRepoResolved={handleRepoResolved}
                       />
                       {selectedRepo && (

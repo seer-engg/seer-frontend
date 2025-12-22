@@ -7,7 +7,7 @@ interface ListAgentsResponse {
 }
 
 export interface ImportGithubAgentRequest {
-  connectedAccountId: string;
+  connectionId: string;
   repoId: string;
   repoFullName: string;
   repoDescription?: string | null;
@@ -64,7 +64,7 @@ export const agentsApi = {
 
   async importFromGithub(payload: ImportGithubAgentRequest): Promise<AgentSummary> {
     const body = {
-      connected_account_id: payload.connectedAccountId,
+      connection_id: payload.connectionId,
       repo_id: payload.repoId,
       repo_full_name: payload.repoFullName,
       repo_description: payload.repoDescription,

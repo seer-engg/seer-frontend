@@ -2,7 +2,7 @@
  * Optional resource selector for Google Drive folders
  */
 
-import { executeTool } from "@/lib/composio/proxy-client";
+import { executeTool } from "@/lib/tools/proxy-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { RefreshCcw, Loader2 } from "lucide-react";
@@ -16,12 +16,12 @@ type GoogleDriveFolder = {
 };
 
 interface GoogleDriveFolderSelectorProps {
-  connectedAccountId: string;
+  connectionId: string;
   onFolderSelected?: (folderId: string, folderName: string) => void;
 }
 
 export function GoogleDriveFolderSelector({
-  connectedAccountId,
+  connectionId,
   onFolderSelected,
 }: GoogleDriveFolderSelectorProps) {
   const { user } = useUser();
@@ -36,7 +36,7 @@ export function GoogleDriveFolderSelector({
   const [error, setError] = useState<string | null>(null);
 
   const fetchFolders = useCallback(async () => {
-    if (!connectedAccountId || !userEmail) return;
+    if (!connectionId || !userEmail) return;
 
     setLoading(true);
     setError(null);
@@ -45,7 +45,7 @@ export function GoogleDriveFolderSelector({
       const response = await executeTool({
         toolSlug: "GOOGLEDRIVE_LIST_FILES",
         userId: userEmail,
-        connectedAccountId,
+        connectionId,
         arguments: {
           q: "mimeType='application/vnd.google-apps.folder'",
           pageSize: 50,
@@ -87,13 +87,13 @@ export function GoogleDriveFolderSelector({
     } finally {
       setLoading(false);
     }
-  }, [connectedAccountId, userEmail, onFolderSelected, selectedFolderId]);
+  }, [connectionId, userEmail, onFolderSelected, selectedFolderId]);
 
   useEffect(() => {
-    if (connectedAccountId) {
+    if (connectionId) {
       fetchFolders();
     }
-  }, [connectedAccountId, fetchFolders]);
+  }, [connectionId, fetchFolders]);
 
   // Folder selection is optional, so we can return null if not needed
   if (loading && folders.length === 0) {
