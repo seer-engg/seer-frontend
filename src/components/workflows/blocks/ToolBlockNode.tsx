@@ -221,9 +221,6 @@ export const ToolBlockNode = memo(function ToolBlockNode(
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-medium text-sm truncate">{data.label}</p>
-            <p className="text-xs text-muted-foreground">
-              {toolName || 'Integration Tool'}
-            </p>
           </div>
         </div>
 

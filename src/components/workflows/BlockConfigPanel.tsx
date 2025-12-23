@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { OAuthScopeSelector, ProviderType } from './OAuthScopeSelector';
+import { ProviderType } from './OAuthScopeSelector';
 import { WorkflowNodeData, BlockType } from './WorkflowCanvas';
 import { Code, Save } from 'lucide-react';
 import { backendApiClient } from '@/lib/api-client';
@@ -471,12 +471,6 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                 />
               </div>
             )}
-            
-            <OAuthScopeSelector
-              provider={getProviderFromTool(config.tool_name)}
-              value={getScopeLevel(oauthScope)}
-              onChange={setOAuthScope}
-            />
           </div>
         );
 
@@ -736,69 +730,9 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
   return (
     <div className="p-4">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{node.data.label}</CardTitle>
-          <CardDescription className="capitalize">
-            {node.data.type.replace('_', ' ')} Block
-          </CardDescription>
-        </CardHeader>
         <CardContent className="space-y-4">
           {renderConfigFields()}
           
-          {/* Input References Section */}
-          {inputHandles.length > 0 && (
-            <div className="space-y-3 pt-4 border-t">
-              <div>
-                <Label className="text-sm font-semibold">Input References</Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Reference outputs from other blocks using: block_id.handle_id
-                </p>
-              </div>
-              
-              {inputHandles.map((handleId) => (
-                <div key={handleId}>
-                  <Label htmlFor={`input-ref-${handleId}`} className="text-xs">
-                    {handleId}
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id={`input-ref-${handleId}`}
-                      placeholder="e.g., block_a.email"
-                      value={inputRefs[handleId] || ''}
-                      onChange={(e) => setInputRefs({
-                        ...inputRefs,
-                        [handleId]: e.target.value
-                      })}
-                      className="font-mono text-xs"
-                    />
-                    {availableBlocks.length > 0 && (
-                      <Select
-                        value={inputRefs[handleId] || ''}
-                        onValueChange={(value) => setInputRefs({
-                          ...inputRefs,
-                          [handleId]: value
-                        })}
-                      >
-                        <SelectTrigger className="w-[140px]">
-                          <SelectValue placeholder="Select block" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableBlocks.map((block) => (
-                            <SelectItem 
-                              key={block.id} 
-                              value={`${block.id}.output`}
-                            >
-                              {block.data.label || block.id}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
           
           <Button onClick={handleSave} className="w-full" size="sm">
             <Save className="w-4 h-4 mr-2" />
