@@ -87,10 +87,11 @@ export async function initiateConnection(params: {
   if (params.callbackUrl) {
     searchParams.append("redirect_to", params.callbackUrl);
   }
-  
+  console.log("searchParams", searchParams.toString());
   // Build full backend URL for OAuth redirect
   // The browser will navigate directly to the backend OAuth endpoint
   const backendUrl = getBackendBaseUrl();
+  console.log("backendUrl", backendUrl);
   const redirectUrl = `${backendUrl}/api/integrations/${provider}/connect?${searchParams.toString()}`;
   console.log("redirectUrl", redirectUrl);
   
