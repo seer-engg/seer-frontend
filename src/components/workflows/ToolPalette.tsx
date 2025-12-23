@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Wrench, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, Clock, FileEdit, Trash2, Play, Check, X } from 'lucide-react';
+import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table';
+import { Search, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, Clock, FileEdit, Trash2, Play, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { backendApiClient } from '@/lib/api-client';
 
@@ -430,62 +431,58 @@ export function ToolPalette({
           ) : (
             <div>
               <h3 className="text-sm font-medium mb-2">Integration Tools</h3>
-              {providers.length > 0 && (
-                <div className="flex gap-2 mb-3 flex-wrap">
-                  <Badge
-                    variant={selectedProvider === null ? 'default' : 'outline'}
-                    className="cursor-pointer"
-                    onClick={() => setSelectedProvider(null)}
-                  >
-                    All
-                  </Badge>
-                  {providers.map((provider) => (
-                    <Badge
-                      key={provider}
-                      variant={selectedProvider === provider ? 'default' : 'outline'}
-                      className="cursor-pointer capitalize"
-                      onClick={() => setSelectedProvider(provider)}
-                    >
-                      {provider}
-                    </Badge>
-                  ))}
+              {Object.entries(toolsByProvider).length > 0 ? (
+                <div className="space-y-4">
+                  {Object.entries(toolsByProvider).map(([provider, providerTools]) => {
+                    const filteredProviderTools = providerTools.filter((tool) => {
+                      const matchesSearch =
+                        tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        tool.description?.toLowerCase().includes(searchQuery.toLowerCase());
+                      const matchesProvider = !selectedProvider || tool.provider === selectedProvider;
+                      return matchesSearch && matchesProvider;
+                    });
+
+                    if (filteredProviderTools.length === 0) return null;
+
+                    return (
+                      <div key={provider}>
+                        <h4 className="text-xs font-semibold mb-2 capitalize text-muted-foreground">
+                          {provider}
+                        </h4>
+                        <Table>
+                          <TableBody>
+                            {filteredProviderTools.map((tool) => (
+                              <TableRow
+                                key={tool.slug || tool.name}
+                                className="cursor-pointer"
+                                onClick={() => handleBlockClick(tool, true)}
+                              >
+                                <TableCell className="p-2">
+                                  <p className="text-sm font-medium">{tool.name}</p>
+                                  {tool.description && (
+                                    <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                                      {tool.description}
+                                    </p>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    );
+                  })}
+                  {filteredTools.length === 0 && (
+                    <div className="text-sm text-muted-foreground text-center py-4">
+                      No tools found
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No tools available
                 </div>
               )}
-              <div className="space-y-2">
-                {filteredTools.map((tool) => (
-                  <Card
-                    key={tool.slug || tool.name}
-                    className="cursor-pointer hover:bg-accent transition-colors"
-                    onClick={() => handleBlockClick(tool, true)}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-center gap-2">
-                        <Wrench className="w-4 h-4 text-primary" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {tool.name}
-                          </p>
-                          {tool.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {tool.description}
-                            </p>
-                          )}
-                          {tool.provider && (
-                            <Badge variant="outline" className="mt-1 text-xs capitalize">
-                              {tool.provider}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {filteredTools.length === 0 && !isLoading && (
-                  <div className="text-sm text-muted-foreground text-center py-4">
-                    No tools found
-                  </div>
-                )}
-              </div>
             </div>
           )}
         </div>

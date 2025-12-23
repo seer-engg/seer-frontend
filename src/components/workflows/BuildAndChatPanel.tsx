@@ -11,13 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { 
   Search, 
-  Wrench, 
   Code, 
   Sparkles, 
   GitBranch, 
@@ -501,8 +501,8 @@ export function BuildAndChatPanel({
             <div className="p-4 space-y-6">
               {/* Blocks */}
               <div>
-                <h3 className="text-sm font-medium mb-2">Blocks</h3>
-                <div className="space-y-2">
+                <h3 className="text-sm font-medium mb-2 text-left">Blocks</h3>
+                <div className="grid grid-cols-2 gap-2">
                   {filteredBlocks.map((block) => (
                     <Tooltip key={block.type}>
                       <TooltipTrigger asChild>
@@ -526,82 +526,77 @@ export function BuildAndChatPanel({
                 </div>
               </div>
 
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search blocks..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-
               {/* Integration Tools */}
               {isLoadingTools ? (
                 <div className="text-sm text-muted-foreground">Loading tools...</div>
               ) : (
                 <div>
-                  <h3 className="text-sm font-medium mb-2">Integration Tools</h3>
-                  {providers.length > 0 && (
-                    <div className="flex gap-2 mb-3 flex-wrap">
-                      <Badge
-                        variant={selectedProvider === null ? 'default' : 'outline'}
-                        className="cursor-pointer"
-                        onClick={() => setSelectedProvider(null)}
-                      >
-                        All
-                      </Badge>
-                      {providers.map((provider) => (
-                        <Badge
-                          key={provider}
-                          variant={selectedProvider === provider ? 'default' : 'outline'}
-                          className="cursor-pointer capitalize"
-                          onClick={() => setSelectedProvider(provider)}
-                        >
-                          {provider}
-                        </Badge>
-                      ))}
+                  <h3 className="text-sm font-medium mb-2 text-left">Tools</h3>
+                  {/* Search */}
+                  <div className="relative mb-4">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search tools..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                  {Object.entries(toolsByProvider).length > 0 ? (
+                    <div className="space-y-4">
+                      {Object.entries(toolsByProvider).map(([provider, providerTools]) => {
+                        const filteredProviderTools = providerTools.filter((tool) => {
+                          const matchesSearch =
+                            tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            tool.description?.toLowerCase().includes(searchQuery.toLowerCase());
+                          const matchesProvider = !selectedProvider || tool.provider === selectedProvider;
+                          return matchesSearch && matchesProvider;
+                        });
+
+                        if (filteredProviderTools.length === 0) return null;
+
+                        return (
+                          <div key={provider}>
+                            <h4 className="text-xs font-semibold mb-2 capitalize text-muted-foreground text-left">
+                              {provider}
+                            </h4>
+                            <Table>
+                              <TableBody>
+                                {filteredProviderTools.map((tool) => (
+                                  <Tooltip key={tool.slug || tool.name}>
+                                    <TooltipTrigger asChild>
+                                      <TableRow
+                                        className="cursor-pointer"
+                                        onClick={() => handleBlockClick(tool, true)}
+                                      >
+                                        <TableCell className="p-2 text-left">
+                                          <p className="text-sm font-medium">{tool.name}</p>
+                                        </TableCell>
+                                      </TableRow>
+                                    </TooltipTrigger>
+                                    {tool.description && (
+                                      <TooltipContent>
+                                        <p>{tool.description}</p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        );
+                      })}
+                      {filteredTools.length === 0 && (
+                        <div className="text-sm text-muted-foreground text-center py-4">
+                          No tools found
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground text-center py-4">
+                      No tools available
                     </div>
                   )}
-                  <div className="space-y-2">
-                    {filteredTools.map((tool) => (
-                      <Tooltip key={tool.slug || tool.name}>
-                        <TooltipTrigger asChild>
-                          <Card
-                            className="cursor-pointer hover:bg-accent transition-colors"
-                            onClick={() => handleBlockClick(tool, true)}
-                          >
-                            <CardContent className="p-2">
-                              <div className="flex items-center gap-2">
-                                <Wrench className="w-4 h-4 text-primary" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate">
-                                    {tool.name}
-                                  </p>
-                                  {tool.provider && (
-                                    <Badge variant="outline" className="mt-1 text-xs capitalize">
-                                      {tool.provider}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </TooltipTrigger>
-                        {tool.description && (
-                          <TooltipContent>
-                            <p>{tool.description}</p>
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
-                    ))}
-                    {filteredTools.length === 0 && !isLoadingTools && (
-                      <div className="text-sm text-muted-foreground text-center py-4">
-                        No tools found
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
