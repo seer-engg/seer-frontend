@@ -30,10 +30,7 @@ import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
   { name: "Workflows", href: "/workflows", icon: Workflow },
-  { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
-  { name: "Evals", href: "/eval", icon: Sparkles },
-  { name: "Traces", href: "/trace", icon: Activity },
-  { name: "Tool Hub", href: "/tools", icon: Package },
+  { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap }
 ] as const;
 
 const secondaryNav = [
