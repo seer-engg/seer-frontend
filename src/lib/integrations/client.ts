@@ -8,6 +8,36 @@ import { getGitHubToolScopes } from './github_tool_scopes';
 export type IntegrationType = "sandbox" | "github" | "googledrive" | "asana" | "gmail" | "googlesheets";
 
 /**
+ * OAuth provider type - used for OAuth connections
+ * Multiple integration types can map to the same provider (e.g., gmail, googledrive, googlesheets all use 'google')
+ */
+export type OAuthProvider = "google" | "github" | "asana";
+
+/**
+ * Map integration type to OAuth provider.
+ * This is used when initiating OAuth connections - the backend expects the provider, not the integration type.
+ * 
+ * @param integrationType - The integration type (e.g., 'gmail', 'googledrive', 'googlesheets')
+ * @returns The OAuth provider to use for the connection (e.g., 'google')
+ */
+export function getOAuthProvider(integrationType: IntegrationType): OAuthProvider | null {
+  switch (integrationType) {
+    case "gmail":
+    case "googledrive":
+    case "googlesheets":
+      return "google";
+    case "github":
+      return "github";
+    case "asana":
+      return "asana";
+    case "sandbox":
+      return null; // Sandbox doesn't need OAuth
+    default:
+      return null;
+  }
+}
+
+/**
  * Get required OAuth scopes for an integration type.
  * Frontend controls which scopes to request - this is our core differentiation.
  * 
