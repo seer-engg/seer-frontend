@@ -161,6 +161,7 @@ export class BackendAPIClient {
       ...restOptions,
       headers,
       body,
+      signal: restOptions.signal, // Pass through abort signal
     });
 
     const contentType = response.headers.get("content-type") || "";

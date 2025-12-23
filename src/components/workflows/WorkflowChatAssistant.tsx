@@ -4,17 +4,18 @@
  * Intelligent AI assistant for editing workflows via chat.
  */
 import { useState, useRef, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Send, Bot, User, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { backendApiClient } from '@/lib/api-client';
+import { Send, Bot, User, Check, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Plus, Clock, FileText } from 'lucide-react';
+import { backendApiClient, BackendAPIError } from '@/lib/api-client';
 import { Node, Edge } from '@xyflow/react';
 import { WorkflowNodeData } from './WorkflowCanvas';
+import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface WorkflowEdit {
   operation: string;
@@ -32,8 +33,21 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   suggestedEdits?: WorkflowEdit[];
+  thinking?: string[];
   timestamp: Date;
   model?: string; // Model used for this message
+  interruptRequired?: boolean;
+  interruptData?: Record<string, any>;
+}
+
+interface ChatSession {
+  id: number;
+  workflow_id: number;
+  user_id?: string;
+  thread_id: string;
+  title?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface ModelInfo {
@@ -79,8 +93,13 @@ export function WorkflowChatAssistant({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+  const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set());
+  const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   // Fetch available models
   const { data: models = [], isLoading: isLoadingModels } = useQuery<ModelInfo[]>({
@@ -102,6 +121,56 @@ export function WorkflowChatAssistant({
     }
   }, [models, selectedModel]);
 
+  // Fetch chat sessions
+  const { data: sessions = [] } = useQuery<ChatSession[]>({
+    queryKey: ['chat-sessions', workflowId],
+    queryFn: async () => {
+      if (!workflowId) return [];
+      const response = await backendApiClient.request<ChatSession[]>(
+        `/api/workflows/${workflowId}/chat/sessions`,
+        { method: 'GET' }
+      );
+      return response;
+    },
+    enabled: !!workflowId,
+  });
+
+  // Load session messages when session changes
+  const { data: sessionMessages } = useQuery<ChatMessage[]>({
+    queryKey: ['chat-session-messages', currentSessionId],
+    queryFn: async () => {
+      if (!workflowId || !currentSessionId) return [];
+      const response = await backendApiClient.request<{
+        id: number;
+        messages: Array<{
+          id: number;
+          role: string;
+          content: string;
+          thinking?: string;
+          suggested_edits?: WorkflowEdit[];
+          created_at: string;
+        }>;
+      }>(`/api/workflows/${workflowId}/chat/sessions/${currentSessionId}`, {
+        method: 'GET',
+      });
+      return response.messages.map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        thinking: msg.thinking ? msg.thinking.split('\n') : undefined,
+        suggestedEdits: msg.suggested_edits,
+        timestamp: new Date(msg.created_at),
+      }));
+    },
+    enabled: !!currentSessionId && !!workflowId,
+  });
+
+  // Update messages when session messages load
+  useEffect(() => {
+    if (sessionMessages) {
+      setMessages(sessionMessages);
+    }
+  }, [sessionMessages]);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -118,18 +187,31 @@ export function WorkflowChatAssistant({
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const messageContent = input.trim();
     setInput('');
     setIsLoading(true);
+
+    // Add timeout to prevent indefinite hangs
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
 
     try {
       const response = await backendApiClient.request<{
         response: string;
         suggested_edits: WorkflowEdit[];
+        session_id?: number;
+        thread_id?: string;
+        thinking?: string[];
+        interrupt_required?: boolean;
+        interrupt_data?: Record<string, any>;
       }>(`/api/workflows/${workflowId}/chat`, {
         method: 'POST',
         body: JSON.stringify({
-          message: userMessage.content,
+          message: messageContent,
           model: selectedModel,
+          session_id: currentSessionId || undefined,
+          thread_id: currentThreadId || undefined,
+          resume_thread: true,
           workflow_state: {
             nodes: nodes.map((n) => ({
               id: n.id,
@@ -146,22 +228,54 @@ export function WorkflowChatAssistant({
             })),
           },
         }),
+        signal: controller.signal, // Add abort signal
       });
+      
+      clearTimeout(timeoutId);
+
+      // Update session/thread IDs if returned
+      if (response.session_id && response.session_id !== currentSessionId) {
+        setCurrentSessionId(response.session_id);
+      }
+      if (response.thread_id && response.thread_id !== currentThreadId) {
+        setCurrentThreadId(response.thread_id);
+      }
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: response.response,
         suggestedEdits: response.suggested_edits || [],
+        thinking: response.thinking,
+        interruptRequired: response.interrupt_required,
+        interruptData: response.interrupt_data,
         timestamp: new Date(),
         model: selectedModel,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      
+      // Refresh sessions list
+      queryClient.invalidateQueries({ queryKey: ['chat-sessions', workflowId] });
     } catch (error) {
+      clearTimeout(timeoutId);
+      
       console.error('Failed to send chat message:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        status: error instanceof BackendAPIError ? error.status : undefined,
+        response: error instanceof BackendAPIError ? error.response : undefined,
+        name: error instanceof Error ? error.name : undefined,
+      });
+      
+      const isTimeout = 
+        (error instanceof Error && error.name === 'AbortError') ||
+        (error instanceof BackendAPIError && error.status === 504);
+      
       const errorMessage: ChatMessage = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: isTimeout
+          ? 'Request timed out. Please try again with a shorter message.'
+          : 'Sorry, I encountered an error. Please try again.',
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -170,17 +284,70 @@ export function WorkflowChatAssistant({
     }
   };
 
+  const handleNewSession = async () => {
+    if (!workflowId) return;
+    try {
+      const response = await backendApiClient.request<ChatSession>(
+        `/api/workflows/${workflowId}/chat/sessions`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ title: null }),
+        }
+      );
+      setCurrentSessionId(response.id);
+      setCurrentThreadId(response.thread_id);
+      setMessages([]);
+      queryClient.invalidateQueries({ queryKey: ['chat-sessions', workflowId] });
+    } catch (error) {
+      console.error('Failed to create session:', error);
+    }
+  };
+
+  const handleSelectSession = (sessionId: number) => {
+    setCurrentSessionId(sessionId);
+    const session = sessions.find((s) => s.id === sessionId);
+    if (session) {
+      setCurrentThreadId(session.thread_id);
+    }
+    setSessionPopoverOpen(false);
+  };
+
+  const toggleThinking = (messageIndex: number) => {
+    setExpandedThinking((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageIndex)) {
+        newSet.delete(messageIndex);
+      } else {
+        newSet.add(messageIndex);
+      }
+      return newSet;
+    });
+  };
+
   const handleApplyEdits = (edits: WorkflowEdit[]) => {
     if (onApplyEdits) {
       onApplyEdits(edits);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // Filter out system prompt content from messages
+  const filterSystemPrompt = (content: string): string => {
+    // Remove long system descriptions
+    const systemPromptPattern = /I help you build, inspect, edit.*?Concretely I can:/s;
+    let filtered = content.replace(systemPromptPattern, '').trim();
+    
+    // Remove any remaining system prompt patterns
+    filtered = filtered.replace(/What I can do \(high level\).*?$/s, '').trim();
+    filtered = filtered.replace(/Your capabilities:.*?$/s, '').trim();
+    
+    return filtered;
   };
 
   if (!workflowId) {
@@ -194,35 +361,211 @@ export function WorkflowChatAssistant({
   return (
     <div className="flex flex-col h-full bg-background w-full">
       {/* Header */}
-      <div className="border-b p-4 flex-shrink-0 space-y-3">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setCollapsed(true)}
-            className="h-6 w-6"
-            title="Collapse chat"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <div>
+      <div className="border-b p-3 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setCollapsed(true)}
+              className="h-6 w-6"
+              title="Collapse chat"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
             <h3 className="text-sm font-semibold">Workflow Assistant</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Ask questions or request workflow edits
-            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6" 
+              title="New session"
+              onClick={handleNewSession}
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+            <Popover open={sessionPopoverOpen} onOpenChange={setSessionPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" title="Select session">
+                  <Clock className="w-3 h-3" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2" align="end">
+                <div className="space-y-2">
+                  <div className="text-xs font-medium px-2 py-1.5 text-muted-foreground">
+                    Select Session
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto">
+                    {sessions.length === 0 ? (
+                      <div className="text-xs text-muted-foreground px-2 py-1.5">
+                        No sessions available
+                      </div>
+                    ) : (
+                      sessions.map((session) => (
+                        <button
+                          key={session.id}
+                          onClick={() => {
+                            handleSelectSession(session.id);
+                          }}
+                          className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-accent ${
+                            currentSessionId === session.id ? 'bg-accent' : ''
+                          }`}
+                        >
+                          {session.title || `Session ${session.id}`}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
-        {/* Model Selector */}
-        <div className="space-y-1.5">
-          <Label htmlFor="model-selector" className="text-xs text-muted-foreground">
-            Model
-          </Label>
+      </div>
+
+      {/* Messages */}
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+        <div className="space-y-4">
+          {messages.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-8">
+              <Bot className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>Start a conversation about your workflow</p>
+            </div>
+          ) : (
+            messages.map((message, index) => {
+              const filteredContent = filterSystemPrompt(message.content);
+              if (!filteredContent && message.role === 'assistant') return null;
+              
+              return (
+                <div
+                  key={index}
+                  className="flex gap-3 justify-start"
+                >
+                  <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-muted-foreground mt-1">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 max-w-[85%]">
+                    <div
+                      className={`rounded-lg p-3 ${
+                        message.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted'
+                      }`}
+                    >
+                      <p className="text-sm whitespace-pre-wrap text-left">{filteredContent || message.content}</p>
+                      {message.thinking && message.thinking.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-border/50">
+                          <button
+                            onClick={() => toggleThinking(index)}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {expandedThinking.has(index) ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )}
+                            <span>Thinking ({message.thinking.length} steps)</span>
+                          </button>
+                          {expandedThinking.has(index) && (
+                            <div className="mt-2 space-y-1 text-xs text-muted-foreground bg-background/50 p-2 rounded text-left">
+                              {message.thinking.map((step, idx) => (
+                                <div key={idx} className="font-mono">
+                                  {step}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {message.interruptRequired && (
+                        <div className="mt-3 pt-3 border-t border-yellow-500/50 bg-yellow-500/10 p-3 rounded">
+                          <p className="text-xs font-medium mb-2 text-yellow-700 dark:text-yellow-400">
+                            Human input required
+                          </p>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            {message.interruptData?.message || 'Please approve, edit, or reject this action.'}
+                          </p>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="default" className="text-xs">
+                              <Check className="w-3 h-3 mr-1" />
+                              Approve
+                            </Button>
+                            <Button size="sm" variant="outline" className="text-xs">
+                              Edit
+                            </Button>
+                            <Button size="sm" variant="outline" className="text-xs">
+                              <X className="w-3 h-3 mr-1" />
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {message.suggestedEdits && message.suggestedEdits.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <p className="text-xs font-medium mb-2">Suggested edits:</p>
+                          <div className="space-y-2">
+                            {message.suggestedEdits.map((edit, editIndex) => (
+                              <div
+                                key={editIndex}
+                                className="text-xs bg-background/50 p-2 rounded"
+                              >
+                                <span className="font-medium">{edit.operation}</span>
+                                {edit.block_type && (
+                                  <span className="text-muted-foreground">
+                                    {' '}
+                                    ({edit.block_type})
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            <Button
+                              size="sm"
+                              className="w-full mt-2"
+                              onClick={() => handleApplyEdits(message.suggestedEdits!)}
+                            >
+                              <Check className="w-3 h-3 mr-2" />
+                              Apply Edits
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {isLoading && (
+            <div className="flex gap-3 justify-start">
+              <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-muted-foreground mt-1">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div className="flex-1 max-w-[85%]">
+                <div className="bg-muted rounded-lg p-3">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce delay-75" />
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce delay-150" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
+
+      {/* Input Area */}
+      <div className="border-t p-4 flex-shrink-0">
+        <div className="space-y-2">
+          {/* Model Selector */}
           <Select
             value={selectedModel}
             onValueChange={setSelectedModel}
             disabled={isLoadingModels || isLoading}
           >
-            <SelectTrigger id="model-selector" className="h-8 text-xs">
+            <SelectTrigger className="h-7 text-xs w-full">
               <SelectValue placeholder={isLoadingModels ? "Loading models..." : "Select model"} />
             </SelectTrigger>
             <SelectContent>
@@ -240,113 +583,26 @@ export function WorkflowChatAssistant({
                 ))}
             </SelectContent>
           </Select>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
-        <div className="space-y-4">
-          {messages.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              <Bot className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>Start a conversation about your workflow</p>
-            </div>
-          ) : (
-            messages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex gap-3 ${
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                }`}
-              >
-                {message.role === 'assistant' && (
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Bot className="w-4 h-4 text-primary" />
-                  </div>
-                )}
-                <div
-                  className={`max-w-[80%] rounded-lg p-3 ${
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
-                  }`}
-                >
-                  {message.model && (
-                    <p className="text-xs opacity-70 mb-1">
-                      {models.find(m => m.id === message.model)?.name || message.model}
-                    </p>
-                  )}
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  {message.suggestedEdits && message.suggestedEdits.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-border/50">
-                      <p className="text-xs font-medium mb-2">Suggested edits:</p>
-                      <div className="space-y-2">
-                        {message.suggestedEdits.map((edit, editIndex) => (
-                          <div
-                            key={editIndex}
-                            className="text-xs bg-background/50 p-2 rounded"
-                          >
-                            <span className="font-medium">{edit.operation}</span>
-                            {edit.block_type && (
-                              <span className="text-muted-foreground">
-                                {' '}
-                                ({edit.block_type})
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                        <Button
-                          size="sm"
-                          className="w-full mt-2"
-                          onClick={() => handleApplyEdits(message.suggestedEdits!)}
-                        >
-                          <Check className="w-3 h-3 mr-2" />
-                          Apply Edits
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {message.role === 'user' && (
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                    <User className="w-4 h-4 text-primary-foreground" />
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-          {isLoading && (
-            <div className="flex gap-3 justify-start">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                <Bot className="w-4 h-4 text-primary" />
-              </div>
-              <div className="bg-muted rounded-lg p-3">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce delay-75" />
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce delay-150" />
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
-
-      {/* Input */}
-      <div className="border-t p-4 flex-shrink-0">
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask about your workflow..."
-            disabled={isLoading}
-            className="flex-1"
-          />
-          <Button onClick={handleSend} disabled={isLoading || !input.trim()}>
-            <Send className="w-4 h-4" />
-          </Button>
+          {/* Textarea Input */}
+          <div className="relative flex items-end gap-2">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder="Ask about your workflow..."
+              disabled={isLoading}
+              className="min-h-[52px] max-h-[200px] resize-none pr-12 flex-1"
+              rows={1}
+            />
+            <Button
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              size="icon"
+              className="absolute right-2 bottom-2 h-8 w-8"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
