@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/button';
 import { Play, Save, Trash2, FileEdit, Clock, ChevronRight, Bot, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardContent } from '@/components/ui/card';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -83,26 +82,6 @@ export default function Workflows() {
     []
   );
 
-  const handleNodeUpdate = useCallback(
-    (nodeId: string, updates: Partial<WorkflowNodeData>) => {
-      setNodes((nds) =>
-        nds.map((node) =>
-          node.id === nodeId
-            ? { ...node, data: { ...node.data, ...updates } }
-            : node
-        )
-      );
-    },
-    []
-  );
-
-  const handleWorkflowGenerated = useCallback(
-    (generatedNodes: Node<WorkflowNodeData>[], generatedEdges: Edge[]) => {
-      setNodes(generatedNodes);
-      setEdges(generatedEdges);
-    },
-    []
-  );
 
   const handleSave = useCallback(async () => {
     const graphData = { nodes, edges };
