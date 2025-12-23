@@ -19,7 +19,15 @@ import { SignIn, SignUp } from "@clerk/clerk-react";
 
 
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      staleTime: 0,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

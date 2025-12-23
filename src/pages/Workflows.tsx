@@ -8,12 +8,13 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Node, Edge } from '@xyflow/react';
 import { WorkflowCanvas, WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
-import { ToolPalette } from '@/components/workflows/ToolPalette';
-import { WorkflowChatAssistant } from '@/components/workflows/WorkflowChatAssistant';
+import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
+import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
+import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { Button } from '@/components/ui/button';
-import { Play, Save, Trash2, FileEdit, Clock, ChevronRight, Bot, X } from 'lucide-react';
+import { Clock, X, Rocket, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
@@ -33,6 +34,8 @@ export default function Workflows() {
   const [showInputDialog, setShowInputDialog] = useState(false);
   const [inputData, setInputData] = useState<Record<string, any>>({});
   const [configNode, setConfigNode] = useState<Node<WorkflowNodeData> | null>(null);
+  const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   
   const {
     workflows,
@@ -88,20 +91,73 @@ export default function Workflows() {
     
     try {
       if (selectedWorkflowId) {
+        // Update existing workflow
         await updateWorkflow(selectedWorkflowId, {
           name: workflowName,
           graph_data: graphData,
         });
+        toast.success('Workflow saved successfully!');
       } else {
-        const workflow = await createWorkflow(workflowName, undefined, graphData);
+        // Fallback: create workflow if somehow we don't have a selectedWorkflowId
+        // This shouldn't normally happen since workflows are created on "+ New"
+        const workflow = await createWorkflow(workflowName || 'Untitled', undefined, graphData);
         setSelectedWorkflowId(workflow.id);
+        toast.success('Workflow created and saved!');
       }
-      alert('Workflow saved successfully!');
     } catch (error) {
       console.error('Failed to save workflow:', error);
-      alert('Failed to save workflow');
+      toast.error('Failed to save workflow');
     }
   }, [nodes, edges, workflowName, selectedWorkflowId, createWorkflow, updateWorkflow]);
+
+  // Autosave callback - only saves if workflow already exists
+  const autosaveCallback = useCallback(async (data: { nodes: Node<WorkflowNodeData>[]; edges: Edge[]; workflowName: string }) => {
+    if (!selectedWorkflowId) {
+      return; // Don't autosave unsaved workflows
+    }
+
+    setAutosaveStatus('saving');
+    try {
+      await updateWorkflow(selectedWorkflowId, {
+        name: data.workflowName,
+        graph_data: { nodes: data.nodes, edges: data.edges },
+      });
+      setAutosaveStatus('saved');
+      // Reset status after 2 seconds
+      setTimeout(() => setAutosaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error('Autosave failed:', error);
+      setAutosaveStatus('error');
+      throw error;
+    }
+  }, [selectedWorkflowId, updateWorkflow]);
+
+  // Setup autosave hook
+  const { triggerSave, resetSavedData } = useDebouncedAutosave({
+    data: { nodes, edges, workflowName },
+    onSave: autosaveCallback,
+    options: {
+      delay: 1000,
+      enabled: !!selectedWorkflowId && !isLoadingWorkflow,
+    },
+  });
+
+  // Trigger autosave when nodes, edges, or workflowName change
+  useEffect(() => {
+    if (selectedWorkflowId && !isLoadingWorkflow) {
+      triggerSave();
+    }
+  }, [nodes, edges, workflowName, selectedWorkflowId, triggerSave, isLoadingWorkflow]);
+
+  // Handle autosave errors
+  useEffect(() => {
+    if (autosaveStatus === 'error') {
+      toast.error('Autosave failed', {
+        description: 'Your changes may not have been saved. Please save manually.',
+        duration: 5000,
+      });
+    }
+  }, [autosaveStatus]);
 
   const handleConfigureBlock = useCallback((node: Node<WorkflowNodeData>) => {
     // Open the floating configuration panel attached to this node
@@ -191,13 +247,17 @@ export default function Workflows() {
   }, [selectedWorkflowId, executeWorkflow, inputData, inputFields]);
 
   const handleLoadWorkflow = useCallback((workflow: typeof workflows[0]) => {
+    setIsLoadingWorkflow(true);
     setSelectedWorkflowId(workflow.id);
     setWorkflowName(workflow.name);
     if (workflow.graph_data) {
       setNodes(workflow.graph_data.nodes || []);
       setEdges(workflow.graph_data.edges || []);
     }
-  }, []);
+    resetSavedData(); // Reset autosave tracking when loading a workflow
+    // Reset loading flag after a brief delay to prevent immediate autosave
+    setTimeout(() => setIsLoadingWorkflow(false), 100);
+  }, [resetSavedData]);
 
   const handleDeleteWorkflow = useCallback(async (workflowId: number) => {
     if (!confirm('Are you sure you want to delete this workflow?')) {
@@ -214,17 +274,52 @@ export default function Workflows() {
       }
     } catch (error) {
       console.error('Failed to delete workflow:', error);
-      alert('Failed to delete workflow');
+      toast.error('Failed to delete workflow');
     }
   }, [deleteWorkflow, selectedWorkflowId]);
 
-  const handleNewWorkflow = useCallback(() => {
-    setSelectedWorkflowId(null);
-    setWorkflowName('My Workflow');
-    setNodes([]);
-    setEdges([]);
-    setSelectedNodeId(null);
-  }, []);
+  const handleRenameWorkflow = useCallback(async (workflowId: number, newName: string) => {
+    if (!newName.trim()) {
+      toast.error('Workflow name cannot be empty');
+      return;
+    }
+    try {
+      await updateWorkflow(workflowId, { name: newName.trim() });
+      // Update local workflow name if it's the currently selected workflow
+      if (selectedWorkflowId === workflowId) {
+        setWorkflowName(newName.trim());
+      }
+      toast.success('Workflow renamed successfully');
+    } catch (error) {
+      console.error('Failed to rename workflow:', error);
+      toast.error('Failed to rename workflow');
+      throw error; // Re-throw to allow ToolPalette to handle it
+    }
+  }, [updateWorkflow, selectedWorkflowId]);
+
+  const handleNewWorkflow = useCallback(async () => {
+    try {
+      // Create a new workflow immediately with "Untitled" name
+      const workflow = await createWorkflow('Untitled', undefined, { nodes: [], edges: [] });
+      setSelectedWorkflowId(workflow.id);
+      setWorkflowName('Untitled');
+      setNodes([]);
+      setEdges([]);
+      setSelectedNodeId(null);
+      resetSavedData(); // Reset autosave tracking for new workflow
+      // Workflow will appear in list automatically via React Query cache invalidation
+    } catch (error) {
+      console.error('Failed to create new workflow:', error);
+      toast.error('Failed to create new workflow');
+      // Fallback to clearing canvas without creating workflow
+      setSelectedWorkflowId(null);
+      setWorkflowName('My Workflow');
+      setNodes([]);
+      setEdges([]);
+      setSelectedNodeId(null);
+      resetSavedData();
+    }
+  }, [createWorkflow, resetSavedData]);
 
   const handleApplyChatEdits = useCallback((edits: Array<{
     operation: string;
@@ -305,25 +400,29 @@ export default function Workflows() {
     setEdges(newEdges);
   }, [nodes, edges]);
 
+  const [buildChatCollapsed, setBuildChatCollapsed] = useState(() => {
+    const saved = localStorage.getItem('buildChatPanelCollapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  const handleBuildChatCollapseChange = useCallback((collapsed: boolean) => {
+    setBuildChatCollapsed(collapsed);
+    localStorage.setItem('buildChatPanelCollapsed', JSON.stringify(collapsed));
+  }, []);
+
+  // Control SeerSidebar collapse state (synced with SeerLayout via localStorage)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    const saved = localStorage.getItem('workflowSidebarCollapsed');
-    return saved ? JSON.parse(saved) : false;
+    const saved = localStorage.getItem('seerSidebarCollapsed');
+    return saved ? JSON.parse(saved) : true; // Default to collapsed on workflows page
   });
 
-  const handleSidebarCollapseChange = useCallback((collapsed: boolean) => {
-    setSidebarCollapsed(collapsed);
-    localStorage.setItem('workflowSidebarCollapsed', JSON.stringify(collapsed));
-  }, []);
-
-  const [chatCollapsed, setChatCollapsed] = useState(() => {
-    const saved = localStorage.getItem('workflowChatCollapsed');
-    return saved ? JSON.parse(saved) : false;
-  });
-
-  const handleChatCollapseChange = useCallback((collapsed: boolean) => {
-    setChatCollapsed(collapsed);
-    localStorage.setItem('workflowChatCollapsed', JSON.stringify(collapsed));
-  }, []);
+  const handleSidebarToggle = useCallback(() => {
+    const newValue = !sidebarCollapsed;
+    setSidebarCollapsed(newValue);
+    localStorage.setItem('seerSidebarCollapsed', JSON.stringify(newValue));
+    // Dispatch custom event to notify SeerLayout
+    window.dispatchEvent(new CustomEvent('seerSidebarToggle', { detail: newValue }));
+  }, [sidebarCollapsed]);
 
   // Check backend health
   const { isHealthy } = useBackendHealth(10000); // Check every 10 seconds
@@ -344,171 +443,135 @@ export default function Workflows() {
   }, [isHealthy]);
 
   return (
-    <div className="flex h-screen bg-background">
-      <ResizablePanelGroup direction="horizontal" className="flex-1">
-        {/* Left Sidebar - Tool Palette & Saved Workflows */}
-        {sidebarCollapsed ? (
-          <ResizablePanel defaultSize={0} minSize={0} maxSize={5} className="border-r">
-            <div className="w-12 h-full flex flex-col items-center py-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleSidebarCollapseChange(false)}
-                title="Expand sidebar"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </ResizablePanel>
-        ) : (
-          <ResizablePanel 
-            defaultSize={20} 
-            minSize={15} 
-            maxSize={40}
-            className="border-r"
+    <div className="flex flex-col h-screen bg-background">
+      {/* Unified Top Bar */}
+      <header className="h-14 border-b border-border flex items-center px-4 gap-4 bg-card shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleSidebarToggle}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <Menu className="w-4 h-4" />
+        </Button>
+        <div className="flex-1 flex items-center justify-end gap-2">
+          <Button
+            onClick={handleExecute}
+            disabled={!selectedWorkflowId || isExecuting}
+            size="sm"
+            variant="default"
           >
-            <div className="h-full w-full flex flex-col overflow-hidden">
-              <ToolPalette 
-                onBlockSelect={handleBlockSelect}
-                collapsed={sidebarCollapsed}
-                onCollapseChange={handleSidebarCollapseChange}
-                workflows={workflows}
-                isLoadingWorkflows={isLoadingWorkflows}
-                selectedWorkflowId={selectedWorkflowId}
-                onLoadWorkflow={handleLoadWorkflow}
-                onDeleteWorkflow={handleDeleteWorkflow}
-                onExecuteWorkflow={executeWorkflow}
-                onNewWorkflow={handleNewWorkflow}
-                isExecuting={isExecuting}
-              />
-            </div>
-          </ResizablePanel>
-        )}
-        
-        <ResizableHandle withHandle />
-
-        {/* Main Canvas Area */}
-        <ResizablePanel defaultSize={60} minSize={40} className="flex flex-col">
-        {/* Header */}
-        <header className="h-14 border-b border-border flex items-center px-4 gap-4 bg-card">
-          <div className="flex items-center gap-2 flex-1">
-            <Input
-              value={workflowName}
-              onChange={(e) => setWorkflowName(e.target.value)}
-              className="max-w-xs"
-              placeholder="Workflow name"
-            />
-            <Button onClick={handleSave} disabled={isCreating} size="sm">
-              <Save className="w-4 h-4 mr-2" />
-              Save
-            </Button>
+            <Rocket className="w-4 h-4 mr-2" />
+            Run
+          </Button>
+          {selectedWorkflowId && (
             <Button
-              onClick={handleExecute}
-              disabled={!selectedWorkflowId || isExecuting}
+              onClick={() => navigate(`/workflows/${selectedWorkflowId}/execution`)}
               size="sm"
-              variant="default"
+              variant="outline"
+              title="View execution history and details"
             >
-              <Play className="w-4 h-4 mr-2" />
-              Run
+              <Clock className="w-4 h-4 mr-2" />
+              Executions
             </Button>
-            {selectedWorkflowId && (
-              <Button
-                onClick={() => navigate(`/workflows/${selectedWorkflowId}/execution`)}
-                size="sm"
-                variant="outline"
-                title="View execution history and details"
-              >
-                <Clock className="w-4 h-4 mr-2" />
-                Executions
-              </Button>
-            )}
-          </div>
-        </header>
-
-        {/* Canvas */}
-        <div className="flex-1 relative overflow-hidden">
-          <WorkflowCanvas
-            initialNodes={nodes}
-            initialEdges={edges}
-            onNodesChange={setNodes}
-            onEdgesChange={setEdges}
-            onNodeSelect={setSelectedNodeId}
-            selectedNodeId={selectedNodeId}
-            onNodeDoubleClick={(event, node) => {
-              handleConfigureBlock(node);
-            }}
-          />
-          
-          {/* Floating Configuration Panel */}
-          {configNode && (
-            <div 
-              className="absolute top-4 right-4 w-[400px] max-h-[calc(100%-32px)] bg-card border border-border rounded-lg shadow-xl z-50 flex flex-col"
-            >
-              {/* Panel Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 rounded-t-lg">
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-sm truncate">{configNode.data.label}</h3>
-                  <p className="text-xs text-muted-foreground capitalize">
-                    {configNode.data.type.replace('_', ' ')} Block
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={handleCloseConfig}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              {/* Panel Content */}
-              <ScrollArea className="flex-1 overflow-auto">
-                <BlockConfigPanel
-                  node={configNode}
-                  onUpdate={handleConfigUpdate}
-                  allNodes={nodes}
-                  autoSave={false}
-                />
-              </ScrollArea>
-            </div>
           )}
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => handleBuildChatCollapseChange(!buildChatCollapsed)}
+          title={buildChatCollapsed ? "Show Build & Chat panel" : "Hide Build & Chat panel"}
+        >
+          <Menu className="w-4 h-4" />
+        </Button>
+      </header>
+
+      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+        {/* Main Canvas Area */}
+        <ResizablePanel defaultSize={75} minSize={50} className="flex flex-col">
+          {/* Canvas */}
+          <div className="flex-1 relative overflow-hidden">
+            <WorkflowCanvas
+              initialNodes={nodes}
+              initialEdges={edges}
+              onNodesChange={setNodes}
+              onEdgesChange={setEdges}
+              onNodeSelect={setSelectedNodeId}
+              selectedNodeId={selectedNodeId}
+              onNodeDoubleClick={(event, node) => {
+                handleConfigureBlock(node);
+              }}
+            />
+            
+            {/* Floating Workflows Panel */}
+            <FloatingWorkflowsPanel
+              workflows={workflows}
+              isLoadingWorkflows={isLoadingWorkflows}
+              selectedWorkflowId={selectedWorkflowId}
+              onLoadWorkflow={handleLoadWorkflow}
+              onDeleteWorkflow={handleDeleteWorkflow}
+              onRenameWorkflow={handleRenameWorkflow}
+              onNewWorkflow={handleNewWorkflow}
+            />
+            
+            {/* Floating Configuration Panel */}
+            {configNode && (
+              <div 
+                className="absolute top-4 right-4 w-[400px] max-h-[calc(100%-32px)] bg-card border border-border rounded-lg shadow-xl z-50 flex flex-col"
+              >
+                {/* Panel Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 rounded-t-lg">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-sm truncate">{configNode.data.label}</h3>
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {configNode.data.type.replace('_', ' ')} Block
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={handleCloseConfig}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                {/* Panel Content */}
+                <ScrollArea className="flex-1 overflow-auto">
+                  <BlockConfigPanel
+                    node={configNode}
+                    onUpdate={handleConfigUpdate}
+                    allNodes={nodes}
+                    autoSave={false}
+                  />
+                </ScrollArea>
+              </div>
+            )}
+          </div>
         </ResizablePanel>
         
-        <ResizableHandle withHandle />
-
-        {/* Chat Assistant */}
-        {chatCollapsed ? (
-          <ResizablePanel defaultSize={0} minSize={0} maxSize={5} className="border-l">
-            <div className="w-12 h-full flex flex-col items-start py-2 px-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleChatCollapseChange(false)}
-                title="Expand chat"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-              <Bot className="w-6 h-6 text-muted-foreground mt-2" />
-            </div>
-          </ResizablePanel>
-        ) : (
-          <ResizablePanel 
-            defaultSize={20} 
-            minSize={15} 
-            maxSize={40} 
-            className="border-l"
-          >
-            <WorkflowChatAssistant
-              workflowId={selectedWorkflowId}
-              nodes={nodes}
-              edges={edges}
-              onApplyEdits={handleApplyChatEdits}
-              collapsed={chatCollapsed}
-              onCollapseChange={handleChatCollapseChange}
-            />
-          </ResizablePanel>
+        {/* Build & Chat Panel - Conditionally render to avoid residue width */}
+        {!buildChatCollapsed && (
+          <>
+            <ResizableHandle withHandle />
+            <ResizablePanel 
+              defaultSize={25} 
+              minSize={20} 
+              maxSize={50} 
+              className="border-l"
+            >
+              <BuildAndChatPanel
+                onBlockSelect={handleBlockSelect}
+                workflowId={selectedWorkflowId}
+                nodes={nodes}
+                edges={edges}
+                onApplyEdits={handleApplyChatEdits}
+                collapsed={buildChatCollapsed}
+                onCollapseChange={handleBuildChatCollapseChange}
+              />
+            </ResizablePanel>
+          </>
         )}
       </ResizablePanelGroup>
 

@@ -156,6 +156,12 @@ export class BackendAPIClient {
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
     }
+    // Add cache-control headers for GET requests to prevent HTTP-level caching
+    if ((restOptions.method === 'GET' || !restOptions.method) && !headers.has('Cache-Control')) {
+      headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      headers.set("Pragma", "no-cache");
+      headers.set("Expires", "0");
+    }
 
     const response = await fetch(url, {
       ...restOptions,
