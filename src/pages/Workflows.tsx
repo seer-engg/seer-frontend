@@ -4,28 +4,37 @@
  * Main page for visual workflow builder.
  * Supports connecting to self-hosted backend via ?backend= URL parameter.
  */
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Node, Edge } from '@xyflow/react';
 import { WorkflowCanvas, WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
 import { ToolPalette } from '@/components/workflows/ToolPalette';
 import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
 import { WorkflowChatAssistant } from '@/components/workflows/WorkflowChatAssistant';
-import { ExecutionPanel } from '@/components/workflows/ExecutionPanel';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
 import { Button } from '@/components/ui/button';
-import { Play, Save, Trash2, FileEdit, Clock } from 'lucide-react';
+import { Play, Save, Trash2, FileEdit, Clock, ChevronRight, Bot } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { useBackendHealth } from '@/lib/backend-health';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { toast } from '@/components/ui/sonner';
 
 export default function Workflows() {
+  const navigate = useNavigate();
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState('My Workflow');
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [showInputDialog, setShowInputDialog] = useState(false);
+  const [inputData, setInputData] = useState<Record<string, any>>({});
+  const [selectedNodeForConfig, setSelectedNodeForConfig] = useState<Node<WorkflowNodeData> | null>(null);
   
   const {
     workflows,
@@ -46,6 +55,17 @@ export default function Workflows() {
 
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
+      // Set default config based on block type
+      let defaultConfig = block.config || {};
+      if (block.type === 'llm') {
+        defaultConfig = {
+          system_prompt: '',
+          model: 'gpt-5-mini',
+          temperature: 0.2,
+          ...defaultConfig,
+        };
+      }
+      
       const newNode: Node<WorkflowNodeData> = {
         id: `node-${Date.now()}`,
         type: block.type as any,
@@ -56,7 +76,7 @@ export default function Workflows() {
         data: {
           type: block.type as any,
           label: block.label,
-          config: block.config || {},
+          config: defaultConfig,
         },
       };
       setNodes((nds) => [...nds, newNode]);
@@ -105,20 +125,67 @@ export default function Workflows() {
     }
   }, [nodes, edges, workflowName, selectedWorkflowId, createWorkflow, updateWorkflow]);
 
+  // Extract input blocks from current workflow
+  const inputBlocks = useMemo(() => {
+    return nodes.filter((node) => node.data?.type === 'input');
+  }, [nodes]);
+
+  // Generate input fields from input blocks
+  const inputFields = useMemo(() => {
+    return inputBlocks.map((block) => ({
+      id: block.id,
+      label: block.data?.label || block.id,
+      type: block.data?.config?.type || 'text',
+      required: block.data?.config?.required !== false,
+      variableName: block.data?.config?.variable_name, // Get variable name if set
+    }));
+  }, [inputBlocks]);
+
   const handleExecute = useCallback(async () => {
     if (!selectedWorkflowId) {
       alert('Please save the workflow first');
       return;
     }
 
+    // Check if workflow has input blocks
+    if (inputFields.length > 0) {
+      // Show input dialog
+      setInputData({});
+      setShowInputDialog(true);
+    } else {
+      // No input blocks, execute immediately
+      try {
+        await executeWorkflow(selectedWorkflowId, {}, false);
+        alert('Workflow execution started!');
+      } catch (error) {
+        console.error('Failed to execute workflow:', error);
+        alert('Failed to execute workflow');
+      }
+    }
+  }, [selectedWorkflowId, executeWorkflow, inputFields]);
+
+  const handleExecuteWithInput = useCallback(async () => {
+    if (!selectedWorkflowId) return;
+
+    // Transform input data to use variable names if provided
+    const transformedInputData: Record<string, any> = {};
+    inputFields.forEach((field) => {
+      const value = inputData[field.id];
+      // Use variable name if set, otherwise use block id
+      const key = field.variableName || field.id;
+      transformedInputData[key] = value;
+    });
+
     try {
-      await executeWorkflow(selectedWorkflowId, {}, false);
+      await executeWorkflow(selectedWorkflowId, transformedInputData, false);
+      setShowInputDialog(false);
+      setInputData({});
       alert('Workflow execution started!');
     } catch (error) {
       console.error('Failed to execute workflow:', error);
       alert('Failed to execute workflow');
     }
-  }, [selectedWorkflowId, executeWorkflow]);
+  }, [selectedWorkflowId, executeWorkflow, inputData, inputFields]);
 
   const handleLoadWorkflow = useCallback((workflow: typeof workflows[0]) => {
     setSelectedWorkflowId(workflow.id);
@@ -156,15 +223,169 @@ export default function Workflows() {
     setSelectedNodeId(null);
   }, []);
 
+  const handleApplyChatEdits = useCallback((edits: Array<{
+    operation: string;
+    block_id?: string;
+    block_type?: string;
+    config?: Record<string, any>;
+    position?: { x: number; y: number };
+    source_id?: string;
+    target_id?: string;
+    source_handle?: string;
+    target_handle?: string;
+  }>) => {
+    // Apply edits to workflow
+    let newNodes = [...nodes];
+    let newEdges = [...edges];
+
+    for (const edit of edits) {
+      if (edit.operation === 'add_block' && edit.block_type) {
+        // Add new block
+        const newNode: Node<WorkflowNodeData> = {
+          id: edit.block_id || `node-${Date.now()}`,
+          type: edit.block_type as any,
+          position: edit.position || {
+            x: Math.random() * 400 + 100,
+            y: Math.random() * 400 + 100,
+          },
+          data: {
+            type: edit.block_type as any,
+            label: edit.block_type.charAt(0).toUpperCase() + edit.block_type.slice(1),
+            config: edit.config || {},
+          },
+        };
+        newNodes.push(newNode);
+      } else if (edit.operation === 'modify_block' && edit.block_id) {
+        // Modify existing block
+        newNodes = newNodes.map((node) =>
+          node.id === edit.block_id
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  config: { ...node.data.config, ...(edit.config || {}) },
+                },
+              }
+            : node
+        );
+      } else if (edit.operation === 'remove_block' && edit.block_id) {
+        // Remove block
+        newNodes = newNodes.filter((node) => node.id !== edit.block_id);
+        // Also remove connected edges
+        newEdges = newEdges.filter(
+          (edge) => edge.source !== edit.block_id && edge.target !== edit.block_id
+        );
+      } else if (edit.operation === 'add_edge' && edit.source_id && edit.target_id) {
+        // Add connection
+        const newEdge: Edge = {
+          id: `edge-${edit.source_id}-${edit.target_id}`,
+          source: edit.source_id,
+          target: edit.target_id,
+          sourceHandle: edit.source_handle,
+          targetHandle: edit.target_handle,
+        };
+        // Check if edge already exists
+        if (!newEdges.some((e) => e.source === edit.source_id && e.target === edit.target_id)) {
+          newEdges.push(newEdge);
+        }
+      } else if (edit.operation === 'remove_edge') {
+        // Remove connection
+        if (edit.source_id && edit.target_id) {
+          newEdges = newEdges.filter(
+            (edge) => !(edge.source === edit.source_id && edge.target === edit.target_id)
+          );
+        }
+      }
+    }
+
+    setNodes(newNodes);
+    setEdges(newEdges);
+  }, [nodes, edges]);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('workflowSidebarCollapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  const handleSidebarCollapseChange = useCallback((collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
+    localStorage.setItem('workflowSidebarCollapsed', JSON.stringify(collapsed));
+  }, []);
+
+  const [chatCollapsed, setChatCollapsed] = useState(() => {
+    const saved = localStorage.getItem('workflowChatCollapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  const handleChatCollapseChange = useCallback((collapsed: boolean) => {
+    setChatCollapsed(collapsed);
+    localStorage.setItem('workflowChatCollapsed', JSON.stringify(collapsed));
+  }, []);
+
+  // Check backend health
+  const { isHealthy } = useBackendHealth(10000); // Check every 10 seconds
+
+  // Show toast notifications for backend status changes
+  useEffect(() => {
+    if (isHealthy === true) {
+      toast.success('Backend Connected', {
+        description: 'Successfully connected to backend server',
+        duration: 3000,
+      });
+    } else if (isHealthy === false) {
+      toast.error('Backend Disconnected', {
+        description: 'Unable to connect to backend server',
+        duration: 5000,
+      });
+    }
+  }, [isHealthy]);
+
   return (
     <div className="flex h-screen bg-background">
-      {/* Left Sidebar - Tool Palette */}
-      <div className="w-64 border-r">
-        <ToolPalette onBlockSelect={handleBlockSelect} />
-      </div>
+      <ResizablePanelGroup direction="horizontal" className="flex-1">
+        {/* Left Sidebar - Tool Palette & Saved Workflows */}
+        {sidebarCollapsed ? (
+          <ResizablePanel defaultSize={0} minSize={0} maxSize={5} className="border-r">
+            <div className="w-12 h-full flex flex-col items-center py-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleSidebarCollapseChange(false)}
+                title="Expand sidebar"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </ResizablePanel>
+        ) : (
+          <ResizablePanel 
+            defaultSize={20} 
+            minSize={15} 
+            maxSize={40}
+            className="border-r"
+          >
+            <div className="h-full w-full flex flex-col overflow-hidden">
+              <ToolPalette 
+                onBlockSelect={handleBlockSelect}
+                collapsed={sidebarCollapsed}
+                onCollapseChange={handleSidebarCollapseChange}
+                workflows={workflows}
+                isLoadingWorkflows={isLoadingWorkflows}
+                selectedWorkflowId={selectedWorkflowId}
+                onLoadWorkflow={handleLoadWorkflow}
+                onDeleteWorkflow={handleDeleteWorkflow}
+                onExecuteWorkflow={executeWorkflow}
+                onNewWorkflow={handleNewWorkflow}
+                isExecuting={isExecuting}
+              />
+            </div>
+          </ResizablePanel>
+        )}
+        
+        <ResizableHandle withHandle />
 
-      {/* Main Canvas Area */}
-      <div className="flex-1 flex flex-col">
+        {/* Main Canvas Area */}
+        <ResizablePanel defaultSize={60} minSize={40} className="flex flex-col">
         {/* Header */}
         <header className="h-14 border-b border-border flex items-center px-4 gap-4 bg-card">
           <div className="flex items-center gap-2 flex-1">
@@ -187,6 +408,17 @@ export default function Workflows() {
               <Play className="w-4 h-4 mr-2" />
               Run
             </Button>
+            {selectedWorkflowId && (
+              <Button
+                onClick={() => navigate(`/workflows/${selectedWorkflowId}/execution`)}
+                size="sm"
+                variant="outline"
+                title="View execution history and details"
+              >
+                <Clock className="w-4 h-4 mr-2" />
+                Executions
+              </Button>
+            )}
           </div>
         </header>
 
@@ -199,136 +431,103 @@ export default function Workflows() {
             onEdgesChange={setEdges}
             onNodeSelect={setSelectedNodeId}
             selectedNodeId={selectedNodeId}
+            onNodeDoubleClick={(event, node) => {
+              setSelectedNodeForConfig(node);
+            }}
           />
         </div>
-      </div>
+        </ResizablePanel>
+        
+        <ResizableHandle withHandle />
 
-      {/* Right Sidebar */}
-      <div className="w-80 border-l border-border flex flex-col">
-        {/* Top Panel - Chat Assistant or Block Config */}
-        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-          {selectedNode ? (
-            <BlockConfigPanel
-              node={selectedNode}
-              onUpdate={handleNodeUpdate}
+        {/* Chat Assistant */}
+        {chatCollapsed ? (
+          <ResizablePanel defaultSize={0} minSize={0} maxSize={5} className="border-l">
+            <div className="w-12 h-full flex flex-col items-start py-2 px-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleChatCollapseChange(false)}
+                title="Expand chat"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Bot className="w-6 h-6 text-muted-foreground mt-2" />
+            </div>
+          </ResizablePanel>
+        ) : (
+          <ResizablePanel 
+            defaultSize={20} 
+            minSize={15} 
+            maxSize={40} 
+            className="border-l"
+          >
+            <WorkflowChatAssistant
+              workflowId={selectedWorkflowId}
+              nodes={nodes}
+              edges={edges}
+              onApplyEdits={handleApplyChatEdits}
+              collapsed={chatCollapsed}
+              onCollapseChange={handleChatCollapseChange}
             />
-          ) : (
-            <div className="p-4 flex-1 overflow-hidden flex flex-col">
-              <WorkflowChatAssistant
-                onWorkflowGenerated={handleWorkflowGenerated}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Saved Workflows Panel */}
-        <div className="border-t flex flex-col max-h-72">
-          <div className="p-3 border-b bg-muted/30 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Saved Workflows</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleNewWorkflow}
-              className="h-7 text-xs"
-            >
-              + New
-            </Button>
-          </div>
-          <ScrollArea className="flex-1">
-            <div className="p-2 space-y-2">
-              {isLoadingWorkflows ? (
-                <div className="text-sm text-muted-foreground text-center py-4">
-                  Loading workflows...
-                </div>
-              ) : workflows.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-4">
-                  No saved workflows yet
-                </div>
-              ) : (
-                workflows.map((workflow) => (
-                  <Card
-                    key={workflow.id}
-                    className={cn(
-                      'cursor-pointer hover:bg-accent/50 transition-colors',
-                      selectedWorkflowId === workflow.id && 'ring-2 ring-primary bg-accent/30'
-                    )}
-                    onClick={() => handleLoadWorkflow(workflow)}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {workflow.name}
-                          </p>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                            <Clock className="w-3 h-3" />
-                            <span>
-                              {new Date(workflow.updated_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLoadWorkflow(workflow);
-                            }}
-                            title="Edit workflow"
-                          >
-                            <FileEdit className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                await executeWorkflow(workflow.id, {}, false);
-                                alert('Workflow execution started!');
-                              } catch (error) {
-                                console.error('Failed to execute workflow:', error);
-                                alert('Failed to execute workflow');
-                              }
-                            }}
-                            disabled={isExecuting}
-                            title="Run workflow"
-                          >
-                            <Play className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteWorkflow(workflow.id);
-                            }}
-                            disabled={isDeleting}
-                            title="Delete workflow"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-          </ScrollArea>
-        </div>
-
-        {/* Bottom Panel - Execution History */}
-        {selectedWorkflowId && (
-          <div className="h-64 border-t">
-            <ExecutionPanel workflowId={selectedWorkflowId} />
-          </div>
+          </ResizablePanel>
         )}
-      </div>
+      </ResizablePanelGroup>
+
+      {/* Block Configuration Modal */}
+      <Dialog open={!!selectedNodeForConfig} onOpenChange={(open) => !open && setSelectedNodeForConfig(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
+            <DialogTitle>Configure Block</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full px-6 pb-6">
+              {selectedNodeForConfig && (
+                <BlockConfigPanel
+                  node={selectedNodeForConfig}
+                  onUpdate={(nodeId, updates) => {
+                    handleNodeUpdate(nodeId, updates);
+                  }}
+                  allNodes={nodes}
+                />
+              )}
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Input Dialog */}
+      <AlertDialog open={showInputDialog} onOpenChange={setShowInputDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Workflow Input</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please provide input values for this workflow
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            {inputFields.map((field) => (
+              <div key={field.id} className="space-y-2">
+                <Label htmlFor={field.id}>{field.label}</Label>
+                <Input
+                  id={field.id}
+                  type={field.type}
+                  value={inputData[field.id] || ''}
+                  onChange={(e) => setInputData({ ...inputData, [field.id]: e.target.value })}
+                  required={field.required}
+                  placeholder={`Enter ${field.label.toLowerCase()}`}
+                />
+              </div>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleExecuteWithInput}>
+              Run Workflow
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

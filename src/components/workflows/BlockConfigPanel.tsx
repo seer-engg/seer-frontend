@@ -4,7 +4,8 @@
  * Right sidebar panel for configuring selected block.
  * Supports editing parameters, Python code, and OAuth scopes.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Node } from '@xyflow/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -15,22 +16,93 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { OAuthScopeSelector, ProviderType } from './OAuthScopeSelector';
 import { WorkflowNodeData, BlockType } from './WorkflowCanvas';
 import { Code, Save } from 'lucide-react';
+import { backendApiClient } from '@/lib/api-client';
+import { Checkbox } from '@/components/ui/checkbox';
+import { StructuredOutputEditor } from './StructuredOutputEditor';
+
+interface ToolMetadata {
+  name: string;
+  description: string;
+  parameters?: {
+    properties?: Record<string, any>;
+  };
+}
 
 interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;
   onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
+  allNodes?: Node<WorkflowNodeData>[]; // All nodes in workflow for reference dropdown
 }
 
-export function BlockConfigPanel({ node, onUpdate }: BlockConfigPanelProps) {
+export function BlockConfigPanel({ node, onUpdate, allNodes = [] }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [pythonCode, setPythonCode] = useState('');
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
+  const [inputRefs, setInputRefs] = useState<Record<string, string>>({});
+  const [useStructuredOutput, setUseStructuredOutput] = useState(false);
+
+  const toolName = config.tool_name || config.toolName || '';
+
+  // Fetch tool schema for tool blocks to determine input handles
+  const { data: toolSchema } = useQuery<ToolMetadata | undefined>({
+    queryKey: ['tool-schema', toolName],
+    queryFn: async () => {
+      if (!toolName || node?.data.type !== 'tool') return undefined;
+      const response = await backendApiClient.request<{ tools: ToolMetadata[] }>(
+        '/api/tools',
+        { method: 'GET' }
+      );
+      return response.tools.find(t => t.name === toolName);
+    },
+    enabled: !!toolName && node?.data.type === 'tool',
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Determine input handles based on block type
+  const inputHandles = useMemo(() => {
+    if (!node) return [];
+    
+    const blockType = node.data.type;
+    
+    switch (blockType) {
+      case 'input':
+        // Input blocks are entry points, no inputs
+        return [];
+      
+      case 'tool':
+        // For tool blocks, derive from tool schema
+        if (toolSchema?.parameters?.properties) {
+          return Object.keys(toolSchema.parameters.properties);
+        }
+        // Fallback to single input handle
+        return ['input'];
+      
+      case 'code':
+      case 'llm':
+      case 'if_else':
+      case 'for_loop':
+      case 'variable':
+        // These blocks typically have a single input
+        return ['input'];
+      
+      default:
+        return [];
+    }
+  }, [node, toolSchema]);
+
+  // Get available blocks (all nodes except current node)
+  const availableBlocks = useMemo(() => {
+    if (!node) return [];
+    return allNodes.filter(n => n.id !== node.id);
+  }, [node, allNodes]);
 
   useEffect(() => {
     if (node) {
       setConfig(node.data.config || {});
       setPythonCode(node.data.python_code || '');
       setOAuthScope(node.data.oauth_scope);
+      setInputRefs(node.data.config?.input_refs || {});
+      setUseStructuredOutput(!!node.data.config?.output_schema);
     }
   }, [node]);
 
@@ -45,7 +117,10 @@ export function BlockConfigPanel({ node, onUpdate }: BlockConfigPanelProps) {
   const handleSave = () => {
     if (node) {
       onUpdate(node.id, {
-        config,
+        config: {
+          ...config,
+          input_refs: inputRefs,
+        },
         python_code: pythonCode,
         oauth_scope: oauthScope,
       });
@@ -57,6 +132,10 @@ export function BlockConfigPanel({ node, onUpdate }: BlockConfigPanelProps) {
 
     switch (blockType) {
       case 'tool':
+        const toolParams = config.params || {};
+        const paramSchema = toolSchema?.parameters?.properties || {};
+        const requiredParams = toolSchema?.parameters?.required || [];
+        
         return (
           <div className="space-y-4">
             <div>
@@ -67,27 +146,160 @@ export function BlockConfigPanel({ node, onUpdate }: BlockConfigPanelProps) {
                 onChange={(e) =>
                   setConfig({ ...config, tool_name: e.target.value })
                 }
-                placeholder="e.g., GMAIL_LIST_MESSAGES"
+                placeholder="e.g., gmail_read_emails"
               />
             </div>
-            <div>
-              <Label htmlFor="tool-params">Parameters (JSON)</Label>
-              <Textarea
-                id="tool-params"
-                value={JSON.stringify(config.params || {}, null, 2)}
-                onChange={(e) => {
-                  try {
-                    const params = JSON.parse(e.target.value);
-                    setConfig({ ...config, params });
-                  } catch {
-                    // Invalid JSON, keep as is
-                  }
-                }}
-                placeholder='{"max_results": 5}'
-                className="font-mono text-xs"
-                rows={4}
-              />
-            </div>
+            
+            {/* Render individual parameters based on schema */}
+            {Object.keys(paramSchema).length > 0 ? (
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Parameters</Label>
+                {Object.entries(paramSchema).map(([paramName, paramDef]: [string, any]) => {
+                  const paramType = paramDef.type || 'string';
+                  const paramValue = toolParams[paramName];
+                  const isRequired = requiredParams.includes(paramName);
+                  const hasDefault = paramDef.default !== undefined;
+                  
+                  return (
+                    <div key={paramName} className="space-y-1">
+                      <Label htmlFor={`param-${paramName}`} className="text-xs">
+                        {paramName}
+                        {isRequired && <span className="text-destructive ml-1">*</span>}
+                        {paramDef.description && (
+                          <span className="text-muted-foreground font-normal ml-2">
+                            ({paramDef.description})
+                          </span>
+                        )}
+                      </Label>
+                      
+                      {paramType === 'boolean' ? (
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`param-${paramName}`}
+                            checked={paramValue ?? paramDef.default ?? false}
+                            onChange={(e) =>
+                              setConfig({
+                                ...config,
+                                params: { ...toolParams, [paramName]: e.target.checked },
+                              })
+                            }
+                            className="rounded"
+                          />
+                          <Label htmlFor={`param-${paramName}`} className="text-xs font-normal">
+                            {paramDef.description || paramName}
+                          </Label>
+                        </div>
+                      ) : paramType === 'integer' || paramType === 'number' ? (
+                        <Input
+                          id={`param-${paramName}`}
+                          type="number"
+                          value={paramValue ?? paramDef.default ?? ''}
+                          onChange={(e) => {
+                            const value = paramType === 'integer' 
+                              ? parseInt(e.target.value) || 0
+                              : parseFloat(e.target.value) || 0;
+                            setConfig({
+                              ...config,
+                              params: { ...toolParams, [paramName]: value },
+                            });
+                          }}
+                          min={paramDef.minimum}
+                          max={paramDef.maximum}
+                          step={paramType === 'integer' ? 1 : 0.1}
+                          placeholder={hasDefault ? String(paramDef.default) : ''}
+                          className="text-xs"
+                        />
+                      ) : paramType === 'array' ? (
+                        <Textarea
+                          id={`param-${paramName}`}
+                          value={Array.isArray(paramValue) 
+                            ? JSON.stringify(paramValue, null, 2)
+                            : paramDef.default 
+                              ? JSON.stringify(paramDef.default, null, 2)
+                              : '[]'}
+                          onChange={(e) => {
+                            try {
+                              const value = JSON.parse(e.target.value);
+                              if (Array.isArray(value)) {
+                                setConfig({
+                                  ...config,
+                                  params: { ...toolParams, [paramName]: value },
+                                });
+                              }
+                            } catch {
+                              // Invalid JSON, keep as is
+                            }
+                          }}
+                          placeholder={JSON.stringify(paramDef.default || [], null, 2)}
+                          className="font-mono text-xs"
+                          rows={3}
+                        />
+                      ) : paramType === 'object' ? (
+                        <Textarea
+                          id={`param-${paramName}`}
+                          value={typeof paramValue === 'object' && paramValue !== null
+                            ? JSON.stringify(paramValue, null, 2)
+                            : paramDef.default
+                              ? JSON.stringify(paramDef.default, null, 2)
+                              : '{}'}
+                          onChange={(e) => {
+                            try {
+                              const value = JSON.parse(e.target.value);
+                              if (typeof value === 'object' && value !== null) {
+                                setConfig({
+                                  ...config,
+                                  params: { ...toolParams, [paramName]: value },
+                                });
+                              }
+                            } catch {
+                              // Invalid JSON, keep as is
+                            }
+                          }}
+                          placeholder={JSON.stringify(paramDef.default || {}, null, 2)}
+                          className="font-mono text-xs"
+                          rows={4}
+                        />
+                      ) : (
+                        <Input
+                          id={`param-${paramName}`}
+                          type="text"
+                          value={paramValue ?? paramDef.default ?? ''}
+                          onChange={(e) =>
+                            setConfig({
+                              ...config,
+                              params: { ...toolParams, [paramName]: e.target.value },
+                            })
+                          }
+                          placeholder={paramDef.default || paramDef.description || ''}
+                          className="text-xs"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="tool-params">Parameters (JSON)</Label>
+                <Textarea
+                  id="tool-params"
+                  value={JSON.stringify(toolParams, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const params = JSON.parse(e.target.value);
+                      setConfig({ ...config, params });
+                    } catch {
+                      // Invalid JSON, keep as is
+                    }
+                  }}
+                  placeholder='{"max_results": 5}'
+                  className="font-mono text-xs"
+                  rows={4}
+                />
+              </div>
+            )}
+            
             <OAuthScopeSelector
               provider={getProviderFromTool(config.tool_name)}
               value={getScopeLevel(oauthScope)}
@@ -166,6 +378,47 @@ export function BlockConfigPanel({ node, onUpdate }: BlockConfigPanelProps) {
                 }
               />
             </div>
+            <div className="flex items-center space-x-2 pt-2 border-t">
+              <Checkbox
+                id="structured-output"
+                checked={useStructuredOutput}
+                onCheckedChange={(checked) => {
+                  const isChecked = checked === true;
+                  setUseStructuredOutput(isChecked);
+                  if (!isChecked) {
+                    // Remove output_schema when unchecked
+                    const newConfig = { ...config };
+                    delete newConfig.output_schema;
+                    setConfig(newConfig);
+                  } else {
+                    // Set default empty schema when checked
+                    setConfig({
+                      ...config,
+                      output_schema: config.output_schema || {
+                        type: "object",
+                        properties: {},
+                      },
+                    });
+                  }
+                }}
+              />
+              <Label
+                htmlFor="structured-output"
+                className="text-sm font-normal cursor-pointer"
+              >
+                Structured Output (JSON Schema)
+              </Label>
+            </div>
+            {useStructuredOutput && (
+              <div>
+                <StructuredOutputEditor
+                  value={config.output_schema}
+                  onChange={(schema) => {
+                    setConfig({ ...config, output_schema: schema });
+                  }}
+                />
+              </div>
+            )}
           </div>
         );
 
@@ -215,19 +468,55 @@ export function BlockConfigPanel({ node, onUpdate }: BlockConfigPanelProps) {
           </div>
         );
 
-      case 'variable':
+      case 'input':
         return (
           <div className="space-y-4">
             <div>
-              <Label htmlFor="var-name">Variable Name</Label>
+              <Label htmlFor="variable-name">Variable Name</Label>
               <Input
-                id="var-name"
-                value={config.name || ''}
+                id="variable-name"
+                value={config.variable_name || ''}
                 onChange={(e) =>
-                  setConfig({ ...config, name: e.target.value })
+                  setConfig({ ...config, variable_name: e.target.value })
                 }
-                placeholder="e.g., email_count"
+                placeholder="e.g., user_input"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Use this name to reference this input in system prompts via {'{{'}variable_name{'}}'} syntax
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="input-type">Input Type</Label>
+              <Select
+                value={config.type || 'text'}
+                onValueChange={(value) =>
+                  setConfig({ ...config, type: value })
+                }
+              >
+                <SelectTrigger id="input-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="url">URL</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="input-required"
+                checked={config.required !== false}
+                onChange={(e) =>
+                  setConfig({ ...config, required: e.target.checked })
+                }
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="input-required" className="text-sm font-normal cursor-pointer">
+                Required
+              </Label>
             </div>
           </div>
         );
@@ -252,6 +541,62 @@ export function BlockConfigPanel({ node, onUpdate }: BlockConfigPanelProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {renderConfigFields()}
+          
+          {/* Input References Section */}
+          {inputHandles.length > 0 && (
+            <div className="space-y-3 pt-4 border-t">
+              <div>
+                <Label className="text-sm font-semibold">Input References</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Reference outputs from other blocks using: block_id.handle_id
+                </p>
+              </div>
+              
+              {inputHandles.map((handleId) => (
+                <div key={handleId}>
+                  <Label htmlFor={`input-ref-${handleId}`} className="text-xs">
+                    {handleId}
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id={`input-ref-${handleId}`}
+                      placeholder="e.g., block_a.email"
+                      value={inputRefs[handleId] || ''}
+                      onChange={(e) => setInputRefs({
+                        ...inputRefs,
+                        [handleId]: e.target.value
+                      })}
+                      className="font-mono text-xs"
+                    />
+                    {availableBlocks.length > 0 && (
+                      <Select
+                        value={inputRefs[handleId] || ''}
+                        onValueChange={(value) => setInputRefs({
+                          ...inputRefs,
+                          [handleId]: value
+                        })}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue placeholder="Select block" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableBlocks.map((block) => (
+                            <SelectItem 
+                              key={block.id} 
+                              value={`${block.id}.output`}
+                            >
+                              {block.data.label || block.id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
           <Button onClick={handleSave} className="w-full" size="sm">
             <Save className="w-4 h-4 mr-2" />
             Save Configuration

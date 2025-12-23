@@ -6,9 +6,11 @@
  */
 import { memo, useCallback, useMemo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../WorkflowCanvas';
-import { useToolIntegration } from '@/hooks/useIntegrationTools';
+import { useToolIntegration, ToolMetadata } from '@/hooks/useIntegrationTools';
+import { backendApiClient } from '@/lib/api-client';
 import { 
   Wrench, 
   CheckCircle2, 
@@ -66,6 +68,38 @@ export const ToolBlockNode = memo(function ToolBlockNode(
   
   // Get tool name from config (if available) or use a default
   const toolName = data.config?.tool_name || data.config?.toolName || '';
+  
+  // Fetch tool schema to determine dynamic handles
+  const { data: toolSchema } = useQuery<ToolMetadata | undefined>({
+    queryKey: ['tool-schema', toolName],
+    queryFn: async () => {
+      if (!toolName) return undefined;
+      const response = await backendApiClient.request<{ tools: ToolMetadata[] }>(
+        '/api/tools',
+        { method: 'GET' }
+      );
+      return response.tools.find(t => t.name === toolName);
+    },
+    enabled: !!toolName,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+  
+  // Generate input handles from tool parameters
+  const inputHandles = useMemo(() => {
+    if (!toolSchema?.parameters?.properties) {
+      return ['input']; // Fallback to single handle
+    }
+    
+    // Create handle for each parameter
+    return Object.keys(toolSchema.parameters.properties);
+  }, [toolSchema]);
+  
+  // Generate output handles (tool may return structured data)
+  const outputHandles = useMemo(() => {
+    // For now, single output handle
+    // Could be extended based on tool return schema
+    return ['output'];
+  }, []);
   
   // Get integration status for this tool
   const { status, isLoading, initiateAuth } = useToolIntegration(toolName);
@@ -152,14 +186,20 @@ export const ToolBlockNode = memo(function ToolBlockNode(
         needsAuth && !selected && 'border-amber-500/50',
       )}
     >
-      {/* Input handle */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="input"
-        style={{ left: -8, top: 24 }}
-        className="!w-3 !h-3 !bg-border !border-2 !border-background"
-      />
+      {/* Input handles - dynamic based on tool parameters */}
+      {inputHandles.map((handleId, index) => (
+        <Handle
+          key={`input-${handleId}`}
+          type="target"
+          position={Position.Left}
+          id={handleId}
+          style={{
+            left: -8,
+            top: `${20 + index * 30}px`,
+          }}
+          className="!w-3 !h-3 !bg-border !border-2 !border-background"
+        />
+      ))}
 
       {/* Block content */}
       <div className="flex flex-col gap-2">
@@ -206,14 +246,20 @@ export const ToolBlockNode = memo(function ToolBlockNode(
         )}
       </div>
 
-      {/* Output handle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="output"
-        style={{ right: -8, top: 24 }}
-        className="!w-3 !h-3 !bg-border !border-2 !border-background"
-      />
+      {/* Output handles */}
+      {outputHandles.map((handleId, index) => (
+        <Handle
+          key={`output-${handleId}`}
+          type="source"
+          position={Position.Right}
+          id={handleId}
+          style={{
+            right: -8,
+            top: `${20 + index * 30}px`,
+          }}
+          className="!w-3 !h-3 !bg-border !border-2 !border-background"
+        />
+      ))}
     </div>
   );
 });

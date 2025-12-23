@@ -3,7 +3,7 @@
  */
 
 import type { IntegrationType } from "./client";
-import { Github, FolderOpen, CheckSquare2, Sparkles, Mail } from "lucide-react";
+import { Github, FolderOpen, CheckSquare2, Sparkles, Mail, FileText } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import { getRequiredScopes } from "./client";
 
@@ -62,6 +62,15 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     requiresResourceSelection: false,
     resourceLabel: "Mailbox",
     requiredScopes: getRequiredScopes("gmail"),
+  },
+  googlesheets: {
+    type: "googlesheets",
+    displayName: "Google Sheets",
+    icon: FileText,
+    toolkitSlug: "googlesheets",
+    requiresResourceSelection: false,
+    resourceLabel: "Spreadsheet",
+    requiredScopes: getRequiredScopes("googlesheets"),
   },
 };
 

@@ -8,9 +8,10 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Wrench, Code, Sparkles, GitBranch, Repeat, Database, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Search, Wrench, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, Clock, FileEdit, Trash2, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { backendApiClient } from '@/lib/api-client';
 
@@ -54,31 +55,55 @@ const BUILT_IN_BLOCKS: BuiltInBlock[] = [
     icon: <Repeat className="w-4 h-4" />,
   },
   {
-    type: 'variable',
-    label: 'Variable',
-    description: 'Store/retrieve values',
-    icon: <Database className="w-4 h-4" />,
-  },
-  {
     type: 'input',
     label: 'Input',
     description: 'Workflow entry point',
     icon: <ArrowRight className="w-4 h-4" />,
-  },
-  {
-    type: 'output',
-    label: 'Output',
-    description: 'Workflow exit point',
-    icon: <ArrowLeft className="w-4 h-4" />,
   },
 ];
 
 interface ToolPaletteProps {
   onBlockSelect?: (block: { type: string; label: string; config?: any }) => void;
   className?: string;
+  collapsed?: boolean;
+  onCollapseChange?: (collapsed: boolean) => void;
+  workflows?: Array<{
+    id: number;
+    name: string;
+    updated_at: string;
+    graph_data?: any;
+  }>;
+  isLoadingWorkflows?: boolean;
+  selectedWorkflowId?: number | null;
+  onLoadWorkflow?: (workflow: any) => void;
+  onDeleteWorkflow?: (workflowId: number) => void;
+  onExecuteWorkflow?: (workflowId: number, inputData: Record<string, any>, stream: boolean) => Promise<any>;
+  onNewWorkflow?: () => void;
+  isExecuting?: boolean;
 }
 
-export function ToolPalette({ onBlockSelect, className }: ToolPaletteProps) {
+export function ToolPalette({ 
+  onBlockSelect, 
+  className, 
+  collapsed: externalCollapsed, 
+  onCollapseChange,
+  workflows = [],
+  isLoadingWorkflows = false,
+  selectedWorkflowId,
+  onLoadWorkflow,
+  onDeleteWorkflow,
+  onExecuteWorkflow,
+  onNewWorkflow,
+  isExecuting = false,
+}: ToolPaletteProps) {
+  // Always use external prop when provided, default to false
+  // Don't use internal state when external prop is passed to avoid conflicts
+  const collapsed = externalCollapsed ?? false;
+  
+  const setCollapsed = (value: boolean) => {
+    onCollapseChange?.(value);
+  };
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedToolkit, setSelectedToolkit] = useState<string | null>(null);
 
@@ -146,25 +171,121 @@ export function ToolPalette({ onBlockSelect, className }: ToolPaletteProps) {
   };
 
   return (
-    <div className={cn('flex flex-col h-full bg-card border-r', className)}>
+    <div className={cn('flex flex-col h-full bg-card border-r w-full transition-all duration-200', className)}>
       <div className="p-4 border-b">
-        <h2 className="text-lg font-semibold mb-2">Blocks</h2>
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search blocks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8"
-          />
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Blocks</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setCollapsed(true)}
+            className="h-6 w-6"
+            title="Collapse palette"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
-          {/* Built-in Blocks */}
+          {/* Workflows Section */}
+          {!collapsed && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium">Workflows</h3>
+                {onNewWorkflow && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onNewWorkflow}
+                    className="h-6 text-xs px-2"
+                  >
+                    + New
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-2">
+                {isLoadingWorkflows ? (
+                  <div className="text-sm text-muted-foreground text-center py-4">
+                    Loading workflows...
+                  </div>
+                ) : workflows.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-4">
+                    No saved workflows yet
+                  </div>
+                ) : (
+                  workflows.map((workflow) => (
+                    <Card
+                      key={workflow.id}
+                      className={cn(
+                        'cursor-pointer hover:bg-accent transition-colors',
+                        selectedWorkflowId === workflow.id && 'ring-2 ring-primary'
+                      )}
+                      onClick={() => onLoadWorkflow?.(workflow)}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{workflow.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(workflow.updated_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex gap-1 ml-2">
+                            {onExecuteWorkflow && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onExecuteWorkflow(workflow.id, {}, false);
+                                }}
+                                disabled={isExecuting}
+                                title="Run workflow"
+                              >
+                                <Play className="h-3 w-3" />
+                              </Button>
+                            )}
+                            {onDeleteWorkflow && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Delete "${workflow.name}"?`)) {
+                                    onDeleteWorkflow(workflow.id);
+                                  }
+                                }}
+                                title="Delete workflow"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Blocks */}
           <div>
-            <h3 className="text-sm font-medium mb-2">Built-in Blocks</h3>
+            <div className="relative mb-2">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search blocks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            <h3 className="text-sm font-medium mb-2">Blocks</h3>
             <div className="space-y-2">
               {filteredBlocks.map((block) => (
                 <Card

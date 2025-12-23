@@ -43,7 +43,7 @@ export function useWorkflowBuilder() {
     queryKey: ['workflows'],
     queryFn: async () => {
       const response = await backendApiClient.request<{ workflows: Workflow[] }>(
-        '/workflows',
+        '/api/workflows',
         { method: 'GET' }
       );
       return response.workflows;
@@ -53,7 +53,7 @@ export function useWorkflowBuilder() {
   // Create workflow
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; description?: string; graph_data: any }) => {
-      return await backendApiClient.request<Workflow>('/workflows', {
+      return await backendApiClient.request<Workflow>('/api/workflows', {
         method: 'POST',
         body: data,
       });
@@ -72,7 +72,7 @@ export function useWorkflowBuilder() {
       id: number;
       data: Partial<Workflow>;
     }) => {
-      return await backendApiClient.request<Workflow>(`/workflows/${id}`, {
+      return await backendApiClient.request<Workflow>(`/api/workflows/${id}`, {
         method: 'PUT',
         body: data,
       });
@@ -85,7 +85,7 @@ export function useWorkflowBuilder() {
   // Delete workflow
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await backendApiClient.request(`/workflows/${id}`, {
+      await backendApiClient.request(`/api/workflows/${id}`, {
         method: 'DELETE',
       });
     },
@@ -106,8 +106,8 @@ export function useWorkflowBuilder() {
       stream?: boolean;
     }) => {
       const endpoint = stream
-        ? `/workflows/${workflowId}/execute/stream`
-        : `/workflows/${workflowId}/execute`;
+        ? `/api/workflows/${workflowId}/execute/stream`
+        : `/api/workflows/${workflowId}/execute`;
       
       if (stream) {
         // Handle streaming execution - use dynamic backend URL
@@ -137,7 +137,7 @@ export function useWorkflowBuilder() {
   const getExecutions = useCallback(
     async (workflowId: number) => {
       const response = await backendApiClient.request<WorkflowExecution[]>(
-        `/workflows/${workflowId}/executions`,
+        `/api/workflows/${workflowId}/executions`,
         { method: 'GET' }
       );
       return response;

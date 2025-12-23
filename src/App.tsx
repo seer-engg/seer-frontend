@@ -13,8 +13,8 @@ import Evals from "./pages/Evals";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
-import Agents from "./pages/Agents";
 import Workflows from "./pages/Workflows";
+import WorkflowExecution from "./pages/WorkflowExecution";
 
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
@@ -32,13 +32,6 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Navigate to="/workflows" replace />} />
-            <Route path="/agents" element={
-              <ProtectedRoute>
-                <SeerLayout>
-                  <Agents />
-                </SeerLayout>
-              </ProtectedRoute>
-            } />
 
             <Route
               path="/sign-in/*"
@@ -123,6 +116,16 @@ const App = () => (
                 <ProtectedRoute>
                   <SeerLayout>
                     <Workflows />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows/:workflowId/execution/:executionId?"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <WorkflowExecution />
                   </SeerLayout>
                 </ProtectedRoute>
               }

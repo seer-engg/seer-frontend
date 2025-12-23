@@ -10,7 +10,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   Node,
   Edge,
   Connection,
@@ -30,9 +29,7 @@ import { CodeBlockNode } from './blocks/CodeBlockNode';
 import { LLMBlockNode } from './blocks/LLMBlockNode';
 import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
-import { VariableBlockNode } from './blocks/VariableBlockNode';
 import { InputBlockNode } from './blocks/InputBlockNode';
-import { OutputBlockNode } from './blocks/OutputBlockNode';
 
 export type BlockType =
   | 'tool'
@@ -40,9 +37,7 @@ export type BlockType =
   | 'llm'
   | 'if_else'
   | 'for_loop'
-  | 'variable'
-  | 'input'
-  | 'output';
+  | 'input';
 
 export interface ToolBlockConfig {
   tool_name?: string;
@@ -80,9 +75,7 @@ const nodeTypes = {
   llm: LLMBlockNode,
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
-  variable: VariableBlockNode,
   input: InputBlockNode,
-  output: OutputBlockNode,
 };
 
 interface WorkflowCanvasProps {
@@ -91,6 +84,7 @@ interface WorkflowCanvasProps {
   onNodesChange?: (nodes: Node<WorkflowNodeData>[]) => void;
   onEdgesChange?: (edges: Edge[]) => void;
   onNodeSelect?: (nodeId: string) => void;
+  onNodeDoubleClick?: (event: React.MouseEvent, node: Node<WorkflowNodeData>) => void;
   selectedNodeId?: string | null;
   className?: string;
 }
@@ -101,6 +95,7 @@ export function WorkflowCanvas({
   onNodesChange,
   onEdgesChange,
   onNodeSelect,
+  onNodeDoubleClick,
   selectedNodeId,
   className,
 }: WorkflowCanvasProps) {
@@ -225,6 +220,16 @@ export function WorkflowCanvas({
     [onNodeSelect]
   );
 
+  // Handle node double clicks
+  const handleNodeDoubleClick: NodeMouseHandler = useCallback(
+    (event, node) => {
+      if (onNodeDoubleClick) {
+        onNodeDoubleClick(event, node);
+      }
+    },
+    [onNodeDoubleClick]
+  );
+
   return (
     <div className={cn('w-full h-full bg-[hsl(var(--canvas-bg))]', className)}>
       <ReactFlow
@@ -235,6 +240,7 @@ export function WorkflowCanvas({
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         onNodeClick={handleNodeClick}
+        onNodeDoubleClick={handleNodeDoubleClick}
         connectionMode={ConnectionMode.Loose}
         fitView
         fitViewOptions={{ padding: 0.2 }}
@@ -257,14 +263,6 @@ export function WorkflowCanvas({
         <Controls
           showInteractive={false}
           className="!bg-card !border-border !rounded-lg !shadow-lg"
-        />
-        <MiniMap
-          className="!bg-card !border-border !rounded-lg"
-          nodeColor={(node) => {
-            if (node.type === 'input') return '#10b981';
-            if (node.type === 'output') return '#3b82f6';
-            return '#6b7280';
-          }}
         />
       </ReactFlow>
     </div>

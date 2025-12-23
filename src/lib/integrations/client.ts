@@ -3,7 +3,9 @@
  * Frontend controls OAuth scopes (read-only is core differentiation)
  */
 
-export type IntegrationType = "sandbox" | "github" | "googledrive" | "asana" | "gmail";
+import { getGitHubToolScopes } from './github_tool_scopes';
+
+export type IntegrationType = "sandbox" | "github" | "googledrive" | "asana" | "gmail" | "googlesheets";
 
 /**
  * Get required OAuth scopes for an integration type.
@@ -22,12 +24,15 @@ export function getRequiredScopes(
   
   switch (integrationType) {
     case "github":
-      // Read-only GitHub scopes
+      // Use tool-specific scopes if toolName is provided
+      if (toolName) {
+        return getGitHubToolScopes(toolName);
+      }
+      // Fallback to default GitHub scopes
       return [
-        ...baseScopes,
         "user:email",
         "read:user",
-        "repo", // Read repository access
+        "repo", // Conservative default
       ];
     
     case "googledrive":
@@ -42,6 +47,13 @@ export function getRequiredScopes(
       return [
         ...baseScopes,
         "https://www.googleapis.com/auth/gmail.readonly",
+      ];
+    
+    case "googlesheets":
+      // Google Sheets read/write scope
+      return [
+        ...baseScopes,
+        "https://www.googleapis.com/auth/spreadsheets",
       ];
     
     case "asana":
