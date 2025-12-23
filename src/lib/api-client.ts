@@ -242,11 +242,45 @@ export interface ConnectedAccount {
   toolkit: {
     slug: string;
   };
+  scopes?: string;
+  provider?: string;
 }
 
 export interface ListConnectedAccountsResponse {
   items: ConnectedAccount[];
   total: number;
+}
+
+/**
+ * Tool connection status - indicates whether a specific tool has the required OAuth scopes
+ */
+export interface ToolConnectionStatus {
+  tool_name: string;
+  integration_type: string | null;
+  provider: string | null;
+  connected: boolean;
+  has_required_scopes: boolean;
+  missing_scopes: string[];
+  connection_id: string | null;
+  provider_account_id?: string;
+}
+
+export interface ToolsConnectionStatusResponse {
+  tools: ToolConnectionStatus[];
+}
+
+/**
+ * Integration status - shows connection status for an integration type
+ */
+export interface IntegrationStatus {
+  integration_type: string;
+  provider: string;
+  connected: boolean;
+  has_required_scopes: boolean;
+  granted_scopes: string[];
+  missing_scopes: string[];
+  connection_id: string | null;
+  provider_account_id?: string;
 }
 
 export interface ConnectResponse {
@@ -299,6 +333,25 @@ export async function listConnectedAccounts(params: {
 }
 
 /**
+ * Get connection status for all tools.
+ * This is the primary way to check which tools are connected and have required scopes.
+ */
+export async function getToolsConnectionStatus(): Promise<ToolsConnectionStatusResponse> {
+  const endpoint = `/api/integrations/tools/status`;
+  return backendApiClient.request<ToolsConnectionStatusResponse>(endpoint);
+}
+
+/**
+ * Get connection status for a specific integration type.
+ * Checks if the user has a connection with required scopes for all tools
+ * belonging to this integration type.
+ */
+export async function getIntegrationStatus(integrationType: string): Promise<IntegrationStatus> {
+  const endpoint = `/api/integrations/${integrationType}/status`;
+  return backendApiClient.request<IntegrationStatus>(endpoint);
+}
+
+/**
  * Initiate OAuth connection
  * CRITICAL: Frontend must always pass scope parameter
  *
@@ -313,6 +366,7 @@ export async function initiateConnection(params: {
   provider: string;
   scope: string; // REQUIRED - OAuth scopes (frontend controls)
   callbackUrl?: string;
+  integrationType?: string; // Integration type that triggered this (e.g., 'gmail', 'googlesheets')
 }): Promise<ConnectResponse> {
   const searchParams = new URLSearchParams();
   searchParams.append("user_id", params.userId);
@@ -320,6 +374,11 @@ export async function initiateConnection(params: {
 
   if (params.callbackUrl) {
     searchParams.append("redirect_to", params.callbackUrl);
+  }
+
+  // Pass integration type so backend can track which tool triggered this connection
+  if (params.integrationType) {
+    searchParams.append("integration_type", params.integrationType);
   }
 
   // Include JWT token for backend authentication

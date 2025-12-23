@@ -3,10 +3,15 @@
  * 
  * Manages integration tools, their OAuth requirements, and authorization status.
  * Used by workflow canvas to show connection status for tool blocks.
+ * 
+ * Key concepts:
+ * - OAuth providers (google, github) can have multiple integration types
+ * - For example, 'google' OAuth provider supports: gmail, googlesheets, googledrive
+ * - Connection status is determined by checking if the OAuth provider has the required scopes
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { backendApiClient, listConnectedAccounts, initiateConnection, ConnectedAccount } from '@/lib/api-client';
+import { useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { backendApiClient, listConnectedAccounts, initiateConnection, ConnectedAccount, getToolsConnectionStatus, ToolConnectionStatus } from '@/lib/api-client';
 import { IntegrationType, formatScopes, getRequiredScopes, getOAuthProvider } from '@/lib/integrations/client';
 import { useUser } from '@clerk/clerk-react';
 
@@ -46,6 +51,7 @@ function getIntegrationTypeFromScopes(scopes: string[]): IntegrationType | null 
   for (const scope of scopes) {
     const scopeLower = scope.toLowerCase();
     if (scopeLower.includes('gmail')) return 'gmail';
+    if (scopeLower.includes('spreadsheets') || scopeLower.includes('sheets')) return 'googlesheets';
     if (scopeLower.includes('drive')) return 'googledrive';
     if (scopeLower.includes('github')) return 'github';
     if (scopeLower.includes('asana')) return 'asana';
@@ -59,6 +65,7 @@ function getIntegrationTypeFromScopes(scopes: string[]): IntegrationType | null 
 function getIntegrationTypeFromToolName(toolName: string): IntegrationType | null {
   const nameLower = toolName.toLowerCase();
   if (nameLower.includes('gmail')) return 'gmail';
+  if (nameLower.includes('sheets') || nameLower.includes('spreadsheet')) return 'googlesheets';
   if (nameLower.includes('drive') || nameLower.includes('google_drive')) return 'googledrive';
   if (nameLower.includes('github')) return 'github';
   if (nameLower.includes('asana')) return 'asana';
@@ -97,7 +104,28 @@ export function useIntegrationTools() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Fetch user's connected accounts
+  // Fetch tool connection status from backend
+  // This endpoint checks if OAuth provider has required scopes for each tool
+  const {
+    data: toolStatusData,
+    isLoading: toolStatusLoading,
+    refetch: refetchToolStatus
+  } = useQuery({
+    queryKey: ['tools-connection-status', userEmail],
+    queryFn: async () => {
+      try {
+        const response = await getToolsConnectionStatus();
+        return response.tools || [];
+      } catch (error) {
+        console.warn('[useIntegrationTools] Failed to fetch tool status, falling back to connections API', error);
+        return null; // Will use fallback logic
+      }
+    },
+    enabled: isLoaded && !!userEmail,
+    staleTime: 30 * 1000, // 30 seconds
+  });
+
+  // Fallback: Fetch user's connected accounts (for backward compatibility)
   const {
     data: connectionsData,
     isLoading: connectionsLoading,
@@ -108,30 +136,95 @@ export function useIntegrationTools() {
       const response = await listConnectedAccounts({ userIds: [userEmail] });
       return response.items || [];
     },
-    enabled: isLoaded,
+    enabled: isLoaded && !!userEmail,
     staleTime: 30 * 1000, // 30 seconds
   });
 
   const tools = toolsData || [];
+  const toolStatusMap = useMemo(() => {
+    if (!toolStatusData) return null;
+    const map = new Map<string, ToolConnectionStatus>();
+    for (const status of toolStatusData) {
+      map.set(status.tool_name, status);
+    }
+    return map;
+  }, [toolStatusData]);
   const connections = connectionsData || [];
 
   /**
-   * Get all connected integration types
+   * Build a map of OAuth provider -> connection with scopes
+   * This is used for the fallback logic when tools/status API is not available
    */
-  const connectedIntegrations = useMemo(() => {
-    const connected = new Map<IntegrationType, ConnectedAccount>();
+  const providerConnectionsMap = useMemo(() => {
+    const map = new Map<string, { scopes: Set<string>; connectionId: string }>();
     
     for (const conn of connections) {
       if (conn.status === 'ACTIVE') {
-        const slug = conn.toolkit?.slug as IntegrationType;
-        if (slug) {
-          connected.set(slug, conn);
+        const provider = conn.provider || conn.toolkit?.slug;
+        if (provider) {
+          const scopes = new Set((conn.scopes || '').split(' ').filter(Boolean));
+          map.set(provider, {
+            scopes,
+            connectionId: conn.id
+          });
         }
       }
     }
     
-    return connected;
+    return map;
   }, [connections]);
+
+  /**
+   * Get all connected integration types
+   * Now properly checks scopes instead of just provider match
+   */
+  const connectedIntegrations = useMemo(() => {
+    const connected = new Map<IntegrationType, ConnectedAccount>();
+    
+    // If we have tool status data, use it to determine connected integrations
+    if (toolStatusMap) {
+      for (const tool of tools) {
+        const status = toolStatusMap.get(tool.name);
+        if (status?.connected && status?.has_required_scopes) {
+          const integrationType = (tool.integration_type || status.integration_type) as IntegrationType;
+          if (integrationType && !connected.has(integrationType)) {
+            // Create a synthetic connection object for backward compatibility
+            connected.set(integrationType, {
+              id: status.connection_id || '',
+              status: 'ACTIVE',
+              toolkit: { slug: status.provider || integrationType }
+            });
+          }
+        }
+      }
+      return connected;
+    }
+    
+    // Fallback: Check scopes manually for each integration type
+    const integrationTypes: IntegrationType[] = ['gmail', 'googlesheets', 'googledrive', 'github', 'asana'];
+    
+    for (const integrationType of integrationTypes) {
+      const oauthProvider = getOAuthProvider(integrationType);
+      if (!oauthProvider) continue;
+      
+      const providerConn = providerConnectionsMap.get(oauthProvider);
+      if (!providerConn) continue;
+      
+      // Check if provider has required scopes for this integration type
+      const requiredScopes = getRequiredScopes(integrationType);
+      const hasAllScopes = requiredScopes.every(scope => providerConn.scopes.has(scope));
+      
+      if (hasAllScopes) {
+        connected.set(integrationType, {
+          id: providerConn.connectionId,
+          status: 'ACTIVE',
+          toolkit: { slug: oauthProvider }
+        });
+      }
+    }
+    
+    return connected;
+  }, [tools, toolStatusMap, providerConnectionsMap]);
 
   /**
    * Get integration type for a tool - checks backend field first, then fallback heuristics
@@ -167,17 +260,45 @@ export function useIntegrationTools() {
       };
     }
 
-    // Check if integration is connected
-    const connection = connectedIntegrations.get(integrationType);
-    
+    // First check if we have status from the tools/status API
+    if (toolStatusMap) {
+      const status = toolStatusMap.get(toolName);
+      if (status) {
+        return {
+          tool,
+          integrationType,
+          isConnected: status.connected && status.has_required_scopes,
+          connectionId: status.connection_id,
+          requiredScopes: tool.required_scopes,
+        };
+      }
+    }
+
+    // Fallback: Check using OAuth provider and scopes
+    const oauthProvider = getOAuthProvider(integrationType);
+    if (oauthProvider) {
+      const providerConn = providerConnectionsMap.get(oauthProvider);
+      if (providerConn) {
+        const hasAllScopes = tool.required_scopes.every(scope => providerConn.scopes.has(scope));
+        return {
+          tool,
+          integrationType,
+          isConnected: hasAllScopes,
+          connectionId: hasAllScopes ? providerConn.connectionId : null,
+          requiredScopes: tool.required_scopes,
+        };
+      }
+    }
+
+    // No connection found
     return {
       tool,
       integrationType,
-      isConnected: !!connection,
-      connectionId: connection?.id || null,
+      isConnected: false,
+      connectionId: null,
       requiredScopes: tool.required_scopes,
     };
-  }, [tools, connectedIntegrations, getToolIntegrationType]);
+  }, [tools, toolStatusMap, providerConnectionsMap, getToolIntegrationType]);
 
   /**
    * Get all tools with their integration status
@@ -196,31 +317,81 @@ export function useIntegrationTools() {
         };
       }
 
-      const connection = connectedIntegrations.get(integrationType);
-      
+      // Use toolStatusMap if available
+      if (toolStatusMap) {
+        const status = toolStatusMap.get(tool.name);
+        if (status) {
+          return {
+            tool,
+            integrationType,
+            isConnected: status.connected && status.has_required_scopes,
+            connectionId: status.connection_id,
+            requiredScopes: tool.required_scopes,
+          };
+        }
+      }
+
+      // Fallback: check using OAuth provider and scopes
+      const oauthProvider = getOAuthProvider(integrationType);
+      if (oauthProvider) {
+        const providerConn = providerConnectionsMap.get(oauthProvider);
+        if (providerConn) {
+          const hasAllScopes = tool.required_scopes.every(scope => providerConn.scopes.has(scope));
+          return {
+            tool,
+            integrationType,
+            isConnected: hasAllScopes,
+            connectionId: hasAllScopes ? providerConn.connectionId : null,
+            requiredScopes: tool.required_scopes,
+          };
+        }
+      }
+
       return {
         tool,
         integrationType,
-        isConnected: !!connection,
-        connectionId: connection?.id || null,
+        isConnected: false,
+        connectionId: null,
         requiredScopes: tool.required_scopes,
       };
     });
-  }, [tools, connectedIntegrations, getToolIntegrationType]);
+  }, [tools, toolStatusMap, providerConnectionsMap, getToolIntegrationType]);
 
   /**
    * Check if a specific integration type is connected
+   * Now properly checks if OAuth provider has required scopes
    */
   const isIntegrationConnected = useCallback((type: IntegrationType): boolean => {
-    return connectedIntegrations.has(type);
-  }, [connectedIntegrations]);
+    // First check connectedIntegrations (which now uses proper scope checking)
+    if (connectedIntegrations.has(type)) {
+      return true;
+    }
+    
+    // Fallback: Check OAuth provider scopes directly
+    const oauthProvider = getOAuthProvider(type);
+    if (!oauthProvider) return false;
+    
+    const providerConn = providerConnectionsMap.get(oauthProvider);
+    if (!providerConn) return false;
+    
+    const requiredScopes = getRequiredScopes(type);
+    return requiredScopes.every(scope => providerConn.scopes.has(scope));
+  }, [connectedIntegrations, providerConnectionsMap]);
 
   /**
    * Get connection ID for an integration type
    */
   const getConnectionId = useCallback((type: IntegrationType): string | null => {
-    return connectedIntegrations.get(type)?.id || null;
-  }, [connectedIntegrations]);
+    const conn = connectedIntegrations.get(type);
+    if (conn?.id) return conn.id;
+    
+    // Fallback: get from provider connections
+    const oauthProvider = getOAuthProvider(type);
+    if (!oauthProvider) return null;
+    
+    const providerConn = providerConnectionsMap.get(oauthProvider);
+    return providerConn?.connectionId || null;
+  }, [connectedIntegrations, providerConnectionsMap]);
 
   /**
    * Initiate OAuth connection for an integration
@@ -252,6 +423,7 @@ export function useIntegrationTools() {
       provider: provider!, // Use OAuth provider (e.g., 'google' for gmail/drive/sheets)
       scope: scopeString,
       callbackUrl,
+      integrationType: type, // Pass integration type so backend tracks which tool triggered this
     });
 
     return result.redirectUrl;
@@ -262,8 +434,9 @@ export function useIntegrationTools() {
    */
   const refresh = useCallback(() => {
     refetchTools();
+    refetchToolStatus();
     refetchConnections();
-  }, [refetchTools, refetchConnections]);
+  }, [refetchTools, refetchToolStatus, refetchConnections]);
 
   return {
     // Data
@@ -272,7 +445,7 @@ export function useIntegrationTools() {
     connectedIntegrations,
     
     // Loading states
-    isLoading: toolsLoading || connectionsLoading || !isLoaded,
+    isLoading: toolsLoading || toolStatusLoading || connectionsLoading || !isLoaded,
     toolsLoading,
     connectionsLoading,
     error: toolsError,
