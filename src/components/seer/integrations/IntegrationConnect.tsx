@@ -2,6 +2,10 @@
  * Generic component for connecting integrations
  * Handles OAuth flow, connection status, and resource selection
  * Frontend controls OAuth scopes (read-only is core differentiation)
+ * 
+ * Connection status is determined by checking if the OAuth provider connection
+ * has all required scopes for this integration type. Multiple integration types
+ * (gmail, googlesheets, googledrive) share the same Google OAuth connection.
  */
 
 import { IntegrationType, formatScopes, getOAuthProvider } from "@/lib/integrations/client";
@@ -11,6 +15,7 @@ import {
   initiateConnection,
   waitForConnection,
   deleteConnectedAccount,
+  getIntegrationStatus,
 } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,43 +97,72 @@ export function IntegrationConnect({
     setConnectionError(null);
 
     try {
-      const response = await listConnectedAccounts({
-        userIds: [userEmail],
-        toolkitSlugs: [config.toolkitSlug],
-      });
-
-      const items = response.items ?? [];
-      const activeAccount = items.find((item) => item.status === "ACTIVE");
-
+      // Use the new integration status API that checks scopes properly
+      // This is the key change - we now check if the OAuth provider has the required scopes
+      // for this specific integration type
+      const status = await getIntegrationStatus(type);
+      
       // Clear any previous errors on successful fetch
       setConnectionError(null);
 
-      if (activeAccount) {
-        console.log(`[IntegrationConnect] Found ACTIVE account for ${type}:`, activeAccount.id);
-        if (activeAccount.user_id) {
-          console.log(`[IntegrationConnect] Account user_id format:`, activeAccount.user_id);
-        }
-        setConnectionId(activeAccount.id);
+      if (status.connected && status.has_required_scopes) {
+        // Connected with all required scopes
+        console.log(`[IntegrationConnect] ${type} is connected with all required scopes`);
+        setConnectionId(status.connection_id);
         setConnectionStatus("connected");
-        // Call onConnected callback - don't include it in deps to avoid loops
-        onConnected?.(activeAccount.id);
-      } else if (items.length) {
-        console.log(`[IntegrationConnect] Found ${items.length} account(s) but none ACTIVE for ${type}`);
-        setConnectionId(items[0].id);
-        setConnectionStatus("pending");
+        onConnected?.(status.connection_id!);
+      } else if (status.connected && !status.has_required_scopes) {
+        // Connected but missing some scopes - user needs to re-auth to add scopes
+        console.log(`[IntegrationConnect] ${type} connected but missing scopes:`, status.missing_scopes);
+        setConnectionId(status.connection_id);
+        setConnectionStatus("needs-auth"); // Show as needing auth to add more scopes
       } else {
-        console.log(`[IntegrationConnect] No accounts found for ${type}`);
+        // Not connected at all
+        console.log(`[IntegrationConnect] ${type} not connected`);
         resetConnectionState();
       }
     } catch (error) {
-      console.error("[IntegrationConnect] Error fetching connections:", error);
-      setConnectionStatus("error");
-      setConnectionError(error instanceof Error ? error.message : "Unknown error");
+      console.error("[IntegrationConnect] Error fetching connection status:", error);
+      
+      // Fallback to legacy approach if new endpoint not available
+      try {
+        const oauthProvider = getOAuthProvider(type);
+        if (oauthProvider) {
+          const response = await listConnectedAccounts({
+            userIds: [userEmail],
+            toolkitSlugs: [oauthProvider],
+          });
+          
+          const items = response.items ?? [];
+          const activeAccount = items.find((item) => item.status === "ACTIVE");
+          
+          if (activeAccount) {
+            // Check if the account has required scopes
+            const grantedScopes = new Set((activeAccount.scopes || "").split(" ").filter(Boolean));
+            const hasScopes = requiredScopes.every(s => grantedScopes.has(s));
+            
+            if (hasScopes) {
+              setConnectionId(activeAccount.id);
+              setConnectionStatus("connected");
+              onConnected?.(activeAccount.id);
+            } else {
+              setConnectionId(activeAccount.id);
+              setConnectionStatus("needs-auth");
+            }
+          } else {
+            resetConnectionState();
+          }
+        }
+      } catch (fallbackError) {
+        console.error("[IntegrationConnect] Fallback also failed:", fallbackError);
+        setConnectionStatus("error");
+        setConnectionError(error instanceof Error ? error.message : "Unknown error");
+      }
     } finally {
       setConnectionLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canConnect, config.toolkitSlug, resetConnectionState, userEmail]);
+  }, [canConnect, type, resetConnectionState, userEmail, requiredScopes]);
 
   const handleAuthorize = useCallback(async () => {
     if (!userEmail) return;
@@ -166,6 +200,7 @@ export function IntegrationConnect({
         provider: provider!, // Use OAuth provider (e.g., 'google' for gmail/drive/sheets)
         scope: scopeString, // Always pass scopes - frontend controls permissions
         callbackUrl,
+        integrationType: type, // Pass integration type so backend tracks which tool triggered this
       });
 
       if (!connectionRequest.redirectUrl) {

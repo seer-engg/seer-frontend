@@ -10,6 +10,7 @@ import { Node, Edge } from '@xyflow/react';
 import { WorkflowCanvas, WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
 import { ToolPalette } from '@/components/workflows/ToolPalette';
 import { WorkflowChatAssistant } from '@/components/workflows/WorkflowChatAssistant';
+import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
 import { Button } from '@/components/ui/button';
 import { Play, Save, Trash2, FileEdit, Clock, ChevronRight, Bot } from 'lucide-react';
@@ -17,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useBackendHealth } from '@/lib/backend-health';
@@ -32,6 +34,8 @@ export default function Workflows() {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
   const [showInputDialog, setShowInputDialog] = useState(false);
   const [inputData, setInputData] = useState<Record<string, any>>({});
+  const [showConfigDialog, setShowConfigDialog] = useState(false);
+  const [configNode, setConfigNode] = useState<Node<WorkflowNodeData> | null>(null);
   
   const {
     workflows,
@@ -122,46 +126,27 @@ export default function Workflows() {
     }
   }, [nodes, edges, workflowName, selectedWorkflowId, createWorkflow, updateWorkflow]);
 
-  const handleConfigureBlock = useCallback(async (node: Node<WorkflowNodeData>) => {
-    // Ensure workflow is saved before navigating
-    let workflowId = selectedWorkflowId;
-    
-    if (!workflowId) {
-      // Save workflow first if it doesn't exist
-      try {
-        const graphData = { nodes, edges };
-        const workflow = await createWorkflow(workflowName, undefined, graphData);
-        workflowId = workflow.id;
-        setSelectedWorkflowId(workflow.id);
-        toast.success('Workflow saved', {
-          description: 'Workflow has been saved',
-          duration: 2000,
-        });
-      } catch (error) {
-        console.error('Failed to save workflow:', error);
-        toast.error('Failed to save workflow', {
-          description: 'Please save the workflow before configuring blocks',
-          duration: 3000,
-        });
-        return;
-      }
-    } else {
-      // Update existing workflow to ensure latest state is saved
-      try {
-        const graphData = { nodes, edges };
-        await updateWorkflow(workflowId, {
-          name: workflowName,
-          graph_data: graphData,
-        });
-      } catch (error) {
-        console.error('Failed to update workflow:', error);
-        // Continue anyway - workflow might already be up to date
-      }
-    }
+  const handleConfigureBlock = useCallback((node: Node<WorkflowNodeData>) => {
+    // Open the configuration dialog
+    setConfigNode(node);
+    setShowConfigDialog(true);
+  }, []);
 
-    // Navigate to block configuration page
-    navigate(`/workflows/${workflowId}/blocks/${node.id}/configure`);
-  }, [selectedWorkflowId, nodes, edges, workflowName, createWorkflow, updateWorkflow, navigate]);
+  const handleConfigUpdate = useCallback((nodeId: string, updates: Partial<WorkflowNodeData>) => {
+    setNodes((nds) =>
+      nds.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, ...updates } }
+          : node
+      )
+    );
+    // Also update the configNode if it's the same node
+    setConfigNode((prev) => 
+      prev && prev.id === nodeId 
+        ? { ...prev, data: { ...prev.data, ...updates } }
+        : prev
+    );
+  }, []);
 
   // Extract input blocks from current workflow
   const inputBlocks = useMemo(() => {
@@ -544,6 +529,26 @@ export default function Workflows() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Block Configuration Dialog */}
+      <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{configNode?.data.label || 'Block Configuration'}</DialogTitle>
+            <DialogDescription>
+              {configNode?.data.type.replace('_', ' ')} Block
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="flex-1 -mx-6 px-6">
+            <BlockConfigPanel
+              node={configNode}
+              onUpdate={handleConfigUpdate}
+              allNodes={nodes}
+              autoSave={false}
+            />
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
