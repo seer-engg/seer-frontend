@@ -523,9 +523,6 @@ export default function Workflows() {
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 rounded-t-lg">
                   <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-sm truncate">{configNode.data.label}</h3>
-                    <p className="text-xs text-muted-foreground capitalize">
-                      {configNode.data.type.replace('_', ' ')} Block
-                    </p>
                   </div>
                   <Button
                     variant="ghost"
@@ -543,7 +540,7 @@ export default function Workflows() {
                     node={configNode}
                     onUpdate={handleConfigUpdate}
                     allNodes={nodes}
-                    autoSave={false}
+                    autoSave={true}
                   />
                 </ScrollArea>
               </div>

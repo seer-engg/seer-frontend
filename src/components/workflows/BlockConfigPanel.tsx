@@ -397,21 +397,9 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
         
         return (
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="tool-name">Tool Name</Label>
-              <Input
-                id="tool-name"
-                value={config.tool_name || ''}
-                onChange={(e) =>
-                  setConfig({ ...config, tool_name: e.target.value })
-                }
-                placeholder="e.g., gmail_read_emails"
-              />
-            </div>
-            
             {/* Render individual parameters based on schema */}
             {Object.keys(paramSchema).length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <Label className="text-sm font-semibold">Parameters</Label>
                 {Object.entries(paramSchema).map(([paramName, paramDef]: [string, any]) => {
                   const paramType = paramDef.type || 'string';
@@ -420,16 +408,29 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                   const hasDefault = paramDef.default !== undefined;
                   
                   return (
-                    <div key={paramName} className="space-y-1">
-                      <Label htmlFor={`param-${paramName}`} className="text-xs">
-                        {paramName}
-                        {isRequired && <span className="text-destructive ml-1">*</span>}
+                    <div key={paramName} className="grid grid-cols-2 gap-4 items-start">
+                      {/* Left side: Parameter name + description */}
+                      <div className="space-y-1 text-left">
+                        <Label htmlFor={`param-${paramName}`} className="text-xs font-medium">
+                          {paramName}
+                          {isRequired && <span className="text-destructive ml-1">*</span>}
+                        </Label>
                         {paramDef.description && (
-                          <span className="text-muted-foreground font-normal ml-2">
-                            ({paramDef.description})
-                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            {paramDef.description}
+                          </p>
                         )}
-                      </Label>
+                        {hasDefault && (
+                          <p className="text-xs text-muted-foreground italic">
+                            Default: {typeof paramDef.default === 'object' 
+                              ? JSON.stringify(paramDef.default) 
+                              : String(paramDef.default)}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Right side: Input field */}
+                      <div className="space-y-1">
                       
                       {paramType === 'boolean' ? (
                         <div className="flex items-center space-x-2">
@@ -736,6 +737,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                           )}
                         </div>
                       )}
+                      </div>
                     </div>
                   );
                 })}
@@ -1017,19 +1019,18 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
   };
 
   return (
-    <div className="p-4">
-      <Card>
-        <CardContent className="space-y-4">
-          {renderConfigFields()}
-          
-          
+    <Card>
+      <CardContent className="p-6 space-y-4">
+        {renderConfigFields()}
+        
+        {!autoSave && (
           <Button onClick={handleSave} className="w-full" size="sm">
             <Save className="w-4 h-4 mr-2" />
             Save Configuration
           </Button>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

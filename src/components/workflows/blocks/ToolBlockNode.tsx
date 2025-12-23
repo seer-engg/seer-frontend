@@ -17,13 +17,14 @@ import {
   AlertTriangle, 
   Loader2,
   ExternalLink,
-  Mail,
-  FolderOpen,
-  Github,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { IntegrationType } from '@/lib/integrations/client';
+import { GmailSVG } from '@/components/icons/gmail';
+import { GoogleDriveSVG } from '@/components/icons/googledrive';
+import { GoogleSheetsSVG } from '@/components/icons/googlesheets';
+import { GitHubSVG } from '@/components/icons/github';
 
 /**
  * Get icon for integration type
@@ -31,11 +32,13 @@ import { IntegrationType } from '@/lib/integrations/client';
 function getIntegrationIcon(integrationType: IntegrationType | null) {
   switch (integrationType) {
     case 'gmail':
-      return <Mail className="w-4 h-4" />;
+      return <GmailSVG width={16} height={16} />;
     case 'googledrive':
-      return <FolderOpen className="w-4 h-4" />;
+      return <GoogleDriveSVG width={16} height={16} />;
+    case 'googlesheets':
+      return <GoogleSheetsSVG width={16} height={16} />;
     case 'github':
-      return <Github className="w-4 h-4" />;
+      return <GitHubSVG width={16} height={16} />;
     default:
       return <Wrench className="w-4 h-4" />;
   }
@@ -164,7 +167,6 @@ export const ToolBlockNode = memo(function ToolBlockNode(
             className="flex items-center gap-1 text-[10px] px-1.5 py-0 h-5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
           >
             <CheckCircle2 className="w-3 h-3" />
-            {displayName}
           </Badge>
         ),
         needsAuth: false,
@@ -213,44 +215,39 @@ export const ToolBlockNode = memo(function ToolBlockNode(
       ))}
 
       {/* Block content */}
-      <div className="flex flex-col gap-2">
-        {/* Header row */}
-        <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              'w-8 h-8 rounded flex items-center justify-center',
-              needsAuth ? 'bg-amber-500/10' : 'bg-primary/10',
-            )}
-          >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-            ) : (
-              <div className={cn(needsAuth ? 'text-amber-600 dark:text-amber-400' : 'text-primary')}>
-                {icon}
-              </div>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{data.label}</p>
-          </div>
+      <div className="flex items-center gap-2">
+        <div
+          className={cn(
+            'w-8 h-8 rounded flex items-center justify-center',
+            needsAuth ? 'bg-amber-500/10' : 'bg-primary/10',
+          )}
+        >
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          ) : (
+            <div className={cn(needsAuth ? 'text-amber-600 dark:text-amber-400' : 'text-primary')}>
+              {icon}
+            </div>
+          )}
         </div>
-
-        {/* Status row */}
-        {(statusBadge || needsAuth) && (
-          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">{data.label}</p>
+        </div>
+        {statusBadge && (
+          <div className="shrink-0">
             {statusBadge}
-            {needsAuth && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                onClick={handleConnect}
-              >
-                Connect
-                <ExternalLink className="w-3 h-3 ml-1" />
-              </Button>
-            )}
           </div>
+        )}
+        {needsAuth && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
+            onClick={handleConnect}
+          >
+            Connect
+            <ExternalLink className="w-3 h-3 ml-1" />
+          </Button>
         )}
       </div>
 

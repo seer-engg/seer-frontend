@@ -3,9 +3,13 @@
  */
 
 import type { IntegrationType } from "./client";
-import { Github, FolderOpen, CheckSquare2, Sparkles, Mail, FileText } from "lucide-react";
+import { CheckSquare2, Sparkles } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import { getRequiredScopes } from "./client";
+import { GmailIcon } from "@/components/icons/gmail";
+import { GoogleDriveIcon } from "@/components/icons/googledrive";
+import { GoogleSheetsIcon } from "@/components/icons/googlesheets";
+import { GitHubIcon } from "@/components/icons/github";
 
 export interface IntegrationConfig {
   type: IntegrationType;
@@ -30,7 +34,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
   github: {
     type: "github",
     displayName: "GitHub",
-    icon: Github,
+    icon: GitHubIcon,
     toolkitSlug: "github",
     requiresResourceSelection: true,
     resourceLabel: "Repository",
@@ -39,7 +43,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
   googledrive: {
     type: "googledrive",
     displayName: "Google Drive",
-    icon: FolderOpen,
+    icon: GoogleDriveIcon,
     toolkitSlug: "googledrive",
     requiresResourceSelection: false, // Optional
     resourceLabel: "Folder",
@@ -57,7 +61,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
   gmail: {
     type: "gmail",
     displayName: "Gmail",
-    icon: Mail,
+    icon: GmailIcon,
     toolkitSlug: "gmail",
     requiresResourceSelection: false,
     resourceLabel: "Mailbox",
@@ -66,7 +70,7 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
   googlesheets: {
     type: "googlesheets",
     displayName: "Google Sheets",
-    icon: FileText,
+    icon: GoogleSheetsIcon,
     toolkitSlug: "googlesheets",
     requiresResourceSelection: false,
     resourceLabel: "Spreadsheet",

@@ -192,3 +192,20 @@
     box-shadow: inset 9px 0 6px -1px rgb(0 0 0 / 0.02);
   }
 }
+
+/* Remove default React Flow node wrapper styling */
+.react-flow__node {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.react-flow__node-input,
+.react-flow__node-tool,
+.react-flow__node-code,
+.react-flow__node-llm,
+.react-flow__node-if_else,
+.react-flow__node-for_loop {
+  background: transparent !important;
+  border: none !important;
+}

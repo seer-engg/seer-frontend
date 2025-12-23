@@ -65,9 +65,6 @@ export const BaseBlockNode = memo(function BaseBlockNode({
         )}
         <div className="flex-1 min-w-0">
           <p className="font-medium text-sm truncate">{data.label}</p>
-          <p className="text-xs text-muted-foreground capitalize">
-            {data.type.replace('_', ' ')}
-          </p>
         </div>
       </div>
 
