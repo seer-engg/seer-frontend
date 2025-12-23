@@ -6,9 +6,8 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { backendApiClient } from '@/lib/api-client';
-import { listConnectedAccounts, initiateConnection, ConnectedAccount } from '@/lib/tools/proxy-client';
-import { IntegrationType, formatScopes, getRequiredScopes } from '@/lib/integrations/client';
+import { backendApiClient, listConnectedAccounts, initiateConnection, ConnectedAccount } from '@/lib/api-client';
+import { IntegrationType, formatScopes, getRequiredScopes, getOAuthProvider } from '@/lib/integrations/client';
 import { useUser } from '@clerk/clerk-react';
 
 /**
@@ -19,6 +18,7 @@ export interface ToolMetadata {
   description: string;
   required_scopes: string[];
   integration_type?: string | null;
+  provider?: string | null;  // OAuth provider (e.g., 'google', 'github')
   parameters: {
     type: string;
     properties: Record<string, any>;
@@ -237,12 +237,19 @@ export function useIntegrationTools() {
       return null;
     }
 
+    // Get the OAuth provider for this integration type
+    const provider = getOAuthProvider(type);
+    if (!provider && type !== 'sandbox') {
+      console.error(`[useIntegrationTools] No OAuth provider configured for ${type}`);
+      return null;
+    }
+
     const scopeString = formatScopes(scopes);
     const callbackUrl = `${window.location.origin}${window.location.pathname}`;
 
     const result = await initiateConnection({
       userId: userEmail,
-      provider: type,
+      provider: provider!, // Use OAuth provider (e.g., 'google' for gmail/drive/sheets)
       scope: scopeString,
       callbackUrl,
     });

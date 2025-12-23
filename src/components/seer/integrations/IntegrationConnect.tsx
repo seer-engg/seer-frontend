@@ -4,14 +4,14 @@
  * Frontend controls OAuth scopes (read-only is core differentiation)
  */
 
-import { IntegrationType, formatScopes } from "@/lib/integrations/client";
+import { IntegrationType, formatScopes, getOAuthProvider } from "@/lib/integrations/client";
 import { INTEGRATION_CONFIGS, ConnectionStatus, ConnectedAccount } from "@/lib/integrations/config";
 import {
   listConnectedAccounts,
   initiateConnection,
   waitForConnection,
   deleteConnectedAccount,
-} from "@/lib/tools/proxy-client";
+} from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -143,6 +143,17 @@ export function IntegrationConnect({
       return;
     }
     
+    // Get the OAuth provider for this integration type
+    const provider = getOAuthProvider(type);
+    if (!provider && !isSandbox) {
+      toast({
+        title: "Configuration error",
+        description: `No OAuth provider configured for ${config.displayName}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setAuthorizeLoading(true);
     setConnectionError(null);
 
@@ -152,7 +163,7 @@ export function IntegrationConnect({
       
       const connectionRequest = await initiateConnection({
         userId: userEmail,
-        provider: type,
+        provider: provider!, // Use OAuth provider (e.g., 'google' for gmail/drive/sheets)
         scope: scopeString, // Always pass scopes - frontend controls permissions
         callbackUrl,
       });

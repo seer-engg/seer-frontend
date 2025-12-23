@@ -20,6 +20,8 @@ interface Tool {
   description: string;
   toolkit?: string;
   slug?: string;
+  provider?: string;  // OAuth provider (e.g., 'google', 'github')
+  integration_type?: string;  // Integration type (e.g., 'gmail', 'googlesheets')
 }
 
 interface BuiltInBlock {
@@ -105,16 +107,13 @@ export function ToolPalette({
   };
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedToolkit, setSelectedToolkit] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
 
   // Fetch tools
   const { data: toolsData, isLoading } = useQuery({
-    queryKey: ['tools', selectedToolkit],
+    queryKey: ['tools'],
     queryFn: async () => {
-      const url = selectedToolkit
-        ? `/api/tools?integration_type=${selectedToolkit}`
-        : '/api/tools';
-      const response = await backendApiClient.request<{ tools: Tool[] }>(url, {
+      const response = await backendApiClient.request<{ tools: Tool[] }>('/api/tools', {
         method: 'GET',
       });
       return response;
@@ -123,24 +122,26 @@ export function ToolPalette({
 
   const tools = toolsData?.tools || [];
   
-  // Group tools by toolkit
-  const toolsByToolkit = tools.reduce((acc, tool) => {
-    const toolkit = tool.toolkit || 'other';
-    if (!acc[toolkit]) {
-      acc[toolkit] = [];
+  // Group tools by provider (for OAuth grouping)
+  const toolsByProvider = tools.reduce((acc, tool) => {
+    const provider = tool.provider || 'other';
+    if (!acc[provider]) {
+      acc[provider] = [];
     }
-    acc[toolkit].push(tool);
+    acc[provider].push(tool);
     return acc;
   }, {} as Record<string, Tool[]>);
 
-  const toolkits = Object.keys(toolsByToolkit);
+  const providers = Object.keys(toolsByProvider);
 
-  // Filter tools and blocks by search query
-  const filteredTools = tools.filter(
-    (tool) =>
+  // Filter tools by search query and selected provider
+  const filteredTools = tools.filter((tool) => {
+    const matchesSearch =
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tool.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      tool.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesProvider = !selectedProvider || tool.provider === selectedProvider;
+    return matchesSearch && matchesProvider;
+  });
 
   const filteredBlocks = BUILT_IN_BLOCKS.filter(
     (block) =>
@@ -157,6 +158,8 @@ export function ToolPalette({
           label: tool.name,
           config: {
             tool_name: tool.slug || tool.name,
+            provider: tool.provider,  // Include provider for OAuth connections
+            integration_type: tool.integration_type,
             params: {},
           },
         });
@@ -315,23 +318,23 @@ export function ToolPalette({
           ) : (
             <div>
               <h3 className="text-sm font-medium mb-2">Integration Tools</h3>
-              {toolkits.length > 0 && (
+              {providers.length > 0 && (
                 <div className="flex gap-2 mb-3 flex-wrap">
                   <Badge
-                    variant={selectedToolkit === null ? 'default' : 'outline'}
+                    variant={selectedProvider === null ? 'default' : 'outline'}
                     className="cursor-pointer"
-                    onClick={() => setSelectedToolkit(null)}
+                    onClick={() => setSelectedProvider(null)}
                   >
                     All
                   </Badge>
-                  {toolkits.map((toolkit) => (
+                  {providers.map((provider) => (
                     <Badge
-                      key={toolkit}
-                      variant={selectedToolkit === toolkit ? 'default' : 'outline'}
-                      className="cursor-pointer"
-                      onClick={() => setSelectedToolkit(toolkit)}
+                      key={provider}
+                      variant={selectedProvider === provider ? 'default' : 'outline'}
+                      className="cursor-pointer capitalize"
+                      onClick={() => setSelectedProvider(provider)}
                     >
-                      {toolkit}
+                      {provider}
                     </Badge>
                   ))}
                 </div>
@@ -355,9 +358,9 @@ export function ToolPalette({
                               {tool.description}
                             </p>
                           )}
-                          {tool.toolkit && (
-                            <Badge variant="outline" className="mt-1 text-xs">
-                              {tool.toolkit}
+                          {tool.provider && (
+                            <Badge variant="outline" className="mt-1 text-xs capitalize">
+                              {tool.provider}
                             </Badge>
                           )}
                         </div>
