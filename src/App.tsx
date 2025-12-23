@@ -6,10 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import LiveRun from "./pages/LiveRun";
 import ToolOrchestrator from "./pages/ToolOrchestrator";
-import TraceAnalyzer from "./pages/TraceAnalyzer";
-import ToolHub from "./pages/ToolHub";
 import Settings from "./pages/Settings";
-import Evals from "./pages/Evals";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
@@ -72,41 +69,11 @@ const App = () => (
               }
             />
             <Route
-              path="/trace"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <TraceAnalyzer />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/tools"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <ToolHub />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/settings"
               element={
                 <ProtectedRoute>
                   <SeerLayout>
                     <Settings />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/eval"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <Evals />
                   </SeerLayout>
                 </ProtectedRoute>
               }

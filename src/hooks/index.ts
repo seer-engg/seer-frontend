@@ -24,5 +24,4 @@ export { useMediaQuery } from './useMediaQuery';
 export { useQueryState } from './useQueryState';
 export { useUsageGate } from './useUsageGate';
 export { useFileUpload } from './use-file-upload';
-export { useAgentStream } from './useAgentStream';
 
