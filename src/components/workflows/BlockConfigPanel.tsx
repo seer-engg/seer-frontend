@@ -4,7 +4,7 @@
  * Right sidebar panel for configuring selected block.
  * Supports editing parameters, Python code, and OAuth scopes.
  */
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Node } from '@xyflow/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,7 @@ import { Code, Save } from 'lucide-react';
 import { backendApiClient } from '@/lib/api-client';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StructuredOutputEditor } from './StructuredOutputEditor';
+import { toast } from '@/components/ui/sonner';
 
 interface ToolMetadata {
   name: string;
@@ -32,14 +33,37 @@ interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;
   onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
   allNodes?: Node<WorkflowNodeData>[]; // All nodes in workflow for reference dropdown
+  autoSave?: boolean; // Enable auto-save on unmount (default: true for backward compatibility)
 }
 
-export function BlockConfigPanel({ node, onUpdate, allNodes = [] }: BlockConfigPanelProps) {
+export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = true }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [pythonCode, setPythonCode] = useState('');
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
   const [inputRefs, setInputRefs] = useState<Record<string, string>>({});
   const [useStructuredOutput, setUseStructuredOutput] = useState(false);
+  
+  // Autocomplete state for template variables
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [partialVariable, setPartialVariable] = useState('');
+  const systemPromptRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Use refs to track latest values for auto-save on unmount
+  const configRef = useRef(config);
+  const inputRefsRef = useRef(inputRefs);
+  const pythonCodeRef = useRef(pythonCode);
+  const oauthScopeRef = useRef(oauthScope);
+  const isSavingRef = useRef(false); // Track if save is in progress to prevent concurrent saves
+  const originalNodeRef = useRef(node); // Track original node to detect changes
+  
+  // Update refs when state changes
+  useEffect(() => {
+    configRef.current = config;
+    inputRefsRef.current = inputRefs;
+    pythonCodeRef.current = pythonCode;
+    oauthScopeRef.current = oauthScope;
+  }, [config, inputRefs, pythonCode, oauthScope]);
 
   const toolName = config.tool_name || config.toolName || '';
 
@@ -96,6 +120,16 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [] }: BlockConfigP
     return allNodes.filter(n => n.id !== node.id);
   }, [node, allNodes]);
 
+  // Extract available variables from input blocks
+  const availableVariables = useMemo(() => {
+    if (!allNodes) return [];
+    
+    return allNodes
+      .filter(node => node.data.type === 'input')
+      .map(node => node.data.config?.variable_name)
+      .filter(Boolean) as string[];
+  }, [allNodes]);
+
   useEffect(() => {
     if (node) {
       setConfig(node.data.config || {});
@@ -103,8 +137,138 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [] }: BlockConfigP
       setOAuthScope(node.data.oauth_scope);
       setInputRefs(node.data.config?.input_refs || {});
       setUseStructuredOutput(!!node.data.config?.output_schema);
+      originalNodeRef.current = node; // Update original node reference
     }
   }, [node]);
+
+  // Auto-save config changes when component unmounts (modal closes)
+  // Only runs if autoSave is enabled (default true for backward compatibility)
+  useEffect(() => {
+    if (!autoSave) return; // Skip auto-save if disabled
+    
+    return () => {
+      // Auto-save when component unmounts (modal closes)
+      // Use refs to get latest values
+      if (node && !isSavingRef.current) {
+        const originalNode = originalNodeRef.current;
+        if (!originalNode) return;
+        
+        // Check if data actually changed before saving
+        const hasChanges = 
+          JSON.stringify(configRef.current) !== JSON.stringify(originalNode.data.config || {}) ||
+          pythonCodeRef.current !== (originalNode.data.python_code || '') ||
+          oauthScopeRef.current !== originalNode.data.oauth_scope ||
+          JSON.stringify(inputRefsRef.current) !== JSON.stringify(originalNode.data.config?.input_refs || {});
+        
+        if (hasChanges) {
+          isSavingRef.current = true;
+          // Start with original node config to preserve all fields, then merge current changes
+          const originalConfig = originalNode.data.config || {};
+          onUpdate(originalNode.id, {
+            config: {
+              ...originalConfig,
+              ...configRef.current,
+              input_refs: inputRefsRef.current,
+              output_schema: configRef.current.output_schema,
+            },
+            python_code: pythonCodeRef.current,
+            oauth_scope: oauthScopeRef.current,
+          });
+          // Reset flag after a delay to allow save to complete
+          setTimeout(() => {
+            isSavingRef.current = false;
+          }, 1000);
+        }
+      }
+    };
+  }, [node, onUpdate, autoSave]); // Include autoSave in dependencies
+
+  // Filter variables based on partial input
+  const filteredVariables = useMemo(() => {
+    if (!partialVariable) return availableVariables;
+    
+    return availableVariables.filter(variable =>
+      variable.toLowerCase().startsWith(partialVariable.toLowerCase())
+    );
+  }, [availableVariables, partialVariable]);
+
+  // Check for autocomplete trigger
+  const checkForAutocomplete = (value: string, cursorPosition: number) => {
+    // Find the last {{ before cursor
+    const textBeforeCursor = value.substring(0, cursorPosition);
+    const lastOpenBrace = textBeforeCursor.lastIndexOf('{{');
+    
+    if (lastOpenBrace !== -1) {
+      // Check if there's a closing }} after the {{
+      const textAfterOpen = textBeforeCursor.substring(lastOpenBrace + 2);
+      const hasClosing = textAfterOpen.includes('}}');
+      
+      if (!hasClosing) {
+        // Extract partial variable name
+        const partial = textAfterOpen.trim();
+        setPartialVariable(partial);
+        setShowAutocomplete(true);
+        setSelectedIndex(0);
+        return;
+      }
+    }
+    
+    setShowAutocomplete(false);
+    setPartialVariable('');
+  };
+
+  // Insert selected variable into textarea
+  const insertVariable = (variable: string) => {
+    const currentValue = config.system_prompt || '';
+    const textarea = systemPromptRef.current;
+    if (!textarea) return;
+    
+    const cursorPos = textarea.selectionStart || 0;
+    const textBeforeCursor = currentValue.substring(0, cursorPos);
+    const textAfterCursor = currentValue.substring(cursorPos);
+    
+    // Find the last {{ before cursor
+    const lastOpenBrace = textBeforeCursor.lastIndexOf('{{');
+    
+    if (lastOpenBrace !== -1) {
+      // Replace from {{ to cursor with {{variable}}
+      const beforeBrace = currentValue.substring(0, lastOpenBrace);
+      const newValue = `${beforeBrace}{{${variable}}}${textAfterCursor}`;
+      
+      setConfig({ ...config, system_prompt: newValue });
+      setShowAutocomplete(false);
+      setPartialVariable('');
+      
+      // Set cursor position after }}
+      setTimeout(() => {
+        const newCursorPos = lastOpenBrace + variable.length + 4; // {{variable}}
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+        textarea.focus();
+      }, 0);
+    }
+  };
+
+  // Handle keyboard navigation for autocomplete
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showAutocomplete && filteredVariables.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(prev => Math.min(prev + 1, filteredVariables.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(prev => Math.max(prev - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filteredVariables[selectedIndex]) {
+          insertVariable(filteredVariables[selectedIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowAutocomplete(false);
+        setPartialVariable('');
+      }
+    }
+  };
 
   if (!node) {
     return (
@@ -116,13 +280,21 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [] }: BlockConfigP
 
   const handleSave = () => {
     if (node) {
+      // Start with original node config to preserve all fields, then merge current changes
+      const originalConfig = node.data.config || {};
       onUpdate(node.id, {
         config: {
+          ...originalConfig,
           ...config,
           input_refs: inputRefs,
+          output_schema: config.output_schema, // Explicitly include output_schema
         },
         python_code: pythonCode,
         oauth_scope: oauthScope,
+      });
+      toast.success('Configuration saved', {
+        description: 'Block configuration has been saved successfully',
+        duration: 2000,
       });
     }
   };
@@ -331,17 +503,48 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [] }: BlockConfigP
       case 'llm':
         return (
           <div className="space-y-4">
-            <div>
+            <div className="relative">
               <Label htmlFor="system-prompt">System Prompt</Label>
               <Textarea
+                ref={systemPromptRef}
                 id="system-prompt"
                 value={config.system_prompt || ''}
-                onChange={(e) =>
-                  setConfig({ ...config, system_prompt: e.target.value })
-                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setConfig({ ...config, system_prompt: value });
+                  // Check if {{ was just typed
+                  checkForAutocomplete(value, e.target.selectionStart);
+                }}
+                onKeyDown={handleKeyDown}
+                onBlur={() => {
+                  // Close autocomplete when textarea loses focus (with delay to allow click)
+                  setTimeout(() => setShowAutocomplete(false), 200);
+                }}
                 placeholder="You are a helpful assistant..."
                 rows={6}
+                className="max-h-[200px] overflow-y-auto"
               />
+              {showAutocomplete && filteredVariables.length > 0 && (
+                <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover shadow-md max-h-60 overflow-auto">
+                  <div className="p-1">
+                    {filteredVariables.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No variables found</div>
+                    ) : (
+                      filteredVariables.map((variable, index) => (
+                        <div
+                          key={variable}
+                          onClick={() => insertVariable(variable)}
+                          className={`px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent ${
+                            index === selectedIndex ? 'bg-accent' : ''
+                          }`}
+                        >
+                          {variable}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="model">Model</Label>
@@ -531,7 +734,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [] }: BlockConfigP
   };
 
   return (
-    <div className="h-full overflow-y-auto p-4">
+    <div className="p-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">{node.data.label}</CardTitle>

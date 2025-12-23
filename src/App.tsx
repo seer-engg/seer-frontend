@@ -15,6 +15,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
 import WorkflowExecution from "./pages/WorkflowExecution";
+import BlockConfiguration from "./pages/BlockConfiguration";
 
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
@@ -126,6 +127,16 @@ const App = () => (
                 <ProtectedRoute>
                   <SeerLayout>
                     <WorkflowExecution />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows/:workflowId/blocks/:blockId/configure"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <BlockConfiguration />
                   </SeerLayout>
                 </ProtectedRoute>
               }

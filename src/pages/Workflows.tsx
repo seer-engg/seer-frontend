@@ -9,7 +9,6 @@ import { useNavigate } from 'react-router-dom';
 import { Node, Edge } from '@xyflow/react';
 import { WorkflowCanvas, WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
 import { ToolPalette } from '@/components/workflows/ToolPalette';
-import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
 import { WorkflowChatAssistant } from '@/components/workflows/WorkflowChatAssistant';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,6 @@ import { Play, Save, Trash2, FileEdit, Clock, ChevronRight, Bot } from 'lucide-r
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -34,7 +32,6 @@ export default function Workflows() {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
   const [showInputDialog, setShowInputDialog] = useState(false);
   const [inputData, setInputData] = useState<Record<string, any>>({});
-  const [selectedNodeForConfig, setSelectedNodeForConfig] = useState<Node<WorkflowNodeData> | null>(null);
   
   const {
     workflows,
@@ -124,6 +121,47 @@ export default function Workflows() {
       alert('Failed to save workflow');
     }
   }, [nodes, edges, workflowName, selectedWorkflowId, createWorkflow, updateWorkflow]);
+
+  const handleConfigureBlock = useCallback(async (node: Node<WorkflowNodeData>) => {
+    // Ensure workflow is saved before navigating
+    let workflowId = selectedWorkflowId;
+    
+    if (!workflowId) {
+      // Save workflow first if it doesn't exist
+      try {
+        const graphData = { nodes, edges };
+        const workflow = await createWorkflow(workflowName, undefined, graphData);
+        workflowId = workflow.id;
+        setSelectedWorkflowId(workflow.id);
+        toast.success('Workflow saved', {
+          description: 'Workflow has been saved',
+          duration: 2000,
+        });
+      } catch (error) {
+        console.error('Failed to save workflow:', error);
+        toast.error('Failed to save workflow', {
+          description: 'Please save the workflow before configuring blocks',
+          duration: 3000,
+        });
+        return;
+      }
+    } else {
+      // Update existing workflow to ensure latest state is saved
+      try {
+        const graphData = { nodes, edges };
+        await updateWorkflow(workflowId, {
+          name: workflowName,
+          graph_data: graphData,
+        });
+      } catch (error) {
+        console.error('Failed to update workflow:', error);
+        // Continue anyway - workflow might already be up to date
+      }
+    }
+
+    // Navigate to block configuration page
+    navigate(`/workflows/${workflowId}/blocks/${node.id}/configure`);
+  }, [selectedWorkflowId, nodes, edges, workflowName, createWorkflow, updateWorkflow, navigate]);
 
   // Extract input blocks from current workflow
   const inputBlocks = useMemo(() => {
@@ -432,7 +470,7 @@ export default function Workflows() {
             onNodeSelect={setSelectedNodeId}
             selectedNodeId={selectedNodeId}
             onNodeDoubleClick={(event, node) => {
-              setSelectedNodeForConfig(node);
+              handleConfigureBlock(node);
             }}
           />
         </div>
@@ -473,28 +511,6 @@ export default function Workflows() {
           </ResizablePanel>
         )}
       </ResizablePanelGroup>
-
-      {/* Block Configuration Modal */}
-      <Dialog open={!!selectedNodeForConfig} onOpenChange={(open) => !open && setSelectedNodeForConfig(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
-          <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
-            <DialogTitle>Configure Block</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <ScrollArea className="h-full px-6 pb-6">
-              {selectedNodeForConfig && (
-                <BlockConfigPanel
-                  node={selectedNodeForConfig}
-                  onUpdate={(nodeId, updates) => {
-                    handleNodeUpdate(nodeId, updates);
-                  }}
-                  allNodes={nodes}
-                />
-              )}
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Input Dialog */}
       <AlertDialog open={showInputDialog} onOpenChange={setShowInputDialog}>
