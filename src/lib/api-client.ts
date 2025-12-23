@@ -231,4 +231,164 @@ interface WindowWithClerk extends Window {
   };
 }
 
+// ============================================================================
+// Integration & Tool Execution Types and Functions
+// ============================================================================
 
+export interface ConnectedAccount {
+  id: string;
+  status: "ACTIVE" | "PENDING" | "INACTIVE";
+  user_id?: string;
+  toolkit: {
+    slug: string;
+  };
+}
+
+export interface ListConnectedAccountsResponse {
+  items: ConnectedAccount[];
+  total: number;
+}
+
+export interface ConnectResponse {
+  redirectUrl: string;
+  connectionId: string;
+}
+
+export interface WaitForConnectionResponse {
+  status: string;
+  connectionId: string;
+}
+
+export interface ExecuteToolResponse {
+  data: unknown;
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * List connected accounts for a user
+ */
+export async function listConnectedAccounts(params: {
+  userIds?: string[];
+  toolkitSlugs?: string[];
+  authConfigIds?: string[];
+}): Promise<ListConnectedAccountsResponse> {
+  // We only support user_id now.
+  // Take the first user_id from the list if available
+  const userId = params.userIds?.[0];
+  if (!userId) {
+    return { items: [], total: 0 };
+  }
+
+  const searchParams = new URLSearchParams();
+  searchParams.append("user_id", userId);
+
+  const endpoint = `/api/integrations?${searchParams.toString()}`;
+  const response = await backendApiClient.request<{ items: ConnectedAccount[] }>(endpoint);
+
+  // Filter by toolkitSlugs if provided
+  let items = response.items || [];
+  if (params.toolkitSlugs && params.toolkitSlugs.length > 0) {
+    items = items.filter((item) => params.toolkitSlugs!.includes(item.toolkit.slug));
+  }
+
+  return {
+    items,
+    total: items.length,
+  };
+}
+
+/**
+ * Initiate OAuth connection
+ * CRITICAL: Frontend must always pass scope parameter
+ *
+ * Builds OAuth redirect URL with JWT token for authentication.
+ * OAuth flows require browser navigation (not fetch) because the backend
+ * redirects to the OAuth provider, which doesn't allow cross-origin requests.
+ * 
+ * The caller should navigate using: window.location.href = response.redirectUrl
+ */
+export async function initiateConnection(params: {
+  userId: string;
+  provider: string;
+  scope: string; // REQUIRED - OAuth scopes (frontend controls)
+  callbackUrl?: string;
+}): Promise<ConnectResponse> {
+  const searchParams = new URLSearchParams();
+  searchParams.append("user_id", params.userId);
+  searchParams.append("scope", params.scope);
+
+  if (params.callbackUrl) {
+    searchParams.append("redirect_to", params.callbackUrl);
+  }
+
+  // Include JWT token for backend authentication
+  // OAuth flows require browser navigation, so we can't use Authorization header
+  const token = await backendTokenProvider();
+  if (token) {
+    searchParams.append("token", token);
+  }
+
+  // Build full backend URL for OAuth redirect
+  // The browser will navigate directly to this URL
+  const backendUrl = getBackendBaseUrl();
+  const redirectUrl = `${backendUrl}/api/integrations/${params.provider}/connect?${searchParams.toString()}`;
+
+  return {
+    redirectUrl,
+    connectionId: "pending", // Will be set after OAuth callback
+  };
+}
+
+/**
+ * Wait for OAuth connection to be established
+ */
+export async function waitForConnection(params: {
+  connectionId: string;
+  timeoutMs?: number;
+}): Promise<WaitForConnectionResponse> {
+  // Polling logic - TODO: implement actual polling
+  return { status: "ACTIVE", connectionId: params.connectionId };
+}
+
+/**
+ * Delete a connected account
+ */
+export async function deleteConnectedAccount(accountId: string, userId?: string): Promise<void> {
+  const finalUserId = userId || "unknown";
+  await backendApiClient.request<void>(`/api/integrations/${accountId}?user_id=${finalUserId}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * Execute a tool
+ */
+export async function executeTool(params: {
+  toolSlug: string;
+  userId: string;
+  connectionId?: string;
+  arguments?: Record<string, unknown>;
+}): Promise<ExecuteToolResponse> {
+  const endpoint = `/api/tools/${params.toolSlug}/execute`;
+
+  try {
+    const response = await backendApiClient.request<ExecuteToolResponse>(endpoint, {
+      method: "POST",
+      body: {
+        user_id: params.userId,
+        connection_id: params.connectionId,
+        arguments: params.arguments || {},
+      },
+    });
+
+    return response;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Tool execution failed";
+    return {
+      success: false,
+      data: null,
+      error: errorMessage,
+    };
+  }
+}

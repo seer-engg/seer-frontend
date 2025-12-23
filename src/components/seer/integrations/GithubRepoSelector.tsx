@@ -2,7 +2,7 @@
  * Resource selector for GitHub repositories
  */
 
-import { executeTool } from "@/lib/tools/proxy-client";
+import { executeTool } from "@/lib/api-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";

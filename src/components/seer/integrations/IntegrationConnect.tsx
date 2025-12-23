@@ -11,7 +11,7 @@ import {
   initiateConnection,
   waitForConnection,
   deleteConnectedAccount,
-} from "@/lib/tools/proxy-client";
+} from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";

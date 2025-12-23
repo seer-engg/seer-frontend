@@ -6,8 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { backendApiClient } from '@/lib/api-client';
-import { listConnectedAccounts, initiateConnection, ConnectedAccount } from '@/lib/tools/proxy-client';
+import { backendApiClient, listConnectedAccounts, initiateConnection, ConnectedAccount } from '@/lib/api-client';
 import { IntegrationType, formatScopes, getRequiredScopes } from '@/lib/integrations/client';
 import { useUser } from '@clerk/clerk-react';
 
