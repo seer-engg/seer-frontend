@@ -26,6 +26,14 @@ export const BaseBlockNode = memo(function BaseBlockNode({
 }: BaseBlockNodeProps) {
   const inputHandles = handles.inputs || ['input'];
   const outputHandles = handles.outputs || ['output'];
+  
+  // Show labels when there are multiple handles
+  const showInputLabels = inputHandles.length > 1;
+  const showOutputLabels = outputHandles.length > 1;
+
+  // Calculate dynamic height based on number of handles
+  const maxHandles = Math.max(inputHandles.length, outputHandles.length);
+  const dynamicHeight = maxHandles > 1 ? Math.max(60, 20 + maxHandles * 24) : undefined;
 
   return (
     <div
@@ -35,20 +43,37 @@ export const BaseBlockNode = memo(function BaseBlockNode({
           ? 'border-primary shadow-lg ring-2 ring-primary ring-offset-2'
           : 'border-border bg-card hover:border-primary/50',
       )}
+      style={dynamicHeight ? { minHeight: `${dynamicHeight}px` } : undefined}
     >
       {/* Input handles */}
       {inputHandles.map((handleId, index) => (
-        <Handle
-          key={`input-${handleId}`}
-          type="target"
-          position={Position.Left}
-          id={handleId}
+        <div
+          key={`input-wrapper-${handleId}`}
+          className="absolute flex items-center"
           style={{
-            left: -8,
-            top: `${20 + index * 30}px`,
+            left: 0,
+            top: `${20 + index * 24}px`,
           }}
-          className="!w-3 !h-3 !bg-border !border-2 !border-background"
-        />
+        >
+          <Handle
+            key={`input-${handleId}`}
+            type="target"
+            position={Position.Left}
+            id={handleId}
+            style={{
+              position: 'relative',
+              left: -8,
+              top: 0,
+              transform: 'none',
+            }}
+            className="!w-3 !h-3 !bg-border !border-2 !border-background"
+          />
+          {showInputLabels && (
+            <span className="text-[10px] text-muted-foreground ml-1 select-none">
+              {handleId}
+            </span>
+          )}
+        </div>
       ))}
 
       {/* Block content */}
@@ -70,17 +95,33 @@ export const BaseBlockNode = memo(function BaseBlockNode({
 
       {/* Output handles */}
       {outputHandles.map((handleId, index) => (
-        <Handle
-          key={`output-${handleId}`}
-          type="source"
-          position={Position.Right}
-          id={handleId}
+        <div
+          key={`output-wrapper-${handleId}`}
+          className="absolute flex items-center justify-end"
           style={{
-            right: -8,
-            top: `${20 + index * 30}px`,
+            right: 0,
+            top: `${20 + index * 24}px`,
           }}
-          className="!w-3 !h-3 !bg-border !border-2 !border-background"
-        />
+        >
+          {showOutputLabels && (
+            <span className="text-[10px] text-muted-foreground mr-1 select-none">
+              {handleId}
+            </span>
+          )}
+          <Handle
+            key={`output-${handleId}`}
+            type="source"
+            position={Position.Right}
+            id={handleId}
+            style={{
+              position: 'relative',
+              right: -8,
+              top: 0,
+              transform: 'none',
+            }}
+            className="!w-3 !h-3 !bg-border !border-2 !border-background"
+          />
+        </div>
       ))}
     </div>
   );

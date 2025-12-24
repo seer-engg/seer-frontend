@@ -187,6 +187,23 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
       } else if (block.data.type === 'llm') {
         variables.push(`${blockLabel}.output`);
         variables.push('output');
+        
+        // If LLM block has structured output schema, add each field as a variable
+        const llmConfig = block.data.config || {};
+        const outputSchema = llmConfig.output_schema;
+        if (outputSchema && typeof outputSchema === 'object' && outputSchema.properties) {
+          // Add each property from the structured output schema
+          Object.keys(outputSchema.properties).forEach((fieldName: string) => {
+            // Add with block label prefix (e.g., {{LLM.summary}})
+            variables.push(`${blockLabel}.${fieldName}`);
+            // Also add simple field name if it might be useful
+            if (!variables.includes(fieldName)) {
+              variables.push(fieldName);
+            }
+          });
+          // Also add structured_output reference
+          variables.push(`${blockLabel}.structured_output`);
+        }
       } else if (block.data.type === 'code') {
         variables.push(`${blockLabel}.output`);
         variables.push('output');
@@ -900,6 +917,8 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="gpt-5-mini">GPT-5 Mini</SelectItem>
+                  <SelectItem value="gpt-5-nano">GPT-5 Nano</SelectItem>
+
                   <SelectItem value="gpt-5">GPT-5</SelectItem>
                   <SelectItem value="gpt-4o">GPT-4o</SelectItem>
                 </SelectContent>
