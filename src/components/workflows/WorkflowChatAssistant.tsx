@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Send, Bot, User, Check, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Plus, Clock, FileText } from 'lucide-react';
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
 import { Node } from '@xyflow/react';
-import { WorkflowNodeData, WorkflowEdge } from './WorkflowCanvas';
+import { WorkflowNodeData, WorkflowEdge } from './types';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';

@@ -8,7 +8,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { WorkflowNodeData } from '../WorkflowCanvas';
+import { WorkflowNodeData } from '../types';
 import { useToolIntegration, ToolMetadata } from '@/hooks/useIntegrationTools';
 import { backendApiClient } from '@/lib/api-client';
 import { 
@@ -25,6 +25,7 @@ import { GmailSVG } from '@/components/icons/gmail';
 import { GoogleDriveSVG } from '@/components/icons/googledrive';
 import { GoogleSheetsSVG } from '@/components/icons/googlesheets';
 import { GitHubSVG } from '@/components/icons/github';
+import { InlineBlockConfig } from '../InlineBlockConfig';
 
 /**
  * Get icon for integration type
@@ -67,7 +68,7 @@ function getIntegrationDisplayName(integrationType: IntegrationType | null): str
 export const ToolBlockNode = memo(function ToolBlockNode(
   props: NodeProps<WorkflowNodeData>
 ) {
-  const { data, selected } = props;
+  const { data, selected, id } = props;
   
   // Get tool name from config (if available) or use a default
   const toolName = data.config?.tool_name || data.config?.toolName || '';
@@ -187,7 +188,7 @@ export const ToolBlockNode = memo(function ToolBlockNode(
 
       {/* Block content */}
       <div className="space-y-2">
-        {/* Icon and tool name row */}
+        {/* Icon, tool name, and status row */}
         <div className="flex items-center gap-2">
           <div
             className={cn(
@@ -206,28 +207,28 @@ export const ToolBlockNode = memo(function ToolBlockNode(
           <div className="flex-1 min-w-0">
             <p className="font-medium text-sm truncate">{data.label}</p>
           </div>
-        </div>
-        
-        {/* Status badge and connect button row */}
-        {statusBadge && (
-          <div className="flex items-center gap-2 pl-10">
-            <div className="shrink-0">
-              {statusBadge}
+          {statusBadge && (
+            <div className="flex items-center gap-2">
+              <div className="shrink-0">
+                {statusBadge}
+              </div>
+              {needsAuth && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
+                  onClick={handleConnect}
+                >
+                  Connect
+                  <ExternalLink className="w-3 h-3 ml-1" />
+                </Button>
+              )}
             </div>
-            {needsAuth && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
-                onClick={handleConnect}
-              >
-                Connect
-                <ExternalLink className="w-3 h-3 ml-1" />
-              </Button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      <InlineBlockConfig nodeId={id} />
 
       {/* Single output handle */}
       <Handle

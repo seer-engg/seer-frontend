@@ -7,7 +7,7 @@ import { useState, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Node } from '@xyflow/react';
 import { backendApiClient, getBackendBaseUrl } from '@/lib/api-client';
-import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
 
 export interface Workflow {
   id: number;

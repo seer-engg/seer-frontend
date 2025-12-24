@@ -46,7 +46,7 @@ import {
 import { cn } from '@/lib/utils';
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
 import { Node } from '@xyflow/react';
-import { WorkflowNodeData, WorkflowEdge } from './WorkflowCanvas';
+import { WorkflowNodeData, WorkflowEdge } from './types';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 
 interface Tool {

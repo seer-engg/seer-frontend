@@ -7,16 +7,15 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Node } from '@xyflow/react';
-import { WorkflowCanvas, WorkflowNodeData, WorkflowEdge, getNextBranchForSource } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowNodeData, WorkflowEdge, getNextBranchForSource } from '@/components/workflows/types';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
-import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { Button } from '@/components/ui/button';
-import { Clock, X, Rocket, Menu } from 'lucide-react';
+import { Clock, Rocket, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -65,7 +64,6 @@ export default function Workflows() {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
   const [showInputDialog, setShowInputDialog] = useState(false);
   const [inputData, setInputData] = useState<Record<string, any>>({});
-  const [configNode, setConfigNode] = useState<Node<WorkflowNodeData> | null>(null);
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   
@@ -80,11 +78,6 @@ export default function Workflows() {
     isExecuting,
     isDeleting,
   } = useWorkflowBuilder();
-
-  const selectedNode = useMemo(
-    () => nodes.find((n) => n.id === selectedNodeId) || null,
-    [nodes, selectedNodeId]
-  );
 
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
@@ -190,31 +183,6 @@ export default function Workflows() {
       });
     }
   }, [autosaveStatus]);
-
-  const handleConfigureBlock = useCallback((node: Node<WorkflowNodeData>) => {
-    // Open the floating configuration panel attached to this node
-    setConfigNode(node);
-  }, []);
-
-  const handleCloseConfig = useCallback(() => {
-    setConfigNode(null);
-  }, []);
-
-  const handleConfigUpdate = useCallback((nodeId: string, updates: Partial<WorkflowNodeData>) => {
-    setNodes((nds) =>
-      nds.map((node) =>
-        node.id === nodeId
-          ? { ...node, data: { ...node.data, ...updates } }
-          : node
-      )
-    );
-    // Also update the configNode if it's the same node
-    setConfigNode((prev) => 
-      prev && prev.id === nodeId 
-        ? { ...prev, data: { ...prev.data, ...updates } }
-        : prev
-    );
-  }, []);
 
   // Extract input blocks from current workflow
   const inputBlocks = useMemo(() => {
@@ -582,9 +550,6 @@ export default function Workflows() {
               onEdgesChange={setEdges}
               onNodeSelect={setSelectedNodeId}
               selectedNodeId={selectedNodeId}
-              onNodeDoubleClick={(event, node) => {
-                handleConfigureBlock(node);
-              }}
             />
             
             {/* Floating Workflows Panel */}
@@ -598,37 +563,6 @@ export default function Workflows() {
               onNewWorkflow={handleNewWorkflow}
             />
             
-            {/* Floating Configuration Panel */}
-            {configNode && (
-              <div 
-                className="absolute top-4 right-4 w-[400px] max-h-[calc(100%-32px)] bg-card border border-border rounded-lg shadow-xl z-50 flex flex-col"
-              >
-                {/* Panel Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 rounded-t-lg">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-sm truncate">{configNode.data.label}</h3>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    onClick={handleCloseConfig}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                {/* Panel Content */}
-                <ScrollArea className="flex-1 overflow-auto">
-                  <BlockConfigPanel
-                    node={configNode}
-                    onUpdate={handleConfigUpdate}
-                    allNodes={nodes}
-                    autoSave={true}
-                  />
-                </ScrollArea>
-              </div>
-            )}
           </div>
         </ResizablePanel>
         

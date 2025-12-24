@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback } from 'react';
 import { Node } from '@xyflow/react';
 import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
-import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';

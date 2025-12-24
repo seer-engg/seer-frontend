@@ -6,7 +6,7 @@
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { cn } from '@/lib/utils';
-import { WorkflowNodeData } from '../WorkflowCanvas';
+import { WorkflowNodeData } from '../types';
 
 interface BaseBlockNodeProps extends NodeProps<WorkflowNodeData> {
   icon?: React.ReactNode;
@@ -15,6 +15,7 @@ interface BaseBlockNodeProps extends NodeProps<WorkflowNodeData> {
     inputs?: string[];
     outputs?: string[];
   };
+  children?: React.ReactNode;
 }
 
 export const BaseBlockNode = memo(function BaseBlockNode({
@@ -23,6 +24,7 @@ export const BaseBlockNode = memo(function BaseBlockNode({
   icon,
   color = 'primary',
   handles = { inputs: ['input'], outputs: ['output'] },
+  children,
 }: BaseBlockNodeProps) {
   const hasInputHandle = (handles.inputs || ['input']).length > 0;
   const hasOutputHandle = (handles.outputs || ['output']).length > 0;
@@ -67,6 +69,12 @@ export const BaseBlockNode = memo(function BaseBlockNode({
           <p className="font-medium text-sm truncate">{data.label}</p>
         </div>
       </div>
+
+      {children && (
+        <div className="mt-3 space-y-3" onPointerDown={(event) => event.stopPropagation()}>
+          {children}
+        </div>
+      )}
 
       {/* Output handle */}
       {hasOutputHandle && (
