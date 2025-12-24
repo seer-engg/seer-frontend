@@ -78,11 +78,45 @@ const nodeTypes = {
   input: InputBlockNode,
 };
 
+export type WorkflowEdgeData = {
+  branch?: 'true' | 'false';
+};
+
+export type WorkflowEdge = Edge<WorkflowEdgeData>;
+
+export function getNextBranchForSource(
+  sourceId: string | null | undefined,
+  nodes: Node<WorkflowNodeData>[],
+  edges: WorkflowEdge[],
+): 'true' | 'false' | undefined {
+  if (!sourceId) {
+    return undefined;
+  }
+
+  const sourceNode = nodes.find((node) => node.id === sourceId);
+  if (!sourceNode || sourceNode.type !== 'if_else') {
+    return undefined;
+  }
+
+  const outgoing = edges.filter((edge) => edge.source === sourceId);
+  const hasTrue = outgoing.some((edge) => edge.data?.branch === 'true');
+  const hasFalse = outgoing.some((edge) => edge.data?.branch === 'false');
+
+  if (!hasTrue) {
+    return 'true';
+  }
+  if (!hasFalse) {
+    return 'false';
+  }
+
+  return undefined;
+}
+
 interface WorkflowCanvasProps {
   initialNodes?: Node<WorkflowNodeData>[];
-  initialEdges?: Edge[];
+  initialEdges?: WorkflowEdge[];
   onNodesChange?: (nodes: Node<WorkflowNodeData>[]) => void;
-  onEdgesChange?: (edges: Edge[]) => void;
+  onEdgesChange?: (edges: WorkflowEdge[]) => void;
   onNodeSelect?: (nodeId: string) => void;
   onNodeDoubleClick?: (event: React.MouseEvent, node: Node<WorkflowNodeData>) => void;
   selectedNodeId?: string | null;
@@ -161,7 +195,7 @@ export function WorkflowCanvas({
     (changes: any) => {
       onEdgesChangeInternal(changes);
       if (onEdgesChange) {
-        const updatedEdges = changes.reduce((acc: Edge[], change: any) => {
+        const updatedEdges = changes.reduce((acc: WorkflowEdge[], change: any) => {
           if (change.type === 'remove') {
             return acc.filter((e) => e.id !== change.id);
           }
@@ -179,12 +213,10 @@ export function WorkflowCanvas({
   // Handle connections
   const onConnect = useCallback(
     (params: Connection) => {
-      // Validate connection
       if (!params.source || !params.target) {
         return;
       }
 
-      // Check for cycles (basic validation)
       const wouldCreateCycle = edges.some(
         (e) => e.target === params.source && e.source === params.target
       );
@@ -194,9 +226,12 @@ export function WorkflowCanvas({
         return;
       }
 
-      const newEdge = {
-        ...params,
+      const branch = getNextBranchForSource(params.source, nodes, edges);
+      const newEdge: WorkflowEdge = {
         id: `edge-${params.source}-${params.target}`,
+        source: params.source,
+        target: params.target,
+        data: branch ? { branch } : undefined,
         markerEnd: {
           type: MarkerType.ArrowClosed,
         },
@@ -207,7 +242,7 @@ export function WorkflowCanvas({
         onEdgesChange([...edges, newEdge]);
       }
     },
-    [edges, setEdges, onEdgesChange]
+    [edges, nodes, setEdges, onEdgesChange]
   );
 
   // Handle node clicks

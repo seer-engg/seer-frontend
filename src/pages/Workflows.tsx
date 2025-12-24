@@ -6,8 +6,8 @@
  */
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Node, Edge } from '@xyflow/react';
-import { WorkflowCanvas, WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
+import { Node } from '@xyflow/react';
+import { WorkflowCanvas, WorkflowNodeData, WorkflowEdge, getNextBranchForSource } from '@/components/workflows/WorkflowCanvas';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
@@ -24,10 +24,42 @@ import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
 
+const isBranchValue = (value: unknown): value is 'true' | 'false' =>
+  value === 'true' || value === 'false';
+
+const normalizeEdge = (edge: any): WorkflowEdge => {
+  const legacyBranch = edge?.data?.branch ?? edge?.branch;
+  const legacyHandle = edge?.targetHandle || edge?.data?.targetHandle;
+  const branchCandidate = legacyBranch ?? legacyHandle;
+  const branch = isBranchValue(branchCandidate) ? branchCandidate : undefined;
+
+  let normalizedData = edge?.data ? { ...edge.data } : undefined;
+  if (branch) {
+    normalizedData = { ...(normalizedData || {}), branch };
+  }
+  if (normalizedData && Object.keys(normalizedData).length === 0) {
+    normalizedData = undefined;
+  }
+
+  const { sourceHandle: _sourceHandle, targetHandle: _targetHandle, ...rest } = edge || {};
+
+  return {
+    ...rest,
+    data: normalizedData,
+  } as WorkflowEdge;
+};
+
+const normalizeEdges = (rawEdges?: any[]): WorkflowEdge[] => {
+  if (!Array.isArray(rawEdges)) {
+    return [];
+  }
+  return rawEdges.map((edge) => normalizeEdge(edge));
+};
+
 export default function Workflows() {
   const navigate = useNavigate();
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState('My Workflow');
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
@@ -111,7 +143,7 @@ export default function Workflows() {
   }, [nodes, edges, workflowName, selectedWorkflowId, createWorkflow, updateWorkflow]);
 
   // Autosave callback - only saves if workflow already exists
-  const autosaveCallback = useCallback(async (data: { nodes: Node<WorkflowNodeData>[]; edges: Edge[]; workflowName: string }) => {
+  const autosaveCallback = useCallback(async (data: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[]; workflowName: string }) => {
     if (!selectedWorkflowId) {
       return; // Don't autosave unsaved workflows
     }
@@ -252,7 +284,7 @@ export default function Workflows() {
     setWorkflowName(workflow.name);
     if (workflow.graph_data) {
       setNodes(workflow.graph_data.nodes || []);
-      setEdges(workflow.graph_data.edges || []);
+      setEdges(normalizeEdges(workflow.graph_data.edges));
     }
     resetSavedData(); // Reset autosave tracking when loading a workflow
     // Reset loading flag after a brief delay to prevent immediate autosave
@@ -330,8 +362,7 @@ export default function Workflows() {
     position?: { x: number; y: number };
     source_id?: string;
     target_id?: string;
-    source_handle?: string;
-    target_handle?: string;
+    branch?: 'true' | 'false';
   }>) => {
     // Apply edits to workflow
     // Process blocks first, then edges to ensure blocks exist when edges are created
@@ -407,27 +438,32 @@ export default function Workflows() {
     // Process edge operations after blocks are created
     for (const edit of edgeEdits) {
       if (edit.operation === 'add_edge' && edit.source_id && edit.target_id) {
-        // Verify both source and target blocks exist
-        const sourceExists = newNodes.some(n => n.id === edit.source_id);
-        const targetExists = newNodes.some(n => n.id === edit.target_id);
-        
+        const sourceExists = newNodes.some((n) => n.id === edit.source_id);
+        const targetExists = newNodes.some((n) => n.id === edit.target_id);
+
         if (!sourceExists) {
           console.warn(`[handleApplyChatEdits] Source block ${edit.source_id} not found for edge`);
         }
         if (!targetExists) {
           console.warn(`[handleApplyChatEdits] Target block ${edit.target_id} not found for edge`);
         }
-        
+
         if (sourceExists && targetExists) {
-          // Add connection
-          const newEdge: Edge = {
+          const normalizedBranch =
+            edit.branch === 'true' || edit.branch === 'false'
+              ? edit.branch
+              : undefined;
+          const branch =
+            normalizedBranch ||
+            getNextBranchForSource(edit.source_id, newNodes, newEdges);
+
+          const newEdge: WorkflowEdge = {
             id: `edge-${edit.source_id}-${edit.target_id}`,
             source: edit.source_id,
             target: edit.target_id,
-            sourceHandle: edit.source_handle,
-            targetHandle: edit.target_handle,
+            data: branch ? { branch } : undefined,
           };
-          // Check if edge already exists
+
           if (!newEdges.some((e) => e.source === edit.source_id && e.target === edit.target_id)) {
             console.log(`[handleApplyChatEdits] Adding edge from ${edit.source_id} to ${edit.target_id}`);
             newEdges.push(newEdge);
@@ -436,7 +472,6 @@ export default function Workflows() {
           }
         }
       } else if (edit.operation === 'remove_edge') {
-        // Remove connection
         if (edit.source_id && edit.target_id) {
           newEdges = newEdges.filter(
             (edge) => !(edge.source === edit.source_id && edge.target === edit.target_id)

@@ -5,9 +5,9 @@
  */
 import { useState, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Node, Edge } from '@xyflow/react';
+import { Node } from '@xyflow/react';
 import { backendApiClient, getBackendBaseUrl } from '@/lib/api-client';
-import { WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/WorkflowCanvas';
 
 export interface Workflow {
   id: number;
@@ -15,7 +15,7 @@ export interface Workflow {
   description?: string;
   graph_data: {
     nodes: Node<WorkflowNodeData>[];
-    edges: Edge[];
+    edges: WorkflowEdge[];
   };
   schema_version: string;
   is_active: boolean;

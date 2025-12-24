@@ -87,34 +87,6 @@ export const ToolBlockNode = memo(function ToolBlockNode(
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
   
-  // Generate input handles from tool parameters
-  const inputHandles = useMemo(() => {
-    if (!toolSchema?.parameters?.properties) {
-      return ['input']; // Fallback to single handle
-    }
-    
-    // Create handle for each parameter
-    return Object.keys(toolSchema.parameters.properties);
-  }, [toolSchema]);
-  
-  // Generate output handles (tool may return structured data)
-  const outputHandles = useMemo(() => {
-    // Default to single output handle
-    // After execution, if tool returns structured data (dict), backend stores all keys
-    // in block_outputs[block_id], and they become available via templating system
-    // For visual connections, we default to ['output'] but could be extended to include
-    // all keys from execution results if available in node data
-    const handles = ['output'];
-    
-    // TODO: In the future, if execution results are stored in node data,
-    // we could extract additional handles from the output structure here
-    // For example: if (data.execution_results?.output && typeof data.execution_results.output === 'object') {
-    //   handles.push(...Object.keys(data.execution_results.output));
-    // }
-    
-    return handles;
-  }, [data]);
-  
   // Get integration status for this tool
   const { status, isLoading, initiateAuth } = useToolIntegration(toolName);
 
@@ -199,20 +171,19 @@ export const ToolBlockNode = memo(function ToolBlockNode(
         needsAuth && !selected && 'border-amber-500/50',
       )}
     >
-      {/* Input handles - dynamic based on tool parameters */}
-      {inputHandles.map((handleId, index) => (
-        <Handle
-          key={`input-${handleId}`}
-          type="target"
-          position={Position.Left}
-          id={handleId}
-          style={{
-            left: -8,
-            top: `${20 + index * 30}px`,
-          }}
-          className="!w-3 !h-3 !bg-border !border-2 !border-background"
-        />
-      ))}
+      {/* Single input handle */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="input"
+        style={{
+          position: 'absolute',
+          left: -8,
+          top: '50%',
+          transform: 'translateY(-50%)',
+        }}
+        className="!w-3 !h-3 !bg-border !border-2 !border-background"
+      />
 
       {/* Block content */}
       <div className="space-y-2">
@@ -258,20 +229,19 @@ export const ToolBlockNode = memo(function ToolBlockNode(
         )}
       </div>
 
-      {/* Output handles */}
-      {outputHandles.map((handleId, index) => (
-        <Handle
-          key={`output-${handleId}`}
-          type="source"
-          position={Position.Right}
-          id={handleId}
-          style={{
-            right: -8,
-            top: `${20 + index * 30}px`,
-          }}
-          className="!w-3 !h-3 !bg-border !border-2 !border-background"
-        />
-      ))}
+      {/* Single output handle */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="output"
+        style={{
+          position: 'absolute',
+          right: -8,
+          top: '50%',
+          transform: 'translateY(-50%)',
+        }}
+        className="!w-3 !h-3 !bg-border !border-2 !border-background"
+      />
     </div>
   );
 });

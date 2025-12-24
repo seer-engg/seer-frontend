@@ -45,8 +45,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
-import { Node, Edge } from '@xyflow/react';
-import { WorkflowNodeData } from './WorkflowCanvas';
+import { Node } from '@xyflow/react';
+import { WorkflowNodeData, WorkflowEdge } from './WorkflowCanvas';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 
 interface Tool {
@@ -106,8 +106,7 @@ interface WorkflowEdit {
   position?: { x: number; y: number };
   source_id?: string;
   target_id?: string;
-  source_handle?: string;
-  target_handle?: string;
+  branch?: 'true' | 'false';
 }
 
 interface ChatMessage {
@@ -143,7 +142,7 @@ interface BuildAndChatPanelProps {
   workflowId: number | null;
   // @xyflow/react's Node<T> expects T to satisfy Record<string, unknown>
   nodes: Node<WorkflowNodeData & Record<string, unknown>>[];
-  edges: Edge[];
+  edges: WorkflowEdge[];
   onApplyEdits?: (edits: WorkflowEdit[]) => void;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
@@ -464,13 +463,15 @@ export function BuildAndChatPanel({
               data: n.data,
               position: n.position,
             })),
-            edges: edges.map((e) => ({
-              id: e.id,
-              source: e.source,
-              target: e.target,
-              sourceHandle: e.sourceHandle,
-              targetHandle: e.targetHandle,
-            })),
+            edges: edges.map((e) => {
+              const branch = e.data?.branch;
+              return {
+                id: e.id,
+                source: e.source,
+                target: e.target,
+                ...(branch ? { data: { branch } } : {}),
+              };
+            }),
           },
         }),
         signal: controller.signal,
