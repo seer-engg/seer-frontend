@@ -8,7 +8,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { WorkflowNodeData } from '../WorkflowCanvas';
+import { WorkflowNodeData } from '../types';
 import { useToolIntegration, ToolMetadata } from '@/hooks/useIntegrationTools';
 import { backendApiClient } from '@/lib/api-client';
 import { 
@@ -25,6 +25,7 @@ import { GmailSVG } from '@/components/icons/gmail';
 import { GoogleDriveSVG } from '@/components/icons/googledrive';
 import { GoogleSheetsSVG } from '@/components/icons/googlesheets';
 import { GitHubSVG } from '@/components/icons/github';
+import { InlineBlockConfig } from '../InlineBlockConfig';
 
 /**
  * Get icon for integration type
@@ -67,7 +68,7 @@ function getIntegrationDisplayName(integrationType: IntegrationType | null): str
 export const ToolBlockNode = memo(function ToolBlockNode(
   props: NodeProps<WorkflowNodeData>
 ) {
-  const { data, selected } = props;
+  const { data, selected, id } = props;
   
   // Get tool name from config (if available) or use a default
   const toolName = data.config?.tool_name || data.config?.toolName || '';
@@ -86,34 +87,6 @@ export const ToolBlockNode = memo(function ToolBlockNode(
     enabled: !!toolName,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
-  
-  // Generate input handles from tool parameters
-  const inputHandles = useMemo(() => {
-    if (!toolSchema?.parameters?.properties) {
-      return ['input']; // Fallback to single handle
-    }
-    
-    // Create handle for each parameter
-    return Object.keys(toolSchema.parameters.properties);
-  }, [toolSchema]);
-  
-  // Generate output handles (tool may return structured data)
-  const outputHandles = useMemo(() => {
-    // Default to single output handle
-    // After execution, if tool returns structured data (dict), backend stores all keys
-    // in block_outputs[block_id], and they become available via templating system
-    // For visual connections, we default to ['output'] but could be extended to include
-    // all keys from execution results if available in node data
-    const handles = ['output'];
-    
-    // TODO: In the future, if execution results are stored in node data,
-    // we could extract additional handles from the output structure here
-    // For example: if (data.execution_results?.output && typeof data.execution_results.output === 'object') {
-    //   handles.push(...Object.keys(data.execution_results.output));
-    // }
-    
-    return handles;
-  }, [data]);
   
   // Get integration status for this tool
   const { status, isLoading, initiateAuth } = useToolIntegration(toolName);
@@ -199,24 +172,23 @@ export const ToolBlockNode = memo(function ToolBlockNode(
         needsAuth && !selected && 'border-amber-500/50',
       )}
     >
-      {/* Input handles - dynamic based on tool parameters */}
-      {inputHandles.map((handleId, index) => (
-        <Handle
-          key={`input-${handleId}`}
-          type="target"
-          position={Position.Left}
-          id={handleId}
-          style={{
-            left: -8,
-            top: `${20 + index * 30}px`,
-          }}
-          className="!w-3 !h-3 !bg-border !border-2 !border-background"
-        />
-      ))}
+      {/* Single input handle */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="input"
+        style={{
+          position: 'absolute',
+          left: -8,
+          top: '50%',
+          transform: 'translateY(-50%)',
+        }}
+        className="!w-3 !h-3 !bg-border !border-2 !border-background"
+      />
 
       {/* Block content */}
       <div className="space-y-2">
-        {/* Icon and tool name row */}
+        {/* Icon, tool name, and status row */}
         <div className="flex items-center gap-2">
           <div
             className={cn(
@@ -235,43 +207,42 @@ export const ToolBlockNode = memo(function ToolBlockNode(
           <div className="flex-1 min-w-0">
             <p className="font-medium text-sm truncate">{data.label}</p>
           </div>
-        </div>
-        
-        {/* Status badge and connect button row */}
-        {statusBadge && (
-          <div className="flex items-center gap-2 pl-10">
-            <div className="shrink-0">
-              {statusBadge}
+          {statusBadge && (
+            <div className="flex items-center gap-2">
+              <div className="shrink-0">
+                {statusBadge}
+              </div>
+              {needsAuth && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
+                  onClick={handleConnect}
+                >
+                  Connect
+                  <ExternalLink className="w-3 h-3 ml-1" />
+                </Button>
+              )}
             </div>
-            {needsAuth && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
-                onClick={handleConnect}
-              >
-                Connect
-                <ExternalLink className="w-3 h-3 ml-1" />
-              </Button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Output handles */}
-      {outputHandles.map((handleId, index) => (
-        <Handle
-          key={`output-${handleId}`}
-          type="source"
-          position={Position.Right}
-          id={handleId}
-          style={{
-            right: -8,
-            top: `${20 + index * 30}px`,
-          }}
-          className="!w-3 !h-3 !bg-border !border-2 !border-background"
-        />
-      ))}
+      <InlineBlockConfig nodeId={id} />
+
+      {/* Single output handle */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="output"
+        style={{
+          position: 'absolute',
+          right: -8,
+          top: '50%',
+          transform: 'translateY(-50%)',
+        }}
+        className="!w-3 !h-3 !bg-border !border-2 !border-background"
+      />
     </div>
   );
 });

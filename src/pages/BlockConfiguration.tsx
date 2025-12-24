@@ -7,9 +7,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback } from 'react';
-import { Node, Edge } from '@xyflow/react';
+import { Node } from '@xyflow/react';
 import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
-import { WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
@@ -23,7 +23,7 @@ interface Workflow {
   description?: string;
   graph_data: {
     nodes: Node<WorkflowNodeData>[];
-    edges: Edge[];
+    edges: WorkflowEdge[];
   };
   schema_version: string;
   is_active: boolean;
@@ -63,7 +63,7 @@ export default function BlockConfiguration() {
 
   // Update workflow mutation
   const updateMutation = useMutation({
-    mutationFn: async (updates: { nodes: Node<WorkflowNodeData>[]; edges: Edge[] }) => {
+    mutationFn: async (updates: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[] }) => {
       if (!workflowId) throw new Error('Workflow ID is required');
       return await updateWorkflow(Number(workflowId), {
         graph_data: updates,

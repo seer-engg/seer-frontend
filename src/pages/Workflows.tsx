@@ -6,17 +6,16 @@
  */
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Node, Edge } from '@xyflow/react';
-import { WorkflowCanvas, WorkflowNodeData } from '@/components/workflows/WorkflowCanvas';
+import { Node } from '@xyflow/react';
+import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowNodeData, WorkflowEdge, getNextBranchForSource } from '@/components/workflows/types';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
-import { BlockConfigPanel } from '@/components/workflows/BlockConfigPanel';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { Button } from '@/components/ui/button';
-import { Clock, X, Rocket, Menu } from 'lucide-react';
+import { Clock, Rocket, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -24,16 +23,47 @@ import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
 
+const isBranchValue = (value: unknown): value is 'true' | 'false' =>
+  value === 'true' || value === 'false';
+
+const normalizeEdge = (edge: any): WorkflowEdge => {
+  const legacyBranch = edge?.data?.branch ?? edge?.branch;
+  const legacyHandle = edge?.targetHandle || edge?.data?.targetHandle;
+  const branchCandidate = legacyBranch ?? legacyHandle;
+  const branch = isBranchValue(branchCandidate) ? branchCandidate : undefined;
+
+  let normalizedData = edge?.data ? { ...edge.data } : undefined;
+  if (branch) {
+    normalizedData = { ...(normalizedData || {}), branch };
+  }
+  if (normalizedData && Object.keys(normalizedData).length === 0) {
+    normalizedData = undefined;
+  }
+
+  const { sourceHandle: _sourceHandle, targetHandle: _targetHandle, ...rest } = edge || {};
+
+  return {
+    ...rest,
+    data: normalizedData,
+  } as WorkflowEdge;
+};
+
+const normalizeEdges = (rawEdges?: any[]): WorkflowEdge[] => {
+  if (!Array.isArray(rawEdges)) {
+    return [];
+  }
+  return rawEdges.map((edge) => normalizeEdge(edge));
+};
+
 export default function Workflows() {
   const navigate = useNavigate();
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState('My Workflow');
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
   const [showInputDialog, setShowInputDialog] = useState(false);
   const [inputData, setInputData] = useState<Record<string, any>>({});
-  const [configNode, setConfigNode] = useState<Node<WorkflowNodeData> | null>(null);
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   
@@ -48,11 +78,6 @@ export default function Workflows() {
     isExecuting,
     isDeleting,
   } = useWorkflowBuilder();
-
-  const selectedNode = useMemo(
-    () => nodes.find((n) => n.id === selectedNodeId) || null,
-    [nodes, selectedNodeId]
-  );
 
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
@@ -111,7 +136,7 @@ export default function Workflows() {
   }, [nodes, edges, workflowName, selectedWorkflowId, createWorkflow, updateWorkflow]);
 
   // Autosave callback - only saves if workflow already exists
-  const autosaveCallback = useCallback(async (data: { nodes: Node<WorkflowNodeData>[]; edges: Edge[]; workflowName: string }) => {
+  const autosaveCallback = useCallback(async (data: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[]; workflowName: string }) => {
     if (!selectedWorkflowId) {
       return; // Don't autosave unsaved workflows
     }
@@ -158,31 +183,6 @@ export default function Workflows() {
       });
     }
   }, [autosaveStatus]);
-
-  const handleConfigureBlock = useCallback((node: Node<WorkflowNodeData>) => {
-    // Open the floating configuration panel attached to this node
-    setConfigNode(node);
-  }, []);
-
-  const handleCloseConfig = useCallback(() => {
-    setConfigNode(null);
-  }, []);
-
-  const handleConfigUpdate = useCallback((nodeId: string, updates: Partial<WorkflowNodeData>) => {
-    setNodes((nds) =>
-      nds.map((node) =>
-        node.id === nodeId
-          ? { ...node, data: { ...node.data, ...updates } }
-          : node
-      )
-    );
-    // Also update the configNode if it's the same node
-    setConfigNode((prev) => 
-      prev && prev.id === nodeId 
-        ? { ...prev, data: { ...prev.data, ...updates } }
-        : prev
-    );
-  }, []);
 
   // Extract input blocks from current workflow
   const inputBlocks = useMemo(() => {
@@ -252,7 +252,7 @@ export default function Workflows() {
     setWorkflowName(workflow.name);
     if (workflow.graph_data) {
       setNodes(workflow.graph_data.nodes || []);
-      setEdges(workflow.graph_data.edges || []);
+      setEdges(normalizeEdges(workflow.graph_data.edges));
     }
     resetSavedData(); // Reset autosave tracking when loading a workflow
     // Reset loading flag after a brief delay to prevent immediate autosave
@@ -330,8 +330,7 @@ export default function Workflows() {
     position?: { x: number; y: number };
     source_id?: string;
     target_id?: string;
-    source_handle?: string;
-    target_handle?: string;
+    branch?: 'true' | 'false';
   }>) => {
     // Apply edits to workflow
     // Process blocks first, then edges to ensure blocks exist when edges are created
@@ -407,27 +406,32 @@ export default function Workflows() {
     // Process edge operations after blocks are created
     for (const edit of edgeEdits) {
       if (edit.operation === 'add_edge' && edit.source_id && edit.target_id) {
-        // Verify both source and target blocks exist
-        const sourceExists = newNodes.some(n => n.id === edit.source_id);
-        const targetExists = newNodes.some(n => n.id === edit.target_id);
-        
+        const sourceExists = newNodes.some((n) => n.id === edit.source_id);
+        const targetExists = newNodes.some((n) => n.id === edit.target_id);
+
         if (!sourceExists) {
           console.warn(`[handleApplyChatEdits] Source block ${edit.source_id} not found for edge`);
         }
         if (!targetExists) {
           console.warn(`[handleApplyChatEdits] Target block ${edit.target_id} not found for edge`);
         }
-        
+
         if (sourceExists && targetExists) {
-          // Add connection
-          const newEdge: Edge = {
+          const normalizedBranch =
+            edit.branch === 'true' || edit.branch === 'false'
+              ? edit.branch
+              : undefined;
+          const branch =
+            normalizedBranch ||
+            getNextBranchForSource(edit.source_id, newNodes, newEdges);
+
+          const newEdge: WorkflowEdge = {
             id: `edge-${edit.source_id}-${edit.target_id}`,
             source: edit.source_id,
             target: edit.target_id,
-            sourceHandle: edit.source_handle,
-            targetHandle: edit.target_handle,
+            data: branch ? { branch } : undefined,
           };
-          // Check if edge already exists
+
           if (!newEdges.some((e) => e.source === edit.source_id && e.target === edit.target_id)) {
             console.log(`[handleApplyChatEdits] Adding edge from ${edit.source_id} to ${edit.target_id}`);
             newEdges.push(newEdge);
@@ -436,7 +440,6 @@ export default function Workflows() {
           }
         }
       } else if (edit.operation === 'remove_edge') {
-        // Remove connection
         if (edit.source_id && edit.target_id) {
           newEdges = newEdges.filter(
             (edge) => !(edge.source === edit.source_id && edge.target === edit.target_id)
@@ -547,9 +550,6 @@ export default function Workflows() {
               onEdgesChange={setEdges}
               onNodeSelect={setSelectedNodeId}
               selectedNodeId={selectedNodeId}
-              onNodeDoubleClick={(event, node) => {
-                handleConfigureBlock(node);
-              }}
             />
             
             {/* Floating Workflows Panel */}
@@ -563,37 +563,6 @@ export default function Workflows() {
               onNewWorkflow={handleNewWorkflow}
             />
             
-            {/* Floating Configuration Panel */}
-            {configNode && (
-              <div 
-                className="absolute top-4 right-4 w-[400px] max-h-[calc(100%-32px)] bg-card border border-border rounded-lg shadow-xl z-50 flex flex-col"
-              >
-                {/* Panel Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 rounded-t-lg">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-sm truncate">{configNode.data.label}</h3>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    onClick={handleCloseConfig}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                {/* Panel Content */}
-                <ScrollArea className="flex-1 overflow-auto">
-                  <BlockConfigPanel
-                    node={configNode}
-                    onUpdate={handleConfigUpdate}
-                    allNodes={nodes}
-                    autoSave={true}
-                  />
-                </ScrollArea>
-              </div>
-            )}
           </div>
         </ResizablePanel>
         

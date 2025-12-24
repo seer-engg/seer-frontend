@@ -1,8 +1,9 @@
 import { memo } from 'react';
 import { Code } from 'lucide-react';
-import { BaseBlockNode } from './BaseBlockNode';
 import { NodeProps } from '@xyflow/react';
-import { WorkflowNodeData } from '../WorkflowCanvas';
+import { WorkflowNodeData } from '../types';
+import { InlineBlockConfig } from '../InlineBlockConfig';
+import { BaseBlockNode } from './BaseBlockNode';
 
 export const CodeBlockNode = memo(function CodeBlockNode(
   props: NodeProps<WorkflowNodeData>
@@ -16,7 +17,9 @@ export const CodeBlockNode = memo(function CodeBlockNode(
         inputs: ['input'],
         outputs: ['output'],
       }}
-    />
+    >
+      <InlineBlockConfig nodeId={props.id} />
+    </BaseBlockNode>
   );
 });
 

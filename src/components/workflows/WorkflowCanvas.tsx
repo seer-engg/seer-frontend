@@ -22,6 +22,14 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
+import { WorkflowCanvasContext } from './workflow-canvas-context';
+import {
+  WorkflowNodeData,
+  WorkflowEdge,
+  WorkflowEdgeData,
+  ToolBlockConfig,
+  getNextBranchForSource,
+} from './types';
 
 // Import custom node types
 import { ToolBlockNode } from './blocks/ToolBlockNode';
@@ -31,38 +39,13 @@ import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
 import { InputBlockNode } from './blocks/InputBlockNode';
 
-export type BlockType =
-  | 'tool'
-  | 'code'
-  | 'llm'
-  | 'if_else'
-  | 'for_loop'
-  | 'input';
-
-export interface ToolBlockConfig {
-  tool_name?: string;
-  toolName?: string;  // Legacy support
-  connection_id?: string;
-  arguments?: Record<string, any>;
-}
-
-export interface WorkflowNodeData {
-  type: BlockType;
-  label: string;
-  config?: Record<string, any> | ToolBlockConfig;
-  python_code?: string;
-  oauth_scope?: string;
-  selected?: boolean;
-  onSelect?: () => void;
-}
-
 /**
  * Extract tool names from workflow nodes
  */
 export function getToolNamesFromNodes(nodes: Node<WorkflowNodeData>[]): string[] {
   return nodes
-    .filter(node => node.data.type === 'tool')
-    .map(node => {
+    .filter((node) => node.data.type === 'tool')
+    .map((node) => {
       const config = node.data.config as ToolBlockConfig | undefined;
       return config?.tool_name || config?.toolName || '';
     })
@@ -80,11 +63,10 @@ const nodeTypes = {
 
 interface WorkflowCanvasProps {
   initialNodes?: Node<WorkflowNodeData>[];
-  initialEdges?: Edge[];
+  initialEdges?: WorkflowEdge[];
   onNodesChange?: (nodes: Node<WorkflowNodeData>[]) => void;
-  onEdgesChange?: (edges: Edge[]) => void;
+  onEdgesChange?: (edges: WorkflowEdge[]) => void;
   onNodeSelect?: (nodeId: string) => void;
-  onNodeDoubleClick?: (event: React.MouseEvent, node: Node<WorkflowNodeData>) => void;
   selectedNodeId?: string | null;
   className?: string;
 }
@@ -95,12 +77,26 @@ export function WorkflowCanvas({
   onNodesChange,
   onEdgesChange,
   onNodeSelect,
-  onNodeDoubleClick,
   selectedNodeId,
   className,
 }: WorkflowCanvasProps) {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
+
+  const updateNodeData = useCallback(
+    (nodeId: string, updates: Partial<WorkflowNodeData>) => {
+      setNodes((prevNodes) => {
+        const updatedNodes = prevNodes.map((node) =>
+          node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node,
+        );
+        if (onNodesChange) {
+          onNodesChange(updatedNodes);
+        }
+        return updatedNodes;
+      });
+    },
+    [onNodesChange, setNodes],
+  );
 
   // Sync with parent state changes
   useEffect(() => {
@@ -161,7 +157,7 @@ export function WorkflowCanvas({
     (changes: any) => {
       onEdgesChangeInternal(changes);
       if (onEdgesChange) {
-        const updatedEdges = changes.reduce((acc: Edge[], change: any) => {
+        const updatedEdges = changes.reduce((acc: WorkflowEdge[], change: any) => {
           if (change.type === 'remove') {
             return acc.filter((e) => e.id !== change.id);
           }
@@ -179,12 +175,10 @@ export function WorkflowCanvas({
   // Handle connections
   const onConnect = useCallback(
     (params: Connection) => {
-      // Validate connection
       if (!params.source || !params.target) {
         return;
       }
 
-      // Check for cycles (basic validation)
       const wouldCreateCycle = edges.some(
         (e) => e.target === params.source && e.source === params.target
       );
@@ -194,9 +188,12 @@ export function WorkflowCanvas({
         return;
       }
 
-      const newEdge = {
-        ...params,
+      const branch = getNextBranchForSource(params.source, nodes, edges);
+      const newEdge: WorkflowEdge = {
         id: `edge-${params.source}-${params.target}`,
+        source: params.source,
+        target: params.target,
+        data: branch ? { branch } : undefined,
         markerEnd: {
           type: MarkerType.ArrowClosed,
         },
@@ -207,7 +204,7 @@ export function WorkflowCanvas({
         onEdgesChange([...edges, newEdge]);
       }
     },
-    [edges, setEdges, onEdgesChange]
+    [edges, nodes, setEdges, onEdgesChange]
   );
 
   // Handle node clicks
@@ -220,52 +217,51 @@ export function WorkflowCanvas({
     [onNodeSelect]
   );
 
-  // Handle node double clicks
-  const handleNodeDoubleClick: NodeMouseHandler = useCallback(
-    (event, node) => {
-      if (onNodeDoubleClick) {
-        onNodeDoubleClick(event, node);
-      }
-    },
-    [onNodeDoubleClick]
+  const contextValue = useMemo(
+    () => ({
+      nodes,
+      updateNodeData,
+    }),
+    [nodes, updateNodeData],
   );
 
   return (
-    <div className={cn('w-full h-full bg-[hsl(var(--canvas-bg))]', className)}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes as any}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={handleEdgesChange}
-        onConnect={onConnect}
-        onNodeClick={handleNodeClick}
-        onNodeDoubleClick={handleNodeDoubleClick}
-        connectionMode={ConnectionMode.Loose}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        nodesDraggable={true}
-        nodesConnectable={true}
-        elementsSelectable={true}
-        panOnDrag={[1, 2]}
-        zoomOnScroll
-        minZoom={0.1}
-        maxZoom={2}
-        selectNodesOnDrag={false}
-        deleteKeyCode={['Backspace', 'Delete']}
-      >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
-          color="hsl(var(--canvas-grid))"
-        />
-        <Controls
-          showInteractive={false}
-          className="!bg-card !border-border !rounded-lg !shadow-lg"
-        />
-      </ReactFlow>
-    </div>
+    <WorkflowCanvasContext.Provider value={contextValue}>
+      <div className={cn('w-full h-full bg-[hsl(var(--canvas-bg))]', className)}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes as any}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={handleNodeClick}
+          connectionMode={ConnectionMode.Loose}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+          nodesDraggable={true}
+          nodesConnectable={true}
+          elementsSelectable={true}
+          panOnDrag={[1, 2]}
+          zoomOnScroll
+          minZoom={0.1}
+          maxZoom={2}
+          selectNodesOnDrag={false}
+          deleteKeyCode={['Backspace', 'Delete']}
+        >
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
+            color="hsl(var(--canvas-grid))"
+          />
+          <Controls
+            showInteractive={false}
+            className="!bg-card !border-border !rounded-lg !shadow-lg"
+          />
+        </ReactFlow>
+      </div>
+    </WorkflowCanvasContext.Provider>
   );
 }
 
