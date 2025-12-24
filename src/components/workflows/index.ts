@@ -6,7 +6,7 @@
 
 // Main canvas
 export { WorkflowCanvas, getToolNamesFromNodes } from './WorkflowCanvas';
-export type { BlockType, WorkflowNodeData, ToolBlockConfig } from './WorkflowCanvas';
+export type { BlockType, WorkflowNodeData, ToolBlockConfig } from './types';
 
 // Tool selection and integration status
 export { ToolSelector, ToolStatusIndicator } from './ToolSelector';

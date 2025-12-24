@@ -1,8 +1,9 @@
 import { memo } from 'react';
 import { Repeat } from 'lucide-react';
-import { BaseBlockNode } from './BaseBlockNode';
 import { NodeProps } from '@xyflow/react';
-import { WorkflowNodeData } from '../WorkflowCanvas';
+import { WorkflowNodeData } from '../types';
+import { InlineBlockConfig } from '../InlineBlockConfig';
+import { BaseBlockNode } from './BaseBlockNode';
 
 export const ForLoopBlockNode = memo(function ForLoopBlockNode(
   props: NodeProps<WorkflowNodeData>
@@ -16,7 +17,9 @@ export const ForLoopBlockNode = memo(function ForLoopBlockNode(
         inputs: ['array'],
         outputs: ['item', 'done'],
       }}
-    />
+    >
+      <InlineBlockConfig nodeId={props.id} />
+    </BaseBlockNode>
   );
 });
 

@@ -1,8 +1,9 @@
 import { memo } from 'react';
 import { GitBranch } from 'lucide-react';
-import { BaseBlockNode } from './BaseBlockNode';
 import { NodeProps } from '@xyflow/react';
-import { WorkflowNodeData } from '../WorkflowCanvas';
+import { WorkflowNodeData } from '../types';
+import { InlineBlockConfig } from '../InlineBlockConfig';
+import { BaseBlockNode } from './BaseBlockNode';
 
 export const IfElseBlockNode = memo(function IfElseBlockNode(
   props: NodeProps<WorkflowNodeData>
@@ -16,7 +17,9 @@ export const IfElseBlockNode = memo(function IfElseBlockNode(
         inputs: ['input'],
         outputs: ['true', 'false'],
       }}
-    />
+    >
+      <InlineBlockConfig nodeId={props.id} />
+    </BaseBlockNode>
   );
 });
 

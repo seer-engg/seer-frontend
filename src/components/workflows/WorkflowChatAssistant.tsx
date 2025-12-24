@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Send, Bot, User, Check, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Plus, Clock, FileText } from 'lucide-react';
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
-import { Node, Edge } from '@xyflow/react';
-import { WorkflowNodeData } from './WorkflowCanvas';
+import { Node } from '@xyflow/react';
+import { WorkflowNodeData, WorkflowEdge } from './types';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
@@ -26,8 +26,7 @@ interface WorkflowEdit {
   position?: { x: number; y: number };
   source_id?: string;
   target_id?: string;
-  source_handle?: string;
-  target_handle?: string;
+  branch?: 'true' | 'false';
 }
 
 interface ChatMessage {
@@ -61,7 +60,7 @@ interface ModelInfo {
 interface WorkflowChatAssistantProps {
   workflowId: number | null;
   nodes: Node<WorkflowNodeData>[];
-  edges: Edge[];
+  edges: WorkflowEdge[];
   onApplyEdits?: (edits: WorkflowEdit[]) => void;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
@@ -247,13 +246,15 @@ export function WorkflowChatAssistant({
               data: n.data,
               position: n.position,
             })),
-            edges: edges.map((e) => ({
-              id: e.id,
-              source: e.source,
-              target: e.target,
-              sourceHandle: e.sourceHandle,
-              targetHandle: e.targetHandle,
-            })),
+            edges: edges.map((e) => {
+              const branch = e.data?.branch;
+              return {
+                id: e.id,
+                source: e.source,
+                target: e.target,
+                ...(branch ? { data: { branch } } : {}),
+              };
+            }),
           },
         }),
         signal: controller.signal, // Add abort signal

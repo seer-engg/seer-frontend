@@ -14,13 +14,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProviderType } from './OAuthScopeSelector';
-import { WorkflowNodeData, BlockType } from './WorkflowCanvas';
-import { Code, Save } from 'lucide-react';
+import { WorkflowNodeData, BlockType } from './types';
+import { Code, HelpCircle, Save } from 'lucide-react';
 import { backendApiClient } from '@/lib/api-client';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StructuredOutputEditor } from './StructuredOutputEditor';
 import { toast } from '@/components/ui/sonner';
 import { ResourcePicker } from './ResourcePicker';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ResourcePickerConfig {
   resource_type: string;
@@ -37,6 +38,7 @@ interface ToolMetadata {
   description: string;
   parameters?: {
     properties?: Record<string, any>;
+    required?: string[];
   };
 }
 
@@ -45,9 +47,20 @@ interface BlockConfigPanelProps {
   onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
   allNodes?: Node<WorkflowNodeData>[]; // All nodes in workflow for reference dropdown
   autoSave?: boolean; // Enable auto-save on unmount (default: true for backward compatibility)
+  variant?: 'panel' | 'inline';
+  liveUpdate?: boolean;
+  liveUpdateDelayMs?: number;
 }
 
-export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = true }: BlockConfigPanelProps) {
+export function BlockConfigPanel({
+  node,
+  onUpdate,
+  allNodes = [],
+  autoSave = true,
+  variant = 'panel',
+  liveUpdate = false,
+  liveUpdateDelayMs = 350,
+}: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [pythonCode, setPythonCode] = useState('');
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
@@ -65,6 +78,10 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
     onChange: (value: string) => void;
   } | null>(null);
   const systemPromptRef = useRef<HTMLTextAreaElement>(null);
+  const lastSyncedNodeStateRef = useRef<{ nodeId: string | null; signature: string }>({
+    nodeId: null,
+    signature: '',
+  });
   
   // Use refs to track latest values for auto-save on unmount
   const configRef = useRef(config);
@@ -73,6 +90,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
   const oauthScopeRef = useRef(oauthScope);
   const isSavingRef = useRef(false); // Track if save is in progress to prevent concurrent saves
   const originalNodeRef = useRef(node); // Track original node to detect changes
+  const liveUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Update refs when state changes
   useEffect(() => {
@@ -232,15 +250,91 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
   }, [allNodes, node]);
 
   useEffect(() => {
-    if (node) {
-      setConfig(node.data.config || {});
-      setPythonCode(node.data.python_code || '');
-      setOAuthScope(node.data.oauth_scope);
-      setInputRefs(node.data.config?.input_refs || {});
-      setUseStructuredOutput(!!node.data.config?.output_schema);
-      originalNodeRef.current = node; // Update original node reference
+    if (!node) {
+      return;
     }
+
+    const nodeConfig = node.data.config || {};
+    const signature = JSON.stringify({
+      config: nodeConfig,
+      python_code: node.data.python_code || '',
+      oauth_scope: node.data.oauth_scope,
+      input_refs: node.data.config?.input_refs || {},
+    });
+
+    if (
+      lastSyncedNodeStateRef.current.nodeId === node.id &&
+      lastSyncedNodeStateRef.current.signature === signature
+    ) {
+      return;
+    }
+
+    lastSyncedNodeStateRef.current = {
+      nodeId: node.id,
+      signature,
+    };
+
+    setConfig(nodeConfig);
+    setPythonCode(node.data.python_code || '');
+    setOAuthScope(node.data.oauth_scope);
+    setInputRefs(node.data.config?.input_refs || {});
+    setUseStructuredOutput(!!nodeConfig.output_schema);
+    originalNodeRef.current = node; // Update original node reference
   }, [node]);
+
+  useEffect(() => {
+    if (!liveUpdate || !node) {
+      return;
+    }
+
+    const nodeConfig = node.data.config || {};
+    const nodeInputRefs = node.data.config?.input_refs || {};
+
+    const hasChanges =
+      JSON.stringify(config) !== JSON.stringify(nodeConfig) ||
+      pythonCode !== (node.data.python_code || '') ||
+      oauthScope !== node.data.oauth_scope ||
+      JSON.stringify(inputRefs) !== JSON.stringify(nodeInputRefs);
+
+    if (!hasChanges) {
+      return;
+    }
+
+    if (liveUpdateTimeoutRef.current) {
+      clearTimeout(liveUpdateTimeoutRef.current);
+    }
+
+    liveUpdateTimeoutRef.current = setTimeout(() => {
+      const originalConfig = node.data.config || {};
+      onUpdate(node.id, {
+        config: {
+          ...originalConfig,
+          ...config,
+          input_refs: inputRefs,
+          output_schema: config.output_schema,
+        },
+        python_code: pythonCode,
+        oauth_scope: oauthScope,
+      });
+      liveUpdateTimeoutRef.current = null;
+    }, liveUpdateDelayMs);
+
+    return () => {
+      if (liveUpdateTimeoutRef.current) {
+        clearTimeout(liveUpdateTimeoutRef.current);
+        liveUpdateTimeoutRef.current = null;
+      }
+    };
+  }, [
+    config,
+    inputRefs,
+    liveUpdate,
+    liveUpdateDelayMs,
+    node,
+    oauthScope,
+    onUpdate,
+    pythonCode,
+  ]);
 
   // Auto-save config changes when component unmounts (modal closes)
   // Only runs if autoSave is enabled (default true for backward compatibility)
@@ -297,7 +391,12 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
   const checkForAutocomplete = (
     value: string, 
     cursorPosition: number,
-    context?: { inputId: string; ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement>; onChange: (value: string) => void }
+    context?: {
+      inputId: string;
+      ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement>;
+      value: string;
+      onChange: (value: string) => void;
+    }
   ) => {
     // Find the last {{ before cursor
     const textBeforeCursor = value.substring(0, cursorPosition);
@@ -453,7 +552,6 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
             {/* Render individual parameters based on schema */}
             {Object.keys(paramSchema).length > 0 ? (
               <div className="space-y-4">
-                <Label className="text-sm font-semibold">Parameters</Label>
                 {Object.entries(paramSchema).map(([paramName, paramDef]: [string, any]) => {
                   const paramType = paramDef.type || 'string';
                   const paramValue = toolParams[paramName];
@@ -461,20 +559,39 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                   const hasDefault = paramDef.default !== undefined;
                   // Check for resource picker configuration
                   const resourcePicker = paramDef['x-resource-picker'] as ResourcePickerConfig | undefined;
+                  const defaultPlaceholder =
+                    paramDef.default === undefined
+                      ? ''
+                      : typeof paramDef.default === 'object'
+                        ? JSON.stringify(paramDef.default)
+                        : String(paramDef.default);
                   
                   return (
-                    <div key={paramName} className="grid grid-cols-2 gap-4 items-start">
+                    <div key={paramName} className="grid grid-cols-2 gap-1 items-start">
                       {/* Left side: Parameter name + description */}
                       <div className="space-y-1 text-left">
-                        <Label htmlFor={`param-${paramName}`} className="text-xs font-medium">
-                          {paramName}
-                          {isRequired && <span className="text-destructive ml-1">*</span>}
-                        </Label>
-                        {paramDef.description && (
-                          <p className="text-xs text-muted-foreground">
-                            {paramDef.description}
-                          </p>
-                        )}
+                        <div className="flex items-center gap-1">
+                          <Label htmlFor={`param-${paramName}`} className="text-xs font-medium">
+                            {paramName}
+                            {isRequired && <span className="text-destructive ml-1">*</span>}
+                          </Label>
+                          {paramDef.description && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="text-muted-foreground hover:text-foreground transition-colors"
+                                  aria-label={`About ${paramName} parameter`}
+                                >
+                                  <HelpCircle className="h-3.5 w-3.5" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                                {paramDef.description}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                         {hasDefault && (
                           <p className="text-xs text-muted-foreground italic">
                             Default: {typeof paramDef.default === 'object' 
@@ -499,7 +616,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                               params: { ...toolParams, [paramName]: value },
                             });
                           }}
-                          placeholder={paramDef.description || `Select ${paramName}...`}
+                          placeholder={`Select ${paramName}...`}
                           dependsOnValues={resourcePicker.depends_on ? {
                             [resourcePicker.depends_on]: toolParams[resourcePicker.depends_on],
                           } : undefined}
@@ -520,7 +637,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                             className="rounded"
                           />
                           <Label htmlFor={`param-${paramName}`} className="text-xs font-normal">
-                            {paramDef.description || paramName}
+                            {paramName}
                           </Label>
                         </div>
                       ) : paramType === 'integer' || paramType === 'number' ? (
@@ -837,7 +954,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                               // Close autocomplete when input loses focus (with delay to allow click)
                               setTimeout(() => setShowAutocomplete(false), 200);
                             }}
-                            placeholder={paramDef.default || paramDef.description || ''}
+                            placeholder={defaultPlaceholder}
                             className="text-xs"
                           />
                           {showAutocomplete && filteredVariables.length > 0 && autocompleteContext?.inputId === `param-${paramName}` && (
@@ -1146,37 +1263,29 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
     }
   };
 
+  const shouldShowSaveButton = !autoSave && !liveUpdate;
+  const saveButton = shouldShowSaveButton ? (
+    <Button onClick={handleSave} className="w-full" size="sm">
+      <Save className="w-4 h-4 mr-2" />
+      Save Configuration
+    </Button>
+  ) : null;
+
+  if (variant === 'inline') {
+    return (
+      <div className="space-y-4">
+        {renderConfigFields()}
+        {saveButton}
+      </div>
+    );
+  }
+
   return (
     <Card>
       <CardContent className="p-6 space-y-4">
         {renderConfigFields()}
-        
-        {!autoSave && (
-          <Button onClick={handleSave} className="w-full" size="sm">
-            <Save className="w-4 h-4 mr-2" />
-            Save Configuration
-          </Button>
-        )}
+        {saveButton}
       </CardContent>
     </Card>
   );
 }
-
-function getProviderFromTool(toolName: string | undefined): ProviderType {
-  if (!toolName) return 'gmail';
-  const upper = toolName.toUpperCase();
-  if (upper.startsWith('GMAIL')) return 'gmail';
-  if (upper.startsWith('GITHUB')) return 'github';
-  if (upper.startsWith('GOOGLEDRIVE')) return 'googledrive';
-  return 'gmail';
-}
-
-function getScopeLevel(scope: string | undefined): 'readonly' | 'read' | 'write' | 'full' | 'admin' | undefined {
-  if (!scope) return undefined;
-  if (scope.includes('readonly') || scope.includes('read:')) return 'readonly';
-  if (scope.includes('write:')) return 'write';
-  if (scope.includes('admin:')) return 'admin';
-  if (scope.includes('full') || !scope.includes('readonly')) return 'full';
-  return undefined;
-}
-

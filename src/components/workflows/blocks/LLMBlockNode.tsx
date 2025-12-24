@@ -1,8 +1,9 @@
 import { memo, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
-import { BaseBlockNode } from './BaseBlockNode';
 import { NodeProps } from '@xyflow/react';
-import { WorkflowNodeData } from '../WorkflowCanvas';
+import { WorkflowNodeData } from '../types';
+import { InlineBlockConfig } from '../InlineBlockConfig';
+import { BaseBlockNode } from './BaseBlockNode';
 
 export const LLMBlockNode = memo(function LLMBlockNode(
   props: NodeProps<WorkflowNodeData>
@@ -34,7 +35,9 @@ export const LLMBlockNode = memo(function LLMBlockNode(
         inputs: ['input'],
         outputs: outputHandles,
       }}
-    />
+    >
+      <InlineBlockConfig nodeId={props.id} />
+    </BaseBlockNode>
   );
 });
 
