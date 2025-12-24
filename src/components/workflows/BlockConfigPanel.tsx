@@ -547,11 +547,16 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                         <div className="relative">
                           <Textarea
                             id={`param-${paramName}`}
-                            value={Array.isArray(paramValue) 
-                              ? JSON.stringify(paramValue, null, 2)
-                              : paramDef.default 
-                                ? JSON.stringify(paramDef.default, null, 2)
-                                : '[]'}
+                            value={
+                              // Handle array, string (template vars or intermediate typing), or default
+                              Array.isArray(paramValue) 
+                                ? JSON.stringify(paramValue, null, 2)
+                                : typeof paramValue === 'string'
+                                  ? paramValue
+                                  : paramDef.default 
+                                    ? JSON.stringify(paramDef.default, null, 2)
+                                    : '[]'
+                            }
                             onChange={(e) => {
                               const value = e.target.value;
                               // Check for autocomplete trigger
@@ -570,7 +575,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                                       });
                                     }
                                   } catch {
-                                    // Invalid JSON, keep as is - might be in middle of typing
+                                    // Invalid JSON, keep as string (might be template variable or intermediate typing)
                                     setConfig({
                                       ...config,
                                       params: { ...toolParams, [paramName]: newValue },
@@ -578,7 +583,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                                   }
                                 },
                               });
-                              // Also try to parse JSON
+                              // Try to parse JSON, fallback to storing raw value
                               try {
                                 const parsed = JSON.parse(value);
                                 if (Array.isArray(parsed)) {
@@ -586,9 +591,19 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                                     ...config,
                                     params: { ...toolParams, [paramName]: parsed },
                                   });
+                                } else {
+                                  // Not an array, keep as string
+                                  setConfig({
+                                    ...config,
+                                    params: { ...toolParams, [paramName]: value },
+                                  });
                                 }
                               } catch {
-                                // Invalid JSON, keep as is
+                                // Invalid JSON - store as raw string (supports template variables and intermediate editing)
+                                setConfig({
+                                  ...config,
+                                  params: { ...toolParams, [paramName]: value },
+                                });
                               }
                             }}
                             onKeyDown={(e) => {
@@ -618,7 +633,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                             }}
                             placeholder={JSON.stringify(paramDef.default || [], null, 2)}
                             className="font-mono text-xs"
-                            rows={3}
+                            rows={4}
                           />
                           {showAutocomplete && filteredVariables.length > 0 && autocompleteContext?.inputId === `param-${paramName}` && (
                             <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover shadow-md max-h-60 overflow-auto">
@@ -642,16 +657,22 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                         <div className="relative">
                           <Textarea
                             id={`param-${paramName}`}
-                            value={typeof paramValue === 'object' && paramValue !== null
-                              ? JSON.stringify(paramValue, null, 2)
-                              : paramDef.default
-                                ? JSON.stringify(paramDef.default, null, 2)
-                                : '{}'}
+                            value={
+                              // Handle object, string (template vars or intermediate typing), or default
+                              typeof paramValue === 'object' && paramValue !== null
+                                ? JSON.stringify(paramValue, null, 2)
+                                : typeof paramValue === 'string'
+                                  ? paramValue
+                                  : paramDef.default
+                                    ? JSON.stringify(paramDef.default, null, 2)
+                                    : '{}'
+                            }
                             onChange={(e) => {
                               const value = e.target.value;
                               // Check for autocomplete trigger
                               const paramRef = { current: e.target };
                               checkForAutocomplete(value, e.target.selectionStart || 0, {
+                                inputId: `param-${paramName}`,
                                 ref: paramRef,
                                 value,
                                 onChange: (newValue) => {
@@ -664,7 +685,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                                       });
                                     }
                                   } catch {
-                                    // Invalid JSON, keep as is - might be in middle of typing
+                                    // Invalid JSON, keep as string (might be template variable or intermediate typing)
                                     setConfig({
                                       ...config,
                                       params: { ...toolParams, [paramName]: newValue },
@@ -672,7 +693,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                                   }
                                 },
                               });
-                              // Also try to parse JSON
+                              // Try to parse JSON, fallback to storing raw value
                               try {
                                 const parsed = JSON.parse(value);
                                 if (typeof parsed === 'object' && parsed !== null) {
@@ -680,9 +701,19 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                                     ...config,
                                     params: { ...toolParams, [paramName]: parsed },
                                   });
+                                } else {
+                                  // Not an object, keep as string
+                                  setConfig({
+                                    ...config,
+                                    params: { ...toolParams, [paramName]: value },
+                                  });
                                 }
                               } catch {
-                                // Invalid JSON, keep as is
+                                // Invalid JSON - store as raw string (supports template variables and intermediate editing)
+                                setConfig({
+                                  ...config,
+                                  params: { ...toolParams, [paramName]: value },
+                                });
                               }
                             }}
                             onKeyDown={(e) => {
@@ -732,6 +763,28 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                             </div>
                           )}
                         </div>
+                      ) : paramDef.enum && Array.isArray(paramDef.enum) ? (
+                        // Enum type - render as dropdown/select
+                        <Select
+                          value={paramValue ?? paramDef.default ?? paramDef.enum[0]}
+                          onValueChange={(value) =>
+                            setConfig({
+                              ...config,
+                              params: { ...toolParams, [paramName]: value },
+                            })
+                          }
+                        >
+                          <SelectTrigger id={`param-${paramName}`} className="text-xs">
+                            <SelectValue placeholder={`Select ${paramName}...`} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paramDef.enum.map((enumValue: string) => (
+                              <SelectItem key={enumValue} value={enumValue}>
+                                {enumValue}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <div className="relative">
                           <Input
