@@ -6,22 +6,30 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import LiveRun from "./pages/LiveRun";
 import ToolOrchestrator from "./pages/ToolOrchestrator";
-import TraceAnalyzer from "./pages/TraceAnalyzer";
-import ToolHub from "./pages/ToolHub";
 import Settings from "./pages/Settings";
-import Evals from "./pages/Evals";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
-import DatasetExplorer from "./pages/DatasetExplorer";
-import Agents from "./pages/Agents";
+import Workflows from "./pages/Workflows";
+import WorkflowExecution from "./pages/WorkflowExecution";
+import BlockConfiguration from "./pages/BlockConfiguration";
+import Traces from "./pages/Traces";
+import TraceDetail from "./pages/TraceDetail";
 
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 
 
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      staleTime: 0,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -31,14 +39,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Navigate to="/agents" replace />} />
-            <Route path="/agents" element={
-              <ProtectedRoute>
-                <SeerLayout>
-                  <Agents />
-                </SeerLayout>
-              </ProtectedRoute>
-            } />
+            <Route path="/" element={<Navigate to="/workflows" replace />} />
 
             <Route
               path="/sign-in/*"
@@ -78,36 +79,6 @@ const App = () => (
               }
             />
             <Route
-              path="/trace"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <TraceAnalyzer />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/datasets"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <DatasetExplorer />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/tools"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <ToolHub />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/settings"
               element={
                 <ProtectedRoute>
@@ -118,11 +89,51 @@ const App = () => (
               }
             />
             <Route
-              path="/eval"
+              path="/workflows"
               element={
                 <ProtectedRoute>
                   <SeerLayout>
-                    <Evals />
+                    <Workflows />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows/:workflowId/execution/:executionId?"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <WorkflowExecution />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows/:workflowId/blocks/:blockId/configure"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <BlockConfiguration />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/traces"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <Traces />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/traces/:threadId"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <TraceDetail />
                   </SeerLayout>
                 </ProtectedRoute>
               }

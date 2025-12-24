@@ -147,7 +147,8 @@ const StreamSession = ({
 };
 
 // Default values for the form
-const DEFAULT_API_URL = "http://localhost:2024";
+// Updated to match docker-compose.yml port mapping (8000:8000)
+const DEFAULT_API_URL = import.meta.env.VITE_BACKEND_API_URL;
 const DEFAULT_ASSISTANT_ID = "agent";
 
 interface StreamProviderProps {

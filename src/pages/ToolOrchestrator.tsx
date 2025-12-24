@@ -2,9 +2,7 @@ import { AgentChatContainer, AgentChatHeroProps } from "@/features/agent-chat/Ag
 import { motion } from "framer-motion";
 import { Zap, Sparkles } from "lucide-react";
 
-const SUPERVISOR_URL =
-  (import.meta.env.VITE_SUPERVISOR_URL as string | undefined) ||
-  "http://localhost:8000";
+const SUPERVISOR_URL = import.meta.env.VITE_BACKEND_API_URL 
 
 const SUPERVISOR_ASSISTANT_ID =
   (import.meta.env.VITE_SUPERVISOR_AGENT_ID as string | undefined) ||

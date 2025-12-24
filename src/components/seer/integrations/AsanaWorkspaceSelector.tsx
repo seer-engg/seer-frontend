@@ -2,7 +2,7 @@
  * Resource selector for Asana workspaces and projects
  */
 
-import { executeTool } from "@/lib/composio/proxy-client";
+import { executeTool } from "@/lib/api-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -25,7 +25,7 @@ type AsanaProject = {
 };
 
 interface AsanaWorkspaceSelectorProps {
-  connectedAccountId: string;
+  connectionId: string;
   onWorkspaceSelected?: (workspaceGid: string, workspaceName: string) => void;
   onProjectSelected?: (projectGid: string, projectName: string, workspaceGid?: string) => void;
   initialWorkspaceGid?: string; // Persisted workspace GID from previous selection
@@ -33,7 +33,7 @@ interface AsanaWorkspaceSelectorProps {
 }
 
 export function AsanaWorkspaceSelector({
-  connectedAccountId,
+  connectionId,
   onWorkspaceSelected,
   onProjectSelected,
   initialWorkspaceGid,
@@ -55,7 +55,7 @@ export function AsanaWorkspaceSelector({
   const [error, setError] = useState<string | null>(null);
 
   const fetchWorkspaces = useCallback(async () => {
-    if (!connectedAccountId || !userEmail) return;
+    if (!connectionId || !userEmail) return;
 
     setLoading(true);
     setError(null);
@@ -64,7 +64,7 @@ export function AsanaWorkspaceSelector({
       const response = await executeTool({
         toolSlug: "ASANA_GET_MULTIPLE_WORKSPACES",
         userId: userEmail,
-        connectedAccountId,
+        connectionId,
         arguments: {},
       });
 
@@ -121,18 +121,18 @@ export function AsanaWorkspaceSelector({
     } finally {
       setLoading(false);
     }
-  }, [connectedAccountId, toast, userEmail, onWorkspaceSelected]);
+  }, [connectionId, toast, userEmail, onWorkspaceSelected]);
 
   const fetchProjects = useCallback(
     async (workspaceGid: string) => {
-      if (!connectedAccountId || !userEmail) return;
+      if (!connectionId || !userEmail) return;
 
       setLoading(true);
       try {
         const response = await executeTool({
           toolSlug: "ASANA_GET_WORKSPACE_PROJECTS",
           userId: userEmail,
-          connectedAccountId,
+          connectionId,
           arguments: {
             workspace_gid: workspaceGid,
             limit: 50,
@@ -160,7 +160,7 @@ export function AsanaWorkspaceSelector({
         setLoading(false);
       }
     },
-    [connectedAccountId, userEmail, onProjectSelected],
+    [connectionId, userEmail, onProjectSelected],
   );
 
   // Initialize from persisted selection if available
@@ -174,10 +174,10 @@ export function AsanaWorkspaceSelector({
   }, [initialWorkspaceGid, initialProjectGid]);
 
   useEffect(() => {
-    if (connectedAccountId) {
+    if (connectionId) {
       fetchWorkspaces();
     }
-  }, [connectedAccountId, fetchWorkspaces]);
+  }, [connectionId, fetchWorkspaces]);
 
   useEffect(() => {
     if (selectedWorkspaceGid) {

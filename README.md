@@ -72,6 +72,18 @@ To connect a domain, navigate to Project > Settings > Domains and click Connect 
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
 
+## Backend URL Configuration
+
+The frontend can connect to a backend server in three ways (in priority order):
+
+1. **Query parameter** (highest priority): `?backend=http://localhost:8000`
+2. **Environment variable**: `VITE_BACKEND_API_URL=http://localhost:8000`
+3. **Fallback**: Automatically uses `http://localhost:8000` (Docker default) with a console warning
+
+The backend must implement LangGraph Server API endpoints:
+- `/health` - Health check endpoint (returns server info including status, server name, and version)
+- `/info` - Server info endpoint (returns same data as `/health` for connectivity checks)
+
 ## LangGraph Agent Chat
 
 The dashboard now embeds the reusable Agent Chat UI from `agent-chat-ui` for both the supervisor and eval agents. The shared `AgentChatContainer` component lives in `src/features/agent-chat/AgentChatContainer.tsx` and simply needs an API URL plus an assistant (graph) ID.
@@ -80,7 +92,8 @@ You can override the built-in defaults via environment variables:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `VITE_AGENT_CHAT_API_URL` | Optional global LangGraph deployment URL fallback | _none_ |
+| `VITE_BACKEND_API_URL` | Backend API base URL | `http://localhost:8000` (fallback) |
+| `VITE_AGENT_CHAT_API_URL` | Optional global LangGraph deployment URL fallback | `http://localhost:8000` |
 | `VITE_AGENT_CHAT_ASSISTANT_ID` | Optional global assistant ID fallback | _none_ |
 | `VITE_EVAL_AGENT_ID` | Eval graph ID | `eval_agent` |
 | `VITE_SUPERVISOR_AGENT_ID` | Supervisor graph ID | `supervisor` |

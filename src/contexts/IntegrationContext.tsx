@@ -1,8 +1,8 @@
 import { createContext, useContext, useMemo, useState, useEffect } from "react";
-import type { IntegrationType } from "@/lib/composio/client";
+import type { IntegrationType } from "@/lib/integrations/client";
 
 export type IntegrationSelection = {
-  id: string; // Composio connected_account_id (required for tool execution)
+  id: string; // OAuthConnection.id (required for tool execution)
   name: string; // Resource name (workspace/repo/folder name)
   type?: string;
   mode?: "connected" | "sandbox"; // Track whether using connected account or sandbox

@@ -1,16 +1,22 @@
 /**
- * Generic component for connecting Composio integrations
+ * Generic component for connecting integrations
  * Handles OAuth flow, connection status, and resource selection
+ * Frontend controls OAuth scopes (read-only is core differentiation)
+ * 
+ * Connection status is determined by checking if the OAuth provider connection
+ * has all required scopes for this integration type. Multiple integration types
+ * (gmail, googlesheets, googledrive) share the same Google OAuth connection.
  */
 
-import { getAuthConfigId, IntegrationType } from "@/lib/composio/client";
-import { INTEGRATION_CONFIGS, ConnectionStatus, ConnectedAccount } from "@/lib/composio/integrations";
+import { IntegrationType, formatScopes, getOAuthProvider } from "@/lib/integrations/client";
+import { INTEGRATION_CONFIGS, ConnectionStatus, ConnectedAccount } from "@/lib/integrations/config";
 import {
   listConnectedAccounts,
   initiateConnection,
   waitForConnection,
   deleteConnectedAccount,
-} from "@/lib/composio/proxy-client";
+  getIntegrationStatus,
+} from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -19,10 +25,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 
 const CONNECTION_QUERY_KEYS = [
-  "connected_account_id",
+  "connected_account_id", // Legacy support
   "connection_id",
-  "composio_connected_account_id",
-  "connectedAccountId",
+  "connectedAccountId", // Legacy support
+  "connected"
 ];
 
 const STATUS_BADGE_STYLES: Record<ConnectionStatus, string> = {
@@ -35,11 +41,11 @@ const STATUS_BADGE_STYLES: Record<ConnectionStatus, string> = {
 
 interface IntegrationConnectProps {
   type: IntegrationType;
-  onConnected?: (connectedAccountId: string) => void;
+  onConnected?: (connectionId: string) => void;
   onResourceSelected?: (resourceId: string, resourceName: string) => void;
   children?: (props: {
     status: ConnectionStatus;
-    connectedAccountId: string | null;
+    connectionId: string | null;
     isLoading: boolean;
     onAuthorize: () => void;
     onRefresh: () => void;
@@ -58,32 +64,31 @@ export function IntegrationConnect({
   const { toast } = useToast();
 
   const config = INTEGRATION_CONFIGS[type];
-  const authConfigId = useMemo(() => getAuthConfigId(type), [type]);
+  // Get required scopes for this integration
+  const requiredScopes = config.requiredScopes;
 
   const userEmail =
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
     null;
-  const missingAuthConfig = !authConfigId;
-  // No longer need API key check - backend proxy handles it
-  const canUseComposio = Boolean(authConfigId && userEmail && !missingAuthConfig);
+  const canConnect = Boolean(userEmail);
   const isSandbox = type === "sandbox";
 
   // Sandbox is always connected and doesn't need OAuth
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(isSandbox ? "connected" : "unknown");
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
   const [authorizeLoading, setAuthorizeLoading] = useState(false);
 
   const resetConnectionState = useCallback(() => {
-    setConnectedAccountId(null);
+    setConnectionId(null);
     setConnectionStatus("needs-auth");
     setConnectionError(null);
   }, []);
 
   const fetchConnections = useCallback(async () => {
-    if (!canUseComposio || !userEmail) {
+    if (!canConnect || !userEmail) {
       resetConnectionState();
       return;
     }
@@ -92,56 +97,110 @@ export function IntegrationConnect({
     setConnectionError(null);
 
     try {
-      const response = await listConnectedAccounts({
-        userIds: [userEmail],
-        toolkitSlugs: [config.toolkitSlug],
-        authConfigIds: authConfigId ? [authConfigId] : undefined,
-      });
-
-      const items = response.items ?? [];
-      const activeAccount = items.find((item) => item.status === "ACTIVE");
-
+      // Use the new integration status API that checks scopes properly
+      // This is the key change - we now check if the OAuth provider has the required scopes
+      // for this specific integration type
+      const status = await getIntegrationStatus(type);
+      
       // Clear any previous errors on successful fetch
       setConnectionError(null);
 
-      if (activeAccount) {
-        console.log(`[IntegrationConnect] Found ACTIVE account for ${type}:`, activeAccount.id);
-        if (activeAccount.user_id) {
-          console.log(`[IntegrationConnect] Account user_id format:`, activeAccount.user_id);
-        }
-        setConnectedAccountId(activeAccount.id);
+      if (status.connected && status.has_required_scopes) {
+        // Connected with all required scopes
+        console.log(`[IntegrationConnect] ${type} is connected with all required scopes`);
+        setConnectionId(status.connection_id);
         setConnectionStatus("connected");
-        // Call onConnected callback - don't include it in deps to avoid loops
-        onConnected?.(activeAccount.id);
-      } else if (items.length) {
-        console.log(`[IntegrationConnect] Found ${items.length} account(s) but none ACTIVE for ${type}`);
-        setConnectedAccountId(items[0].id);
-        setConnectionStatus("pending");
+        onConnected?.(status.connection_id!);
+      } else if (status.connected && !status.has_required_scopes) {
+        // Connected but missing some scopes - user needs to re-auth to add scopes
+        console.log(`[IntegrationConnect] ${type} connected but missing scopes:`, status.missing_scopes);
+        setConnectionId(status.connection_id);
+        setConnectionStatus("needs-auth"); // Show as needing auth to add more scopes
       } else {
-        console.log(`[IntegrationConnect] No accounts found for ${type}`);
+        // Not connected at all
+        console.log(`[IntegrationConnect] ${type} not connected`);
         resetConnectionState();
       }
     } catch (error) {
-      console.error("[IntegrationConnect] Error fetching connections:", error);
-      setConnectionStatus("error");
-      setConnectionError(error instanceof Error ? error.message : "Unknown error");
+      console.error("[IntegrationConnect] Error fetching connection status:", error);
+      
+      // Fallback to legacy approach if new endpoint not available
+      try {
+        const oauthProvider = getOAuthProvider(type);
+        if (oauthProvider) {
+          const response = await listConnectedAccounts({
+            userIds: [userEmail],
+            toolkitSlugs: [oauthProvider],
+          });
+          
+          const items = response.items ?? [];
+          const activeAccount = items.find((item) => item.status === "ACTIVE");
+          
+          if (activeAccount) {
+            // Check if the account has required scopes
+            const grantedScopes = new Set((activeAccount.scopes || "").split(" ").filter(Boolean));
+            const hasScopes = requiredScopes.every(s => grantedScopes.has(s));
+            
+            if (hasScopes) {
+              setConnectionId(activeAccount.id);
+              setConnectionStatus("connected");
+              onConnected?.(activeAccount.id);
+            } else {
+              setConnectionId(activeAccount.id);
+              setConnectionStatus("needs-auth");
+            }
+          } else {
+            resetConnectionState();
+          }
+        }
+      } catch (fallbackError) {
+        console.error("[IntegrationConnect] Fallback also failed:", fallbackError);
+        setConnectionStatus("error");
+        setConnectionError(error instanceof Error ? error.message : "Unknown error");
+      }
     } finally {
       setConnectionLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseComposio, authConfigId, config.toolkitSlug, resetConnectionState, userEmail]);
+  }, [canConnect, type, resetConnectionState, userEmail, requiredScopes]);
 
   const handleAuthorize = useCallback(async () => {
-    if (!authConfigId || !userEmail) return;
+    if (!userEmail) return;
+    
+    // CRITICAL: Frontend must always pass scopes
+    if (requiredScopes.length === 0 && !isSandbox) {
+      toast({
+        title: "Configuration error",
+        description: `No OAuth scopes configured for ${config.displayName}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Get the OAuth provider for this integration type
+    const provider = getOAuthProvider(type);
+    if (!provider && !isSandbox) {
+      toast({
+        title: "Configuration error",
+        description: `No OAuth provider configured for ${config.displayName}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setAuthorizeLoading(true);
     setConnectionError(null);
 
     try {
       const callbackUrl = `${window.location.origin}${window.location.pathname}`;
+      const scopeString = formatScopes(requiredScopes);
+      
       const connectionRequest = await initiateConnection({
         userId: userEmail,
-        authConfigId,
+        provider: provider!, // Use OAuth provider (e.g., 'google' for gmail/drive/sheets)
+        scope: scopeString, // Always pass scopes - frontend controls permissions
         callbackUrl,
+        integrationType: type, // Pass integration type so backend tracks which tool triggered this
       });
 
       if (!connectionRequest.redirectUrl) {
@@ -161,16 +220,16 @@ export function IntegrationConnect({
     } finally {
       setAuthorizeLoading(false);
     }
-  }, [authConfigId, toast, userEmail, config.displayName]);
+  }, [toast, userEmail, config.displayName, type, requiredScopes, isSandbox]);
 
   const handleCancel = useCallback(async () => {
-    if (!connectedAccountId) return;
+    if (!connectionId) return;
     
     setConnectionLoading(true);
     setConnectionError(null);
 
     try {
-      await deleteConnectedAccount(connectedAccountId);
+      await deleteConnectedAccount(connectionId, userEmail || undefined);
       toast({
         title: `${config.displayName} connection cancelled`,
         description: "The pending connection has been cancelled. You can connect again anytime.",
@@ -187,7 +246,7 @@ export function IntegrationConnect({
     } finally {
       setConnectionLoading(false);
     }
-  }, [connectedAccountId, toast, config.displayName, resetConnectionState]);
+  }, [connectionId, toast, config.displayName, resetConnectionState, userEmail]);
 
   useEffect(() => {
     // Sandbox is always connected, no need to fetch
@@ -202,16 +261,16 @@ export function IntegrationConnect({
       return;
     }
 
-    if (canUseComposio && !authLoading) {
+    if (canConnect && !authLoading) {
       fetchConnections();
     }
     // Only re-fetch when these core dependencies change, not when fetchConnections callback changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, canUseComposio, userEmail, isSandbox]);
+  }, [authLoading, canConnect, userEmail, isSandbox]);
 
   // Handle OAuth callback - use a ref to prevent re-running
   useEffect(() => {
-    if (!canUseComposio) return;
+    if (!canConnect) return;
 
     const params = new URLSearchParams(window.location.search);
     const matchedValue = CONNECTION_QUERY_KEYS.map((key) => params.get(key)).find(Boolean);
@@ -248,14 +307,14 @@ export function IntegrationConnect({
           timeoutMs: 120000,
         });
         
-        // Store the connected account ID
-        if (result.connectedAccountId) {
-          setConnectedAccountId(result.connectedAccountId);
+        // Store the connection ID
+        if (result.connectionId) {
+          setConnectionId(result.connectionId);
           setConnectionStatus("connected");
-          onConnected?.(result.connectedAccountId);
+          onConnected?.(result.connectionId);
           toast({
             title: `${config.displayName} connected`,
-            description: "Composio confirmed the authorization.",
+            description: "Authorization confirmed.",
           });
         }
         // Refresh connections to get latest status
@@ -276,9 +335,9 @@ export function IntegrationConnect({
         sessionStorage.removeItem(processingKey);
       }
     })();
-    // Only depend on canUseComposio - don't include callbacks to avoid loops
+    // Only depend on canConnect - don't include callbacks to avoid loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseComposio]);
+  }, [canConnect]);
 
   // Render using children function if provided
   if (children) {
@@ -286,7 +345,7 @@ export function IntegrationConnect({
       <>
         {children({
           status: connectionStatus,
-          connectedAccountId,
+          connectionId,
           isLoading: connectionLoading || authorizeLoading,
           onAuthorize: handleAuthorize,
           onRefresh: fetchConnections,
