@@ -266,6 +266,7 @@ export interface ToolConnectionStatus {
   provider: string | null;
   connected: boolean;
   has_required_scopes: boolean;
+  has_refresh_token?: boolean;  // Whether refresh_token exists (needed for token refresh)
   missing_scopes: string[];
   connection_id: string | null;
   provider_account_id?: string;

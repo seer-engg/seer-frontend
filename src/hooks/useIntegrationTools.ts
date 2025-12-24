@@ -185,7 +185,8 @@ export function useIntegrationTools() {
     if (toolStatusMap) {
       for (const tool of tools) {
         const status = toolStatusMap.get(tool.name);
-        if (status?.connected && status?.has_required_scopes) {
+        // Check if fully connected (has scopes AND refresh_token)
+        if (status?.connected && status?.has_required_scopes && (status?.has_refresh_token !== false)) {
           const integrationType = (tool.integration_type || status.integration_type) as IntegrationType;
           if (integrationType && !connected.has(integrationType)) {
             // Create a synthetic connection object for backward compatibility
@@ -321,10 +322,12 @@ export function useIntegrationTools() {
       if (toolStatusMap) {
         const status = toolStatusMap.get(tool.name);
         if (status) {
+          // Connection is fully functional only if it has scopes AND refresh_token
+          const fullyConnected = status.connected && status.has_required_scopes && (status.has_refresh_token !== false);
           return {
             tool,
             integrationType,
-            isConnected: status.connected && status.has_required_scopes,
+            isConnected: fullyConnected,
             connectionId: status.connection_id,
             requiredScopes: tool.required_scopes,
           };

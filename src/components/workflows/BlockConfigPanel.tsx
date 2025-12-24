@@ -148,11 +148,13 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
         // Handle fields array (new format)
         if (Array.isArray(config.fields)) {
           config.fields.forEach((field: any) => {
-            if (field.name) {
+            // Support both 'id' and 'name' fields (id is preferred)
+            const fieldName = field.id || field.name;
+            if (fieldName) {
               // Add as {{BlockLabel.fieldName}} format
-              variables.push(`${blockLabel}.${field.name}`);
+              variables.push(`${blockLabel}.${fieldName}`);
               // Also add as simple field name if it's unique
-              variables.push(field.name);
+              variables.push(fieldName);
             }
           });
         }

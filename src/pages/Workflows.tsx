@@ -411,6 +411,13 @@ export default function Workflows() {
         const sourceExists = newNodes.some(n => n.id === edit.source_id);
         const targetExists = newNodes.some(n => n.id === edit.target_id);
         
+        if (!sourceExists) {
+          console.warn(`[handleApplyChatEdits] Source block ${edit.source_id} not found for edge`);
+        }
+        if (!targetExists) {
+          console.warn(`[handleApplyChatEdits] Target block ${edit.target_id} not found for edge`);
+        }
+        
         if (sourceExists && targetExists) {
           // Add connection
           const newEdge: Edge = {
@@ -422,7 +429,10 @@ export default function Workflows() {
           };
           // Check if edge already exists
           if (!newEdges.some((e) => e.source === edit.source_id && e.target === edit.target_id)) {
+            console.log(`[handleApplyChatEdits] Adding edge from ${edit.source_id} to ${edit.target_id}`);
             newEdges.push(newEdge);
+          } else {
+            console.log(`[handleApplyChatEdits] Edge from ${edit.source_id} to ${edit.target_id} already exists`);
           }
         }
       } else if (edit.operation === 'remove_edge') {
