@@ -78,6 +78,10 @@ export function BlockConfigPanel({
     onChange: (value: string) => void;
   } | null>(null);
   const systemPromptRef = useRef<HTMLTextAreaElement>(null);
+  const lastSyncedNodeStateRef = useRef<{ nodeId: string | null; signature: string }>({
+    nodeId: null,
+    signature: '',
+  });
   
   // Use refs to track latest values for auto-save on unmount
   const configRef = useRef(config);
@@ -246,14 +250,36 @@ export function BlockConfigPanel({
   }, [allNodes, node]);
 
   useEffect(() => {
-    if (node) {
-      setConfig(node.data.config || {});
-      setPythonCode(node.data.python_code || '');
-      setOAuthScope(node.data.oauth_scope);
-      setInputRefs(node.data.config?.input_refs || {});
-      setUseStructuredOutput(!!node.data.config?.output_schema);
-      originalNodeRef.current = node; // Update original node reference
+    if (!node) {
+      return;
     }
+
+    const nodeConfig = node.data.config || {};
+    const signature = JSON.stringify({
+      config: nodeConfig,
+      python_code: node.data.python_code || '',
+      oauth_scope: node.data.oauth_scope,
+      input_refs: node.data.config?.input_refs || {},
+    });
+
+    if (
+      lastSyncedNodeStateRef.current.nodeId === node.id &&
+      lastSyncedNodeStateRef.current.signature === signature
+    ) {
+      return;
+    }
+
+    lastSyncedNodeStateRef.current = {
+      nodeId: node.id,
+      signature,
+    };
+
+    setConfig(nodeConfig);
+    setPythonCode(node.data.python_code || '');
+    setOAuthScope(node.data.oauth_scope);
+    setInputRefs(node.data.config?.input_refs || {});
+    setUseStructuredOutput(!!nodeConfig.output_schema);
+    originalNodeRef.current = node; // Update original node reference
   }, [node]);
 
   useEffect(() => {

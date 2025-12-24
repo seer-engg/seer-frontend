@@ -19,7 +19,7 @@ export const InlineBlockConfig = memo(function InlineBlockConfig({
 
   return (
     <div
-      className="mt-3 space-y-4 rounded-md border bg-muted/40 px-3 py-3"
+      className="mt-3 space-y-4 rounded-md border bg-muted/40 px-3 py-3 w-full max-w-[360px]"
       onPointerDown={(event) => event.stopPropagation()}
     >
       <BlockConfigPanel
