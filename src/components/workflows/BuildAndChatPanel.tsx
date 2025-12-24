@@ -5,7 +5,7 @@
  * Split view layout with resizable divider.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -177,6 +177,7 @@ export function BuildAndChatPanel({
   const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set());
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
 
   // Fetch tools
@@ -262,19 +263,46 @@ export function BuildAndChatPanel({
     }
   }, [models, selectedModel]);
 
-  // Fetch chat sessions
-  const { data: sessions = [] } = useQuery<ChatSession[]>({
+  // Fetch chat sessions with pagination
+  const {
+    data: sessionsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isPending,
+    isError,
+    error,
+  } = useInfiniteQuery<ChatSession[]>({
     queryKey: ['chat-sessions', workflowId],
-    queryFn: async () => {
+    queryFn: async ({ pageParam = 0 }) => {
       if (!workflowId) return [];
       const response = await backendApiClient.request<ChatSession[]>(
-        `/api/workflows/${workflowId}/chat/sessions`,
+        `/api/workflows/${workflowId}/chat/sessions?offset=${pageParam}&limit=50`,
         { method: 'GET' }
       );
       return response;
     },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages, lastPageParam) => {
+      // If last page has fewer than 50 items, we've reached the end
+      if (lastPage.length < 50) {
+        return undefined;
+      }
+      // Otherwise, return the next offset
+      return lastPageParam + 50;
+    },
     enabled: !!workflowId,
   });
+
+  // Flatten pages array to get all sessions
+  const sessions = sessionsData?.pages.flatMap(page => page) ?? [];
+
+  // Log errors for debugging
+  useEffect(() => {
+    if (isError && error) {
+      console.error('Failed to load chat sessions:', error);
+    }
+  }, [isError, error]);
 
   // Load session messages when session changes
   const { data: sessionMessages } = useQuery<ChatMessage[]>({
@@ -316,6 +344,15 @@ export function BuildAndChatPanel({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.max(80, Math.min(scrollHeight, 300))}px`;
+    }
+  }, [input]);
 
   const handleSend = async () => {
     if (!input.trim() || !workflowId || isLoading) return;
@@ -614,7 +651,7 @@ export function BuildAndChatPanel({
           ) : (
             <div className="flex flex-col h-full bg-background">
               {/* Chat Header */}
-              <div className="border-b p-3 flex-shrink-0">
+              <div className="p-3 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold">Chat</h3>
                   <div className="flex items-center gap-1">
@@ -639,24 +676,43 @@ export function BuildAndChatPanel({
                             Select Session
                           </div>
                           <div className="max-h-[300px] overflow-y-auto">
-                            {sessions.length === 0 ? (
+                            {isPending ? (
+                              <div className="text-xs text-muted-foreground px-2 py-1.5">
+                                Loading sessions...
+                              </div>
+                            ) : isError ? (
+                              <div className="text-xs text-destructive px-2 py-1.5">
+                                Error loading sessions
+                              </div>
+                            ) : sessions.length === 0 ? (
                               <div className="text-xs text-muted-foreground px-2 py-1.5">
                                 No sessions available
                               </div>
                             ) : (
-                              sessions.map((session) => (
-                                <button
-                                  key={session.id}
-                                  onClick={() => {
-                                    handleSelectSession(session.id);
-                                  }}
-                                  className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-accent ${
-                                    currentSessionId === session.id ? 'bg-accent' : ''
-                                  }`}
-                                >
-                                  {session.title || `Session ${session.id}`}
-                                </button>
-                              ))
+                              <>
+                                {sessions.map((session) => (
+                                  <button
+                                    key={session.id}
+                                    onClick={() => {
+                                      handleSelectSession(session.id);
+                                    }}
+                                    className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-accent ${
+                                      currentSessionId === session.id ? 'bg-accent' : ''
+                                    }`}
+                                  >
+                                    {session.title || `Session ${session.id}`}
+                                  </button>
+                                ))}
+                                {hasNextPage && (
+                                  <button
+                                    onClick={() => fetchNextPage()}
+                                    disabled={isFetchingNextPage}
+                                    className="w-full text-xs px-2 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {isFetchingNextPage ? 'Loading...' : 'Load More'}
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -774,50 +830,44 @@ export function BuildAndChatPanel({
               </ScrollArea>
 
               {/* Input Area */}
-              <div className="border-t p-4 flex-shrink-0">
-                <div className="space-y-2">
+              <div className="p-4 flex-shrink-0 flex flex-col gap-2">
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Ask about your workflow..."
+                  disabled={isLoading}
+                  className="min-h-[80px] resize-none w-full bg-white overflow-hidden"
+                  style={{ maxHeight: '300px' }}
+                />
+                <div className="flex items-center justify-end gap-2">
                   <Select
                     value={selectedModel}
                     onValueChange={setSelectedModel}
                     disabled={isLoadingModels || isLoading}
                   >
-                    <SelectTrigger className="h-7 text-xs w-full">
-                      <SelectValue placeholder={isLoadingModels ? "Loading models..." : "Select model"} />
+                    <SelectTrigger className="h-7 text-xs w-32">
+                      <SelectValue placeholder={isLoadingModels ? "Loading..." : "Select model"} />
                     </SelectTrigger>
                     <SelectContent>
                       {models
                         .filter((m) => m.available)
                         .map((model) => (
                           <SelectItem key={model.id} value={model.id}>
-                            <div className="flex items-center justify-between w-full">
-                              <span>{model.name}</span>
-                              <span className="text-xs text-muted-foreground ml-2">
-                                {model.provider === 'openai' ? 'OpenAI' : 'Anthropic'}
-                              </span>
-                            </div>
+                            {model.name}
                           </SelectItem>
                         ))}
                     </SelectContent>
                   </Select>
-                  <div className="relative flex items-end gap-2">
-                    <Textarea
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={handleKeyPress}
-                      placeholder="Ask about your workflow..."
-                      disabled={isLoading}
-                      className="min-h-[52px] max-h-[200px] resize-none pr-12 flex-1"
-                      rows={1}
-                    />
-                    <Button
-                      onClick={handleSend}
-                      disabled={isLoading || !input.trim()}
-                      size="icon"
-                      className="absolute right-2 bottom-2 h-8 w-8"
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  <Button
+                    onClick={handleSend}
+                    disabled={isLoading || !input.trim()}
+                    size="icon"
+                    className="h-8 w-8"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
             </div>

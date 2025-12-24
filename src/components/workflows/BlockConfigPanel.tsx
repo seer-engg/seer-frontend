@@ -132,12 +132,31 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
     
     const variables: string[] = [];
     
-    // 1. Add input block variable names (existing behavior)
-    const inputVariables = allNodes
-      .filter(node => node.data.type === 'input')
-      .map(node => node.data.config?.variable_name)
-      .filter(Boolean) as string[];
-    variables.push(...inputVariables);
+    // 1. Add input block variable names (existing behavior + fields array support)
+    allNodes
+      .filter(n => n.data.type === 'input')
+      .forEach(inputNode => {
+        const blockLabel = inputNode.data.label || inputNode.id;
+        const config = inputNode.data.config || {};
+        
+        // Handle variable_name (legacy)
+        if (config.variable_name) {
+          variables.push(config.variable_name);
+          variables.push(`${blockLabel}.${config.variable_name}`);
+        }
+        
+        // Handle fields array (new format)
+        if (Array.isArray(config.fields)) {
+          config.fields.forEach((field: any) => {
+            if (field.name) {
+              // Add as {{BlockLabel.fieldName}} format
+              variables.push(`${blockLabel}.${field.name}`);
+              // Also add as simple field name if it's unique
+              variables.push(field.name);
+            }
+          });
+        }
+      });
     
     // 2. Automatically extract outputs from ALL blocks
     // For each block, we need to infer what outputs it might have
@@ -160,8 +179,11 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
         variables.push('output');
       } else if (block.data.type === 'input') {
         // Input blocks already handled above, but also add output handle
-        const varName = block.data.config?.variable_name;
-        if (varName) {
+        const config = block.data.config || {};
+        if (config.variable_name) {
+          variables.push(`${blockLabel}.output`);
+        } else if (Array.isArray(config.fields) && config.fields.length > 0) {
+          // Add output handle for input blocks with fields
           variables.push(`${blockLabel}.output`);
         }
       } else if (block.data.type === 'if_else') {

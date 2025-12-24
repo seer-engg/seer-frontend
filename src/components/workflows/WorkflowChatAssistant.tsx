@@ -4,7 +4,7 @@
  * Intelligent AI assistant for editing workflows via chat.
  */
 import { useState, useRef, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import { Node, Edge } from '@xyflow/react';
 import { WorkflowNodeData } from './WorkflowCanvas';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
 
 interface WorkflowEdit {
   operation: string;
@@ -121,19 +122,46 @@ export function WorkflowChatAssistant({
     }
   }, [models, selectedModel]);
 
-  // Fetch chat sessions
-  const { data: sessions = [] } = useQuery<ChatSession[]>({
+  // Fetch chat sessions with pagination
+  const {
+    data: sessionsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isPending,
+    isError,
+    error,
+  } = useInfiniteQuery<ChatSession[]>({
     queryKey: ['chat-sessions', workflowId],
-    queryFn: async () => {
+    queryFn: async ({ pageParam = 0 }) => {
       if (!workflowId) return [];
       const response = await backendApiClient.request<ChatSession[]>(
-        `/api/workflows/${workflowId}/chat/sessions`,
+        `/api/workflows/${workflowId}/chat/sessions?offset=${pageParam}&limit=50`,
         { method: 'GET' }
       );
       return response;
     },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages, lastPageParam) => {
+      // If last page has fewer than 50 items, we've reached the end
+      if (lastPage.length < 50) {
+        return undefined;
+      }
+      // Otherwise, return the next offset
+      return lastPageParam + 50;
+    },
     enabled: !!workflowId,
   });
+
+  // Flatten pages array to get all sessions
+  const sessions = sessionsData?.pages.flatMap(page => page) ?? [];
+
+  // Log errors for debugging
+  useEffect(() => {
+    if (isError && error) {
+      console.error('Failed to load chat sessions:', error);
+    }
+  }, [isError, error]);
 
   // Load session messages when session changes
   const { data: sessionMessages } = useQuery<ChatMessage[]>({
@@ -397,24 +425,43 @@ export function WorkflowChatAssistant({
                     Select Session
                   </div>
                   <div className="max-h-[300px] overflow-y-auto">
-                    {sessions.length === 0 ? (
+                    {isPending ? (
+                      <div className="text-xs text-muted-foreground px-2 py-1.5">
+                        Loading sessions...
+                      </div>
+                    ) : isError ? (
+                      <div className="text-xs text-destructive px-2 py-1.5">
+                        Error loading sessions
+                      </div>
+                    ) : sessions.length === 0 ? (
                       <div className="text-xs text-muted-foreground px-2 py-1.5">
                         No sessions available
                       </div>
                     ) : (
-                      sessions.map((session) => (
-                        <button
-                          key={session.id}
-                          onClick={() => {
-                            handleSelectSession(session.id);
-                          }}
-                          className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-accent ${
-                            currentSessionId === session.id ? 'bg-accent' : ''
-                          }`}
-                        >
-                          {session.title || `Session ${session.id}`}
-                        </button>
-                      ))
+                      <>
+                        {sessions.map((session) => (
+                          <button
+                            key={session.id}
+                            onClick={() => {
+                              handleSelectSession(session.id);
+                            }}
+                            className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-accent ${
+                              currentSessionId === session.id ? 'bg-accent' : ''
+                            }`}
+                          >
+                            {session.title || `Session ${session.id}`}
+                          </button>
+                        ))}
+                        {hasNextPage && (
+                          <button
+                            onClick={() => fetchNextPage()}
+                            disabled={isFetchingNextPage}
+                            className="w-full text-xs px-2 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isFetchingNextPage ? 'Loading...' : 'Load More'}
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -480,25 +527,48 @@ export function WorkflowChatAssistant({
                       )}
                       {message.interruptRequired && (
                         <div className="mt-3 pt-3 border-t border-yellow-500/50 bg-yellow-500/10 p-3 rounded">
-                          <p className="text-xs font-medium mb-2 text-yellow-700 dark:text-yellow-400">
-                            Human input required
-                          </p>
-                          <p className="text-xs text-muted-foreground mb-3">
-                            {message.interruptData?.message || 'Please approve, edit, or reject this action.'}
-                          </p>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="default" className="text-xs">
-                              <Check className="w-3 h-3 mr-1" />
-                              Approve
-                            </Button>
-                            <Button size="sm" variant="outline" className="text-xs">
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="outline" className="text-xs">
-                              <X className="w-3 h-3 mr-1" />
-                              Reject
-                            </Button>
-                          </div>
+                          {message.interruptData?.type === 'clarification' ? (
+                            // Clarification question UI
+                            <ClarificationQuestion
+                              question={message.interruptData.question || 'I need more information to help you.'}
+                              context={message.interruptData.context}
+                              workflowId={workflowId}
+                              threadId={currentThreadId}
+                              onResume={() => {
+                                // Remove interrupt flag after resuming
+                                setMessages((prev) =>
+                                  prev.map((msg, idx) =>
+                                    idx === index
+                                      ? { ...msg, interruptRequired: false, interruptData: undefined }
+                                      : msg
+                                  )
+                                );
+                              }}
+                            />
+                          ) : (
+                            // Default interrupt UI (for tool approvals, etc.)
+                            <>
+                              <p className="text-xs font-medium mb-2 text-yellow-700 dark:text-yellow-400">
+                                Human input required
+                              </p>
+                              <p className="text-xs text-muted-foreground mb-3">
+                                {message.interruptData?.message || 'Please approve, edit, or reject this action.'}
+                              </p>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="default" className="text-xs">
+                                  <Check className="w-3 h-3 mr-1" />
+                                  Approve
+                                </Button>
+                                <Button size="sm" variant="outline" className="text-xs">
+                                  Edit
+                                </Button>
+                                <Button size="sm" variant="outline" className="text-xs">
+                                  <X className="w-3 h-3 mr-1" />
+                                  Reject
+                                </Button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                       {message.suggestedEdits && message.suggestedEdits.length > 0 && (
@@ -604,6 +674,91 @@ export function WorkflowChatAssistant({
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Clarification Question Component
+function ClarificationQuestion({
+  question,
+  context,
+  workflowId,
+  threadId,
+  onResume,
+}: {
+  question: string;
+  context?: string;
+  workflowId: number | null;
+  threadId: string | null;
+  onResume: () => void;
+}) {
+  const [answer, setAnswer] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!answer.trim() || !workflowId || !threadId || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await backendApiClient.request(
+        `/api/workflows/${workflowId}/chat/resume`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            thread_id: threadId,
+            command: {
+              resume: {
+                answer: answer.trim(),
+              },
+            },
+          }),
+        }
+      );
+
+      // Add user's answer as a message
+      // Note: The backend will handle the actual resume and return the agent's response
+      onResume();
+    } catch (error) {
+      console.error('Failed to submit clarification answer:', error);
+      alert('Failed to submit answer. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-xs font-medium mb-1 text-blue-700 dark:text-blue-400">
+          Question
+        </p>
+        <p className="text-sm text-foreground">{question}</p>
+        {context && (
+          <p className="text-xs text-muted-foreground mt-1">{context}</p>
+        )}
+      </div>
+      <div className="space-y-2">
+        <Input
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          placeholder="Your answer..."
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
+          disabled={isSubmitting}
+        />
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={!answer.trim() || isSubmitting}
+          className="w-full"
+        >
+          {isSubmitting ? 'Submitting...' : 'Submit Answer'}
+        </Button>
       </div>
     </div>
   );

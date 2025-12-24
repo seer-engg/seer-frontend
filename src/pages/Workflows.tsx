@@ -325,6 +325,7 @@ export default function Workflows() {
     operation: string;
     block_id?: string;
     block_type?: string;
+    label?: string;
     config?: Record<string, any>;
     position?: { x: number; y: number };
     source_id?: string;
@@ -333,11 +334,28 @@ export default function Workflows() {
     target_handle?: string;
   }>) => {
     // Apply edits to workflow
+    // Process blocks first, then edges to ensure blocks exist when edges are created
+    const blockEdits = edits.filter(e => ['add_block', 'modify_block', 'remove_block'].includes(e.operation));
+    const edgeEdits = edits.filter(e => ['add_edge', 'remove_edge'].includes(e.operation));
+    
     let newNodes = [...nodes];
     let newEdges = [...edges];
 
-    for (const edit of edits) {
+    // Process block operations first
+    for (const edit of blockEdits) {
       if (edit.operation === 'add_block' && edit.block_type) {
+        // Process config: transform inputs to params for tool blocks, handle fields for input blocks
+        let processedConfig = edit.config || {};
+        
+        // Transform inputs to params for tool blocks (backward compatibility)
+        if (edit.block_type === 'tool' && processedConfig.inputs && !processedConfig.params) {
+          processedConfig = {
+            ...processedConfig,
+            params: processedConfig.inputs,
+          };
+          delete processedConfig.inputs;
+        }
+        
         // Add new block
         const newNode: Node<WorkflowNodeData> = {
           id: edit.block_id || `node-${Date.now()}`,
@@ -348,12 +366,22 @@ export default function Workflows() {
           },
           data: {
             type: edit.block_type as any,
-            label: edit.block_type.charAt(0).toUpperCase() + edit.block_type.slice(1),
-            config: edit.config || {},
+            label: edit.label || edit.block_type.charAt(0).toUpperCase() + edit.block_type.slice(1),
+            config: processedConfig,
           },
         };
         newNodes.push(newNode);
       } else if (edit.operation === 'modify_block' && edit.block_id) {
+        // Transform inputs to params if present
+        let processedConfig = edit.config || {};
+        if (processedConfig.inputs && !processedConfig.params) {
+          processedConfig = {
+            ...processedConfig,
+            params: processedConfig.inputs,
+          };
+          delete processedConfig.inputs;
+        }
+        
         // Modify existing block
         newNodes = newNodes.map((node) =>
           node.id === edit.block_id
@@ -361,7 +389,7 @@ export default function Workflows() {
                 ...node,
                 data: {
                   ...node.data,
-                  config: { ...node.data.config, ...(edit.config || {}) },
+                  config: { ...node.data.config, ...processedConfig },
                 },
               }
             : node
@@ -373,18 +401,29 @@ export default function Workflows() {
         newEdges = newEdges.filter(
           (edge) => edge.source !== edit.block_id && edge.target !== edit.block_id
         );
-      } else if (edit.operation === 'add_edge' && edit.source_id && edit.target_id) {
-        // Add connection
-        const newEdge: Edge = {
-          id: `edge-${edit.source_id}-${edit.target_id}`,
-          source: edit.source_id,
-          target: edit.target_id,
-          sourceHandle: edit.source_handle,
-          targetHandle: edit.target_handle,
-        };
-        // Check if edge already exists
-        if (!newEdges.some((e) => e.source === edit.source_id && e.target === edit.target_id)) {
-          newEdges.push(newEdge);
+      }
+    }
+
+    // Process edge operations after blocks are created
+    for (const edit of edgeEdits) {
+      if (edit.operation === 'add_edge' && edit.source_id && edit.target_id) {
+        // Verify both source and target blocks exist
+        const sourceExists = newNodes.some(n => n.id === edit.source_id);
+        const targetExists = newNodes.some(n => n.id === edit.target_id);
+        
+        if (sourceExists && targetExists) {
+          // Add connection
+          const newEdge: Edge = {
+            id: `edge-${edit.source_id}-${edit.target_id}`,
+            source: edit.source_id,
+            target: edit.target_id,
+            sourceHandle: edit.source_handle,
+            targetHandle: edit.target_handle,
+          };
+          // Check if edge already exists
+          if (!newEdges.some((e) => e.source === edit.source_id && e.target === edit.target_id)) {
+            newEdges.push(newEdge);
+          }
         }
       } else if (edit.operation === 'remove_edge') {
         // Remove connection

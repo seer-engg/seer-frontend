@@ -11,6 +11,7 @@ import {
   Sparkles,
   Lock, // Add Lock icon for coming soon
   Workflow,
+  List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -28,7 +29,8 @@ import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
   { name: "Workflows", href: "/workflows", icon: Workflow },
-  { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap }
+  { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
+  { name: "Traces", href: "/traces", icon: Activity }
 ] as const;
 
 const secondaryNav = [
