@@ -12,7 +12,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table';
-import { Search, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, Clock, FileEdit, Trash2, Play, Check, X } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { GmailIcon } from '@/components/icons/gmail';
+import { GoogleDriveIcon } from '@/components/icons/googledrive';
+import { GoogleSheetsIcon } from '@/components/icons/googlesheets';
+import { GitHubIcon } from '@/components/icons/github';
+import { Search, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Clock, FileEdit, Trash2, Play, Check, X, Globe, Wrench, GitPullRequest, Plug } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { backendApiClient } from '@/lib/api-client';
 
@@ -176,6 +181,63 @@ export function ToolPalette({
           label: builtInBlock.label,
         });
       }
+    }
+  };
+
+  const formatGroupLabel = (value: string) => {
+    const normalized = value.replace(/[_-]+/g, ' ').trim();
+    if (!normalized) return 'Other';
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  };
+
+  const normalizeIntegrationTypeKey = (value: string) => {
+    const v = value.toLowerCase().trim();
+    if (v === 'google_drive') return 'googledrive';
+    if (v === 'google_sheets') return 'googlesheets';
+    return v;
+  };
+
+  const getProviderIcon = (provider: string) => {
+    const p = provider.toLowerCase();
+    switch (p) {
+      case 'google':
+        return <Globe className="w-3.5 h-3.5 text-muted-foreground" />;
+      case 'github':
+        return <GitHubIcon className="w-3.5 h-3.5 text-muted-foreground" />;
+      default:
+        return <Plug className="w-3.5 h-3.5 text-muted-foreground" />;
+    }
+  };
+
+  const getIntegrationTypeIcon = (integrationType: string) => {
+    const key = normalizeIntegrationTypeKey(integrationType);
+    switch (key) {
+      case 'gmail':
+        return <GmailIcon className="w-3.5 h-3.5 text-muted-foreground" />;
+      case 'googledrive':
+        return <GoogleDriveIcon className="w-3.5 h-3.5 text-muted-foreground" />;
+      case 'googlesheets':
+        return <GoogleSheetsIcon className="w-3.5 h-3.5 text-muted-foreground" />;
+      case 'pull_request':
+        return <GitPullRequest className="w-3.5 h-3.5 text-muted-foreground" />;
+      default:
+        return <Wrench className="w-3.5 h-3.5 text-muted-foreground" />;
+    }
+  };
+
+  const getIntegrationTypeLabel = (integrationType: string) => {
+    const key = normalizeIntegrationTypeKey(integrationType);
+    switch (key) {
+      case 'gmail':
+        return 'Gmail';
+      case 'googledrive':
+        return 'Google Drive';
+      case 'googlesheets':
+        return 'Google Sheets';
+      case 'pull_request':
+        return 'Pull Requests';
+      default:
+        return formatGroupLabel(integrationType);
     }
   };
 
@@ -433,7 +495,9 @@ export function ToolPalette({
               <h3 className="text-sm font-medium mb-2">Integration Tools</h3>
               {Object.entries(toolsByProvider).length > 0 ? (
                 <div className="space-y-4">
-                  {Object.entries(toolsByProvider).map(([provider, providerTools]) => {
+                  {Object.entries(toolsByProvider)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([provider, providerTools]) => {
                     const filteredProviderTools = providerTools.filter((tool) => {
                       const matchesSearch =
                         tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -444,31 +508,81 @@ export function ToolPalette({
 
                     if (filteredProviderTools.length === 0) return null;
 
+                    const toolsByIntegrationType = filteredProviderTools.reduce((acc, tool) => {
+                      const integrationType = tool.integration_type || 'other';
+                      if (!acc[integrationType]) acc[integrationType] = [];
+                      acc[integrationType].push(tool);
+                      return acc;
+                    }, {} as Record<string, Tool[]>);
+
                     return (
                       <div key={provider}>
-                        <h4 className="text-xs font-semibold mb-2 capitalize text-muted-foreground">
-                          {provider}
-                        </h4>
-                        <Table>
-                          <TableBody>
-                            {filteredProviderTools.map((tool) => (
-                              <TableRow
-                                key={tool.slug || tool.name}
-                                className="cursor-pointer"
-                                onClick={() => handleBlockClick(tool, true)}
-                              >
-                                <TableCell className="p-2">
-                                  <p className="text-sm font-medium">{tool.name}</p>
-                                  {tool.description && (
-                                    <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                                      {tool.description}
-                                    </p>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                        <Collapsible defaultOpen>
+                          <CollapsibleTrigger asChild>
+                            <button
+                              type="button"
+                              className="group w-full flex items-center justify-between text-left mb-2 px-2 py-1.5 rounded-md bg-muted/30 hover:bg-muted/50 border border-border/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                {getProviderIcon(provider)}
+                                <h4 className="text-xs font-semibold mb-0 capitalize text-muted-foreground">
+                                  {provider}
+                                </h4>
+                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                  {filteredProviderTools.length}
+                                </Badge>
+                              </div>
+                              <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                            </button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="space-y-3 ml-3 pl-3 border-l border-border/60">
+                            {Object.entries(toolsByIntegrationType)
+                              .sort(([a], [b]) => a.localeCompare(b))
+                              .map(([integrationType, integrationTools]) => (
+                                <Collapsible key={`${provider}:${integrationType}`} defaultOpen>
+                                  <CollapsibleTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="group w-full flex items-center justify-between text-left px-2 py-1 rounded-md bg-background hover:bg-accent border border-border/40 transition-colors"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        {getIntegrationTypeIcon(integrationType)}
+                                        <span className="text-xs font-medium text-foreground truncate">
+                                          {getIntegrationTypeLabel(integrationType)}
+                                        </span>
+                                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                                          {integrationTools.length}
+                                        </Badge>
+                                      </div>
+                                      <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                                    </button>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent className="ml-3 pl-3 border-l border-border/40">
+                                    <Table className="mt-1">
+                                      <TableBody>
+                                        {integrationTools.map((tool) => (
+                                          <TableRow
+                                            key={tool.slug || tool.name}
+                                            className="cursor-pointer hover:bg-accent/60"
+                                            onClick={() => handleBlockClick(tool, true)}
+                                          >
+                                            <TableCell className="p-2">
+                                              <p className="text-sm font-medium">{tool.name}</p>
+                                              {tool.description && (
+                                                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                                                  {tool.description}
+                                                </p>
+                                              )}
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              ))}
+                          </CollapsibleContent>
+                        </Collapsible>
                       </div>
                     );
                   })}

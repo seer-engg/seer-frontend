@@ -18,6 +18,7 @@ import { Plus, Trash2, Code } from 'lucide-react';
 interface FieldDefinition {
   name: string;
   type: string;
+  description?: string;
 }
 
 interface StructuredOutputEditorProps {
@@ -71,6 +72,7 @@ function schemaToFields(schema: any): FieldDefinition[] {
   return Object.entries(schema.properties).map(([name, prop]: [string, any]) => ({
     name,
     type: jsonSchemaTypeToPydanticType(prop.type || 'any'),
+    description: prop.description || '',
   }));
 }
 
@@ -80,9 +82,14 @@ function fieldsToSchema(fields: FieldDefinition[]): any {
   
   fields.forEach((field) => {
     if (field.name.trim()) {
-      properties[field.name.trim()] = {
+      const propDef: Record<string, any> = {
         type: pydanticTypeToJsonSchemaType(field.type),
       };
+      // Include description if provided
+      if (field.description && field.description.trim()) {
+        propDef.description = field.description.trim();
+      }
+      properties[field.name.trim()] = propDef;
     }
   });
   
@@ -104,11 +111,11 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
       if (parsedFields.length > 0) {
         setFields(parsedFields);
       } else {
-        setFields([{ name: '', type: 'any' }]);
+        setFields([{ name: '', type: 'any', description: '' }]);
       }
       setJsonValue(JSON.stringify(value, null, 2));
     } else {
-      setFields([{ name: '', type: 'any' }]);
+      setFields([{ name: '', type: 'any', description: '' }]);
       const defaultSchema = { type: 'object', properties: {} };
       setJsonValue(JSON.stringify(defaultSchema, null, 2));
       onChange(defaultSchema);
@@ -142,7 +149,7 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
   };
 
   const addField = () => {
-    setFields([...fields, { name: '', type: 'any' }]);
+    setFields([...fields, { name: '', type: 'any', description: '' }]);
   };
 
   const removeField = (index: number) => {
@@ -181,15 +188,16 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[40%]">Field Name</TableHead>
-                    <TableHead className="w-[40%]">Type</TableHead>
-                    <TableHead className="w-[20%]">Actions</TableHead>
+                    <TableHead className="w-[25%]">Field Name</TableHead>
+                    <TableHead className="w-[20%]">Type</TableHead>
+                    <TableHead className="w-[40%]">Description</TableHead>
+                    <TableHead className="w-[15%]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {fields.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground py-4">
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
                         No fields. Click "Add Field" to get started.
                       </TableCell>
                     </TableRow>
@@ -222,6 +230,14 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
                           </Select>
                         </TableCell>
                         <TableCell>
+                          <Input
+                            value={field.description || ''}
+                            onChange={(e) => updateField(index, { description: e.target.value })}
+                            placeholder="Describe this field..."
+                            className="h-8"
+                          />
+                        </TableCell>
+                        <TableCell>
                           <Button
                             type="button"
                             variant="ghost"
@@ -239,7 +255,8 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
               </Table>
             </div>
             <p className="text-xs text-muted-foreground">
-              Define the structure of the LLM output. Each field will be validated according to its type.
+              Define the structure of the LLM output. Each field will be validated according to its type. 
+              Adding descriptions helps guide the LLM on what content to generate for each field.
             </p>
           </div>
         </TabsContent>
