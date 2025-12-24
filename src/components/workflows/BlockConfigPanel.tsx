@@ -20,6 +20,17 @@ import { backendApiClient } from '@/lib/api-client';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StructuredOutputEditor } from './StructuredOutputEditor';
 import { toast } from '@/components/ui/sonner';
+import { ResourcePicker } from './ResourcePicker';
+
+interface ResourcePickerConfig {
+  resource_type: string;
+  display_field?: string;
+  value_field?: string;
+  search_enabled?: boolean;
+  hierarchy?: boolean;
+  filter?: Record<string, any>;
+  depends_on?: string;
+}
 
 interface ToolMetadata {
   name: string;
@@ -418,6 +429,7 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
         const toolParams = config.params || {};
         const paramSchema = toolSchema?.parameters?.properties || {};
         const requiredParams = toolSchema?.parameters?.required || [];
+        const toolProvider = config.provider || 'google'; // Default to google if not specified
         
         return (
           <div className="space-y-4">
@@ -430,6 +442,8 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                   const paramValue = toolParams[paramName];
                   const isRequired = requiredParams.includes(paramName);
                   const hasDefault = paramDef.default !== undefined;
+                  // Check for resource picker configuration
+                  const resourcePicker = paramDef['x-resource-picker'] as ResourcePickerConfig | undefined;
                   
                   return (
                     <div key={paramName} className="grid grid-cols-2 gap-4 items-start">
@@ -456,7 +470,25 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                       {/* Right side: Input field */}
                       <div className="space-y-1">
                       
-                      {paramType === 'boolean' ? (
+                      {/* Resource Picker for parameters with x-resource-picker */}
+                      {resourcePicker ? (
+                        <ResourcePicker
+                          config={resourcePicker}
+                          provider={toolProvider}
+                          value={paramValue}
+                          onChange={(value, displayName) => {
+                            setConfig({
+                              ...config,
+                              params: { ...toolParams, [paramName]: value },
+                            });
+                          }}
+                          placeholder={paramDef.description || `Select ${paramName}...`}
+                          dependsOnValues={resourcePicker.depends_on ? {
+                            [resourcePicker.depends_on]: toolParams[resourcePicker.depends_on],
+                          } : undefined}
+                          className="text-xs"
+                        />
+                      ) : paramType === 'boolean' ? (
                         <div className="flex items-center space-x-2">
                           <input
                             type="checkbox"

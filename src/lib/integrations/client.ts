@@ -5,7 +5,7 @@
 
 import { getGitHubToolScopes } from './github_tool_scopes';
 
-export type IntegrationType = "sandbox" | "github" | "googledrive" | "asana" | "gmail" | "googlesheets";
+export type IntegrationType = "sandbox" | "github" | "google_drive" | "asana" | "gmail" | "google_sheets";
 
 /**
  * OAuth provider type - used for OAuth connections
@@ -23,8 +23,9 @@ export type OAuthProvider = "google" | "github" | "asana";
 export function getOAuthProvider(integrationType: IntegrationType): OAuthProvider | null {
   switch (integrationType) {
     case "gmail":
-    case "googledrive":
-    case "googlesheets":
+    case "google_drive":
+      return "google";
+    case "google_sheets":
       return "google";
     case "github":
       return "github";
@@ -65,7 +66,7 @@ export function getRequiredScopes(
         "repo", // Conservative default
       ];
     
-    case "googledrive":
+    case "google_drive":
       // Read-only Google Drive scope
       return [
         ...baseScopes,
@@ -79,7 +80,7 @@ export function getRequiredScopes(
         "https://www.googleapis.com/auth/gmail.readonly",
       ];
     
-    case "googlesheets":
+    case "google_sheets":
       // Google Sheets read/write scope
       return [
         ...baseScopes,
