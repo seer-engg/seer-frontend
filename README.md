@@ -81,9 +81,8 @@ The frontend can connect to a backend server in three ways (in priority order):
 3. **Fallback**: Automatically uses `http://localhost:8000` (Docker default) with a console warning
 
 The backend must implement LangGraph Server API endpoints:
-- `/ok` - Health check endpoint (returns `{"ok": true}`)
-- `/info` - Server info endpoint (used for connectivity checks)
-- `/health` - Additional health check endpoint
+- `/health` - Health check endpoint (returns server info including status, server name, and version)
+- `/info` - Server info endpoint (returns same data as `/health` for connectivity checks)
 
 ## LangGraph Agent Chat
 

@@ -7,12 +7,11 @@ import {
   Activity,
   Package,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
   Sparkles,
   Lock, // Add Lock icon for coming soon
   Workflow,
+  List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -30,7 +29,8 @@ import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
   { name: "Workflows", href: "/workflows", icon: Workflow },
-  { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap }
+  { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
+  { name: "Traces", href: "/traces", icon: Activity }
 ] as const;
 
 const secondaryNav = [
@@ -45,8 +45,24 @@ type NavItemType = {
   comingSoon?: boolean;
 };
 
-export function SeerSidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+interface SeerSidebarProps {
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
+  forceCollapsed?: boolean;
+}
+
+export function SeerSidebar({ collapsed: externalCollapsed, onCollapsedChange, forceCollapsed }: SeerSidebarProps = {}) {
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  
+  const collapsed = forceCollapsed ? true : (externalCollapsed !== undefined ? externalCollapsed : internalCollapsed);
+  
+  const setCollapsed = (value: boolean) => {
+    if (forceCollapsed) return; // Don't allow changing if force collapsed
+    if (externalCollapsed === undefined) {
+      setInternalCollapsed(value);
+    }
+    onCollapsedChange?.(value);
+  };
   const { user } = useUser();
   const { signOut } = useClerk();
   const location = useLocation();
@@ -68,32 +84,20 @@ export function SeerSidebar() {
                 "text-muted-foreground"
               )}
             >
-              <item.icon className="h-4 w-4 shrink-0" />
-              {!collapsed && (
-                <motion.span
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: "auto" }}
-                  exit={{ opacity: 0, width: 0 }}
-                  className="whitespace-nowrap flex items-center gap-2"
-                >
-                  {item.name}
-                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
-                    Soon
-                  </Badge>
-                </motion.span>
-              )}
+            <item.icon className="h-4 w-4 shrink-0" />
+            <motion.span
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              className="whitespace-nowrap flex items-center gap-2"
+            >
+              {item.name}
+              <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
+                Soon
+              </Badge>
+            </motion.span>
             </div>
           </TooltipTrigger>
-          {collapsed && (
-            <TooltipContent side="right" className="font-medium">
-              {item.name} - Coming Soon
-            </TooltipContent>
-          )}
-          {!collapsed && (
-            <TooltipContent side="right" className="font-medium">
-              Coming Soon
-            </TooltipContent>
-          )}
         </Tooltip>
       );
     }
@@ -112,31 +116,29 @@ export function SeerSidebar() {
             )}
           >
             <item.icon className="h-4 w-4 shrink-0" />
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="whitespace-nowrap"
-              >
-                {item.name}
-              </motion.span>
-            )}
+            <motion.span
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              className="whitespace-nowrap"
+            >
+              {item.name}
+            </motion.span>
           </NavLink>
         </TooltipTrigger>
-        {collapsed && (
-          <TooltipContent side="right" className="font-medium">
-            {item.name}
-          </TooltipContent>
-        )}
       </Tooltip>
     );
   };
 
+  // When collapsed, render nothing (0 width) - controlled by hamburger menu in top bar
+  if (collapsed || forceCollapsed) {
+    return null;
+  }
+
   return (
     <motion.aside
       initial={false}
-      animate={{ width: collapsed ? 64 : 220 }}
+      animate={{ width: 220 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
       className="h-screen bg-sidebar border-r border-sidebar-border flex flex-col shrink-0"
     >
@@ -146,24 +148,14 @@ export function SeerSidebar() {
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-seer to-indigo-500 flex items-center justify-center">
             <Search className="h-4 w-4 text-white" />
           </div>
-          {!collapsed && (
-            <motion.span
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="font-semibold text-foreground"
-            >
-              Seer
-            </motion.span>
-          )}
+          <motion.span
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="font-semibold text-foreground"
+          >
+            Seer
+          </motion.span>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </Button>
       </div>
 
       {/* Primary Navigation */}
@@ -190,11 +182,9 @@ export function SeerSidebar() {
 
       {/* Theme Switcher */}
       <div className="px-3 py-2 border-t border-sidebar-border">
-        <div className={cn("flex items-center", collapsed ? "justify-center" : "gap-2")}>
+        <div className="flex items-center gap-2">
           <ThemeSwitcher />
-          {!collapsed && (
-            <span className="text-xs text-muted-foreground">Theme</span>
-          )}
+          <span className="text-xs text-muted-foreground">Theme</span>
         </div>
       </div>
 
@@ -204,47 +194,19 @@ export function SeerSidebar() {
           {hasApiKey ? (
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className={cn(
-                  "w-full justify-center text-xs border-success/30 bg-success/10 text-success",
-                  collapsed && "w-auto"
-                )}>
-                  {collapsed ? (
-                    <Key className="h-3 w-3" />
-                  ) : (
-                    <>
-                      <Key className="h-3 w-3 mr-1" />
-                      API Key Active
-                    </>
-                  )}
+                <Badge variant="outline" className="w-full justify-center text-xs border-success/30 bg-success/10 text-success">
+                  <Key className="h-3 w-3 mr-1" />
+                  API Key Active
                 </Badge>
               </TooltipTrigger>
-              {collapsed && (
-                <TooltipContent side="right">
-                  <p>API Key Active</p>
-                </TooltipContent>
-              )}
             </Tooltip>
           ) : (
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className={cn(
-                  "w-full justify-center text-xs border-warning/30 bg-warning/10 text-warning",
-                  collapsed && "w-auto"
-                )}>
-                  {collapsed ? (
-                    <span>{remainingFreeQueries}</span>
-                  ) : (
-                    <>
-                      {remainingFreeQueries} free {remainingFreeQueries === 1 ? 'query' : 'queries'} left
-                    </>
-                  )}
+                <Badge variant="outline" className="w-full justify-center text-xs border-warning/30 bg-warning/10 text-warning">
+                  {remainingFreeQueries} free {remainingFreeQueries === 1 ? 'query' : 'queries'} left
                 </Badge>
               </TooltipTrigger>
-              {collapsed && (
-                <TooltipContent side="right">
-                  <p>{remainingFreeQueries} free {remainingFreeQueries === 1 ? 'query' : 'queries'} left</p>
-                </TooltipContent>
-              )}
             </Tooltip>
           )}
         </div>
@@ -252,34 +214,27 @@ export function SeerSidebar() {
 
       {/* User Profile */}
       <div className="px-2 py-3 border-t border-sidebar-border">
-        <div className={cn(
-          "flex items-center gap-3",
-          collapsed ? "justify-center" : "px-2"
-        )}>
+        <div className="flex items-center gap-3 px-2">
           <Avatar className="h-8 w-8">
             <AvatarImage src={user?.imageUrl} />
             <AvatarFallback className="bg-accent text-xs">
               {(userEmail?.charAt(0) || "U").toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">
-                {user?.fullName || userEmail?.split("@")[0] || "User"}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
-            </div>
-          )}
-          {!collapsed && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-              onClick={() => signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">
+              {user?.fullName || userEmail?.split("@")[0] || "User"}
+            </p>
+            <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+            onClick={() => signOut()}
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </motion.aside>

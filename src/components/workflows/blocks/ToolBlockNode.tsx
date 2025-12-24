@@ -17,13 +17,14 @@ import {
   AlertTriangle, 
   Loader2,
   ExternalLink,
-  Mail,
-  FolderOpen,
-  Github,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { IntegrationType } from '@/lib/integrations/client';
+import { GmailSVG } from '@/components/icons/gmail';
+import { GoogleDriveSVG } from '@/components/icons/googledrive';
+import { GoogleSheetsSVG } from '@/components/icons/googlesheets';
+import { GitHubSVG } from '@/components/icons/github';
 
 /**
  * Get icon for integration type
@@ -31,11 +32,13 @@ import { IntegrationType } from '@/lib/integrations/client';
 function getIntegrationIcon(integrationType: IntegrationType | null) {
   switch (integrationType) {
     case 'gmail':
-      return <Mail className="w-4 h-4" />;
+      return <GmailSVG width={16} height={16} />;
     case 'googledrive':
-      return <FolderOpen className="w-4 h-4" />;
+      return <GoogleDriveSVG width={16} height={16} />;
+    case 'googlesheets':
+      return <GoogleSheetsSVG width={16} height={16} />;
     case 'github':
-      return <Github className="w-4 h-4" />;
+      return <GitHubSVG width={16} height={16} />;
     default:
       return <Wrench className="w-4 h-4" />;
   }
@@ -96,10 +99,21 @@ export const ToolBlockNode = memo(function ToolBlockNode(
   
   // Generate output handles (tool may return structured data)
   const outputHandles = useMemo(() => {
-    // For now, single output handle
-    // Could be extended based on tool return schema
-    return ['output'];
-  }, []);
+    // Default to single output handle
+    // After execution, if tool returns structured data (dict), backend stores all keys
+    // in block_outputs[block_id], and they become available via templating system
+    // For visual connections, we default to ['output'] but could be extended to include
+    // all keys from execution results if available in node data
+    const handles = ['output'];
+    
+    // TODO: In the future, if execution results are stored in node data,
+    // we could extract additional handles from the output structure here
+    // For example: if (data.execution_results?.output && typeof data.execution_results.output === 'object') {
+    //   handles.push(...Object.keys(data.execution_results.output));
+    // }
+    
+    return handles;
+  }, [data]);
   
   // Get integration status for this tool
   const { status, isLoading, initiateAuth } = useToolIntegration(toolName);
@@ -153,7 +167,6 @@ export const ToolBlockNode = memo(function ToolBlockNode(
             className="flex items-center gap-1 text-[10px] px-1.5 py-0 h-5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
           >
             <CheckCircle2 className="w-3 h-3" />
-            {displayName}
           </Badge>
         ),
         needsAuth: false,
@@ -202,12 +215,12 @@ export const ToolBlockNode = memo(function ToolBlockNode(
       ))}
 
       {/* Block content */}
-      <div className="flex flex-col gap-2">
-        {/* Header row */}
+      <div className="space-y-2">
+        {/* Icon and tool name row */}
         <div className="flex items-center gap-2">
           <div
             className={cn(
-              'w-8 h-8 rounded flex items-center justify-center',
+              'w-8 h-8 rounded flex items-center justify-center shrink-0',
               needsAuth ? 'bg-amber-500/10' : 'bg-primary/10',
             )}
           >
@@ -223,16 +236,18 @@ export const ToolBlockNode = memo(function ToolBlockNode(
             <p className="font-medium text-sm truncate">{data.label}</p>
           </div>
         </div>
-
-        {/* Status row */}
-        {(statusBadge || needsAuth) && (
-          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
-            {statusBadge}
+        
+        {/* Status badge and connect button row */}
+        {statusBadge && (
+          <div className="flex items-center gap-2 pl-10">
+            <div className="shrink-0">
+              {statusBadge}
+            </div>
             {needsAuth && (
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
                 onClick={handleConnect}
               >
                 Connect

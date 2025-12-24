@@ -13,13 +13,23 @@ import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
 import WorkflowExecution from "./pages/WorkflowExecution";
 import BlockConfiguration from "./pages/BlockConfiguration";
+import Traces from "./pages/Traces";
+import TraceDetail from "./pages/TraceDetail";
 
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 
 
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      staleTime: 0,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -104,6 +114,26 @@ const App = () => (
                 <ProtectedRoute>
                   <SeerLayout>
                     <BlockConfiguration />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/traces"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <Traces />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/traces/:threadId"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <TraceDetail />
                   </SeerLayout>
                 </ProtectedRoute>
               }

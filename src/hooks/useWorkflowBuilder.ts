@@ -58,7 +58,12 @@ export function useWorkflowBuilder() {
         body: data,
       });
     },
-    onSuccess: () => {
+    onSuccess: (newWorkflow) => {
+      // Optimistically update the cache with the new workflow for immediate UI feedback
+      queryClient.setQueryData<Workflow[]>(['workflows'], (oldWorkflows = []) => {
+        return [...oldWorkflows, newWorkflow];
+      });
+      // Also invalidate to ensure we have the latest data from server
       queryClient.invalidateQueries({ queryKey: ['workflows'] });
     },
   });
@@ -77,7 +82,7 @@ export function useWorkflowBuilder() {
         body: data,
       });
     },
-    onSuccess: () => {
+    onSuccess: (updatedWorkflow) => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] });
     },
   });
@@ -212,4 +217,3 @@ async function getAuthToken(): Promise<string | null> {
     return null;
   }
 }
-

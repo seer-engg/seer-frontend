@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Wrench, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, Clock, FileEdit, Trash2, Play } from 'lucide-react';
+import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table';
+import { Search, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, Clock, FileEdit, Trash2, Play, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { backendApiClient } from '@/lib/api-client';
 
@@ -79,6 +80,7 @@ interface ToolPaletteProps {
   selectedWorkflowId?: number | null;
   onLoadWorkflow?: (workflow: any) => void;
   onDeleteWorkflow?: (workflowId: number) => void;
+  onRenameWorkflow?: (workflowId: number, newName: string) => Promise<void>;
   onExecuteWorkflow?: (workflowId: number, inputData: Record<string, any>, stream: boolean) => Promise<any>;
   onNewWorkflow?: () => void;
   isExecuting?: boolean;
@@ -94,6 +96,7 @@ export function ToolPalette({
   selectedWorkflowId,
   onLoadWorkflow,
   onDeleteWorkflow,
+  onRenameWorkflow,
   onExecuteWorkflow,
   onNewWorkflow,
   isExecuting = false,
@@ -108,6 +111,9 @@ export function ToolPalette({
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [editingWorkflowId, setEditingWorkflowId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState<string>('');
+  const [isRenaming, setIsRenaming] = useState(false);
 
   // Fetch tools
   const { data: toolsData, isLoading } = useQuery({
@@ -173,6 +179,52 @@ export function ToolPalette({
     }
   };
 
+  const handleStartRename = (e: React.MouseEvent, workflow: typeof workflows[0]) => {
+    e.stopPropagation();
+    setEditingWorkflowId(workflow.id);
+    setEditingName(workflow.name);
+  };
+
+  const handleCancelRename = () => {
+    setEditingWorkflowId(null);
+    setEditingName('');
+  };
+
+  const handleSaveRename = async (workflowId: number) => {
+    if (!onRenameWorkflow || !editingName.trim()) {
+      handleCancelRename();
+      return;
+    }
+
+    const trimmedName = editingName.trim();
+    if (trimmedName === workflows.find(w => w.id === workflowId)?.name) {
+      handleCancelRename();
+      return;
+    }
+
+    setIsRenaming(true);
+    try {
+      await onRenameWorkflow(workflowId, trimmedName);
+      setEditingWorkflowId(null);
+      setEditingName('');
+    } catch (error) {
+      console.error('Failed to rename workflow:', error);
+      // Keep editing state on error so user can retry
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, workflowId: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveRename(workflowId);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelRename();
+    }
+  };
+
   return (
     <div className={cn('flex flex-col h-full bg-card border-r w-full transition-all duration-200', className)}>
       <div className="p-4 border-b">
@@ -191,7 +243,7 @@ export function ToolPalette({
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-6">
+        <div className="p-4 space-y-6 text-left">
           {/* Workflows Section */}
           {!collapsed && (
             <div>
@@ -225,47 +277,108 @@ export function ToolPalette({
                         'cursor-pointer hover:bg-accent transition-colors',
                         selectedWorkflowId === workflow.id && 'ring-2 ring-primary'
                       )}
-                      onClick={() => onLoadWorkflow?.(workflow)}
+                      onClick={() => {
+                        if (editingWorkflowId !== workflow.id) {
+                          onLoadWorkflow?.(workflow);
+                        }
+                      }}
                     >
                       <CardContent className="p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{workflow.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(workflow.updated_at).toLocaleDateString()}
-                            </p>
+                            {editingWorkflowId === workflow.id ? (
+                              <Input
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                onBlur={() => handleSaveRename(workflow.id)}
+                                onKeyDown={(e) => handleRenameKeyDown(e, workflow.id)}
+                                className="h-7 text-sm"
+                                disabled={isRenaming}
+                                autoFocus
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <>
+                                <p className="text-sm font-medium truncate">{workflow.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(workflow.updated_at).toLocaleDateString()}
+                                </p>
+                              </>
+                            )}
                           </div>
                           <div className="flex gap-1 ml-2">
-                            {onExecuteWorkflow && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onExecuteWorkflow(workflow.id, {}, false);
-                                }}
-                                disabled={isExecuting}
-                                title="Run workflow"
-                              >
-                                <Play className="h-3 w-3" />
-                              </Button>
-                            )}
-                            {onDeleteWorkflow && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-destructive hover:text-destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (confirm(`Delete "${workflow.name}"?`)) {
-                                    onDeleteWorkflow(workflow.id);
-                                  }
-                                }}
-                                title="Delete workflow"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                            {editingWorkflowId === workflow.id ? (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-green-600 hover:text-green-700"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSaveRename(workflow.id);
+                                  }}
+                                  disabled={isRenaming}
+                                  title="Save"
+                                >
+                                  <Check className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCancelRename();
+                                  }}
+                                  disabled={isRenaming}
+                                  title="Cancel"
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                {onRenameWorkflow && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={(e) => handleStartRename(e, workflow)}
+                                    title="Rename workflow"
+                                  >
+                                    <FileEdit className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                {onExecuteWorkflow && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onExecuteWorkflow(workflow.id, {}, false);
+                                    }}
+                                    disabled={isExecuting}
+                                    title="Run workflow"
+                                  >
+                                    <Play className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                {onDeleteWorkflow && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-destructive hover:text-destructive"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteWorkflow(workflow.id);
+                                    }}
+                                    title="Delete workflow"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -318,62 +431,58 @@ export function ToolPalette({
           ) : (
             <div>
               <h3 className="text-sm font-medium mb-2">Integration Tools</h3>
-              {providers.length > 0 && (
-                <div className="flex gap-2 mb-3 flex-wrap">
-                  <Badge
-                    variant={selectedProvider === null ? 'default' : 'outline'}
-                    className="cursor-pointer"
-                    onClick={() => setSelectedProvider(null)}
-                  >
-                    All
-                  </Badge>
-                  {providers.map((provider) => (
-                    <Badge
-                      key={provider}
-                      variant={selectedProvider === provider ? 'default' : 'outline'}
-                      className="cursor-pointer capitalize"
-                      onClick={() => setSelectedProvider(provider)}
-                    >
-                      {provider}
-                    </Badge>
-                  ))}
+              {Object.entries(toolsByProvider).length > 0 ? (
+                <div className="space-y-4">
+                  {Object.entries(toolsByProvider).map(([provider, providerTools]) => {
+                    const filteredProviderTools = providerTools.filter((tool) => {
+                      const matchesSearch =
+                        tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        tool.description?.toLowerCase().includes(searchQuery.toLowerCase());
+                      const matchesProvider = !selectedProvider || tool.provider === selectedProvider;
+                      return matchesSearch && matchesProvider;
+                    });
+
+                    if (filteredProviderTools.length === 0) return null;
+
+                    return (
+                      <div key={provider}>
+                        <h4 className="text-xs font-semibold mb-2 capitalize text-muted-foreground">
+                          {provider}
+                        </h4>
+                        <Table>
+                          <TableBody>
+                            {filteredProviderTools.map((tool) => (
+                              <TableRow
+                                key={tool.slug || tool.name}
+                                className="cursor-pointer"
+                                onClick={() => handleBlockClick(tool, true)}
+                              >
+                                <TableCell className="p-2">
+                                  <p className="text-sm font-medium">{tool.name}</p>
+                                  {tool.description && (
+                                    <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                                      {tool.description}
+                                    </p>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    );
+                  })}
+                  {filteredTools.length === 0 && (
+                    <div className="text-sm text-muted-foreground text-center py-4">
+                      No tools found
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No tools available
                 </div>
               )}
-              <div className="space-y-2">
-                {filteredTools.map((tool) => (
-                  <Card
-                    key={tool.slug || tool.name}
-                    className="cursor-pointer hover:bg-accent transition-colors"
-                    onClick={() => handleBlockClick(tool, true)}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-center gap-2">
-                        <Wrench className="w-4 h-4 text-primary" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {tool.name}
-                          </p>
-                          {tool.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {tool.description}
-                            </p>
-                          )}
-                          {tool.provider && (
-                            <Badge variant="outline" className="mt-1 text-xs capitalize">
-                              {tool.provider}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {filteredTools.length === 0 && !isLoading && (
-                  <div className="text-sm text-muted-foreground text-center py-4">
-                    No tools found
-                  </div>
-                )}
-              </div>
             </div>
           )}
         </div>

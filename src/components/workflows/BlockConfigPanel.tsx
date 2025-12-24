@@ -43,10 +43,16 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
   const [inputRefs, setInputRefs] = useState<Record<string, string>>({});
   const [useStructuredOutput, setUseStructuredOutput] = useState(false);
   
-  // Autocomplete state for template variables
+  // Autocomplete state for template variables (shared across all templating inputs)
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [partialVariable, setPartialVariable] = useState('');
+  const [autocompleteContext, setAutocompleteContext] = useState<{
+    inputId: string;
+    ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement>;
+    value: string;
+    onChange: (value: string) => void;
+  } | null>(null);
   const systemPromptRef = useRef<HTMLTextAreaElement>(null);
   
   // Use refs to track latest values for auto-save on unmount
@@ -120,15 +126,82 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
     return allNodes.filter(n => n.id !== node.id);
   }, [node, allNodes]);
 
-  // Extract available variables from input blocks
+  // Extract available variables from ALL blocks (automatically discover outputs)
   const availableVariables = useMemo(() => {
     if (!allNodes) return [];
     
-    return allNodes
-      .filter(node => node.data.type === 'input')
-      .map(node => node.data.config?.variable_name)
-      .filter(Boolean) as string[];
-  }, [allNodes]);
+    const variables: string[] = [];
+    
+    // 1. Add input block variable names (existing behavior + fields array support)
+    allNodes
+      .filter(n => n.data.type === 'input')
+      .forEach(inputNode => {
+        const blockLabel = inputNode.data.label || inputNode.id;
+        const config = inputNode.data.config || {};
+        
+        // Handle variable_name (legacy)
+        if (config.variable_name) {
+          variables.push(config.variable_name);
+          variables.push(`${blockLabel}.${config.variable_name}`);
+        }
+        
+        // Handle fields array (new format)
+        if (Array.isArray(config.fields)) {
+          config.fields.forEach((field: any) => {
+            // Support both 'id' and 'name' fields (id is preferred)
+            const fieldName = field.id || field.name;
+            if (fieldName) {
+              // Add as {{BlockLabel.fieldName}} format
+              variables.push(`${blockLabel}.${fieldName}`);
+              // Also add as simple field name if it's unique
+              variables.push(fieldName);
+            }
+          });
+        }
+      });
+    
+    // 2. Automatically extract outputs from ALL blocks
+    // For each block, we need to infer what outputs it might have
+    // Since we don't have execution results, we'll use block type conventions
+    allNodes.forEach(block => {
+      if (block.id === node?.id) return; // Skip current block
+      
+      const blockLabel = block.data.label || block.id;
+      
+      // For tool blocks, we can't know outputs without execution, but we can add common ones
+      if (block.data.type === 'tool') {
+        // Add generic output handle
+        variables.push(`${blockLabel}.output`);
+        variables.push('output'); // Also add as simple name if unique
+      } else if (block.data.type === 'llm') {
+        variables.push(`${blockLabel}.output`);
+        variables.push('output');
+      } else if (block.data.type === 'code') {
+        variables.push(`${blockLabel}.output`);
+        variables.push('output');
+      } else if (block.data.type === 'input') {
+        // Input blocks already handled above, but also add output handle
+        const config = block.data.config || {};
+        if (config.variable_name) {
+          variables.push(`${blockLabel}.output`);
+        } else if (Array.isArray(config.fields) && config.fields.length > 0) {
+          // Add output handle for input blocks with fields
+          variables.push(`${blockLabel}.output`);
+        }
+      } else if (block.data.type === 'if_else') {
+        variables.push(`${blockLabel}.output`);
+        variables.push(`${blockLabel}.condition_result`);
+        variables.push(`${blockLabel}.route`);
+      } else if (block.data.type === 'for_loop') {
+        variables.push(`${blockLabel}.output`);
+        variables.push(`${blockLabel}.items`);
+        variables.push(`${blockLabel}.count`);
+      }
+    });
+    
+    // Remove duplicates while preserving order
+    return Array.from(new Set(variables));
+  }, [allNodes, node]);
 
   useEffect(() => {
     if (node) {
@@ -192,8 +265,12 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
     );
   }, [availableVariables, partialVariable]);
 
-  // Check for autocomplete trigger
-  const checkForAutocomplete = (value: string, cursorPosition: number) => {
+  // Check for autocomplete trigger (generic version)
+  const checkForAutocomplete = (
+    value: string, 
+    cursorPosition: number,
+    context?: { inputId: string; ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement>; onChange: (value: string) => void }
+  ) => {
     // Find the last {{ before cursor
     const textBeforeCursor = value.substring(0, cursorPosition);
     const lastOpenBrace = textBeforeCursor.lastIndexOf('{{');
@@ -209,41 +286,75 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
         setPartialVariable(partial);
         setShowAutocomplete(true);
         setSelectedIndex(0);
+        if (context) {
+          setAutocompleteContext({ ...context, value });
+        }
         return;
       }
     }
     
     setShowAutocomplete(false);
     setPartialVariable('');
+    if (!context) {
+      setAutocompleteContext(null);
+    }
   };
 
-  // Insert selected variable into textarea
+  // Insert selected variable into textarea/input (generic version)
   const insertVariable = (variable: string) => {
-    const currentValue = config.system_prompt || '';
-    const textarea = systemPromptRef.current;
-    if (!textarea) return;
+    if (!autocompleteContext) {
+      // Fallback to system prompt for backward compatibility
+      const currentValue = config.system_prompt || '';
+      const textarea = systemPromptRef.current;
+      if (!textarea) return;
+      
+      const cursorPos = textarea.selectionStart || 0;
+      const textBeforeCursor = currentValue.substring(0, cursorPos);
+      const textAfterCursor = currentValue.substring(cursorPos);
+      
+      const lastOpenBrace = textBeforeCursor.lastIndexOf('{{');
+      
+      if (lastOpenBrace !== -1) {
+        const beforeBrace = currentValue.substring(0, lastOpenBrace);
+        const newValue = `${beforeBrace}{{${variable}}}${textAfterCursor}`;
+        
+        setConfig({ ...config, system_prompt: newValue });
+        setShowAutocomplete(false);
+        setPartialVariable('');
+        
+        setTimeout(() => {
+          const newCursorPos = lastOpenBrace + variable.length + 4;
+          textarea.setSelectionRange(newCursorPos, newCursorPos);
+          textarea.focus();
+        }, 0);
+      }
+      return;
+    }
     
-    const cursorPos = textarea.selectionStart || 0;
-    const textBeforeCursor = currentValue.substring(0, cursorPos);
-    const textAfterCursor = currentValue.substring(cursorPos);
+    // Use autocomplete context
+    const { ref, value, onChange } = autocompleteContext;
+    const input = ref.current;
+    if (!input) return;
     
-    // Find the last {{ before cursor
+    const cursorPos = (input.selectionStart || 0);
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const textAfterCursor = value.substring(cursorPos);
+    
     const lastOpenBrace = textBeforeCursor.lastIndexOf('{{');
     
     if (lastOpenBrace !== -1) {
-      // Replace from {{ to cursor with {{variable}}
-      const beforeBrace = currentValue.substring(0, lastOpenBrace);
+      const beforeBrace = value.substring(0, lastOpenBrace);
       const newValue = `${beforeBrace}{{${variable}}}${textAfterCursor}`;
       
-      setConfig({ ...config, system_prompt: newValue });
+      onChange(newValue);
       setShowAutocomplete(false);
       setPartialVariable('');
+      setAutocompleteContext(null);
       
-      // Set cursor position after }}
       setTimeout(() => {
-        const newCursorPos = lastOpenBrace + variable.length + 4; // {{variable}}
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-        textarea.focus();
+        const newCursorPos = lastOpenBrace + variable.length + 4;
+        input.setSelectionRange(newCursorPos, newCursorPos);
+        input.focus();
       }, 0);
     }
   };
@@ -310,21 +421,9 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
         
         return (
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="tool-name">Tool Name</Label>
-              <Input
-                id="tool-name"
-                value={config.tool_name || ''}
-                onChange={(e) =>
-                  setConfig({ ...config, tool_name: e.target.value })
-                }
-                placeholder="e.g., gmail_read_emails"
-              />
-            </div>
-            
             {/* Render individual parameters based on schema */}
             {Object.keys(paramSchema).length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <Label className="text-sm font-semibold">Parameters</Label>
                 {Object.entries(paramSchema).map(([paramName, paramDef]: [string, any]) => {
                   const paramType = paramDef.type || 'string';
@@ -333,16 +432,29 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                   const hasDefault = paramDef.default !== undefined;
                   
                   return (
-                    <div key={paramName} className="space-y-1">
-                      <Label htmlFor={`param-${paramName}`} className="text-xs">
-                        {paramName}
-                        {isRequired && <span className="text-destructive ml-1">*</span>}
+                    <div key={paramName} className="grid grid-cols-2 gap-4 items-start">
+                      {/* Left side: Parameter name + description */}
+                      <div className="space-y-1 text-left">
+                        <Label htmlFor={`param-${paramName}`} className="text-xs font-medium">
+                          {paramName}
+                          {isRequired && <span className="text-destructive ml-1">*</span>}
+                        </Label>
                         {paramDef.description && (
-                          <span className="text-muted-foreground font-normal ml-2">
-                            ({paramDef.description})
-                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            {paramDef.description}
+                          </p>
                         )}
-                      </Label>
+                        {hasDefault && (
+                          <p className="text-xs text-muted-foreground italic">
+                            Default: {typeof paramDef.default === 'object' 
+                              ? JSON.stringify(paramDef.default) 
+                              : String(paramDef.default)}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Right side: Input field */}
+                      <div className="space-y-1">
                       
                       {paramType === 'boolean' ? (
                         <div className="flex items-center space-x-2">
@@ -383,70 +495,273 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
                           className="text-xs"
                         />
                       ) : paramType === 'array' ? (
-                        <Textarea
-                          id={`param-${paramName}`}
-                          value={Array.isArray(paramValue) 
-                            ? JSON.stringify(paramValue, null, 2)
-                            : paramDef.default 
-                              ? JSON.stringify(paramDef.default, null, 2)
-                              : '[]'}
-                          onChange={(e) => {
-                            try {
-                              const value = JSON.parse(e.target.value);
-                              if (Array.isArray(value)) {
-                                setConfig({
-                                  ...config,
-                                  params: { ...toolParams, [paramName]: value },
-                                });
+                        <div className="relative">
+                          <Textarea
+                            id={`param-${paramName}`}
+                            value={Array.isArray(paramValue) 
+                              ? JSON.stringify(paramValue, null, 2)
+                              : paramDef.default 
+                                ? JSON.stringify(paramDef.default, null, 2)
+                                : '[]'}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Check for autocomplete trigger
+                              const paramRef = { current: e.target };
+                              checkForAutocomplete(value, e.target.selectionStart || 0, {
+                                inputId: `param-${paramName}`,
+                                ref: paramRef,
+                                value,
+                                onChange: (newValue) => {
+                                  try {
+                                    const parsed = JSON.parse(newValue);
+                                    if (Array.isArray(parsed)) {
+                                      setConfig({
+                                        ...config,
+                                        params: { ...toolParams, [paramName]: parsed },
+                                      });
+                                    }
+                                  } catch {
+                                    // Invalid JSON, keep as is - might be in middle of typing
+                                    setConfig({
+                                      ...config,
+                                      params: { ...toolParams, [paramName]: newValue },
+                                    });
+                                  }
+                                },
+                              });
+                              // Also try to parse JSON
+                              try {
+                                const parsed = JSON.parse(value);
+                                if (Array.isArray(parsed)) {
+                                  setConfig({
+                                    ...config,
+                                    params: { ...toolParams, [paramName]: parsed },
+                                  });
+                                }
+                              } catch {
+                                // Invalid JSON, keep as is
                               }
-                            } catch {
-                              // Invalid JSON, keep as is
-                            }
-                          }}
-                          placeholder={JSON.stringify(paramDef.default || [], null, 2)}
-                          className="font-mono text-xs"
-                          rows={3}
-                        />
+                            }}
+                            onKeyDown={(e) => {
+                              // Handle keyboard navigation for autocomplete
+                              if (showAutocomplete && filteredVariables.length > 0) {
+                                if (e.key === 'ArrowDown') {
+                                  e.preventDefault();
+                                  setSelectedIndex(prev => Math.min(prev + 1, filteredVariables.length - 1));
+                                } else if (e.key === 'ArrowUp') {
+                                  e.preventDefault();
+                                  setSelectedIndex(prev => Math.max(prev - 1, 0));
+                                } else if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  if (filteredVariables[selectedIndex]) {
+                                    insertVariable(filteredVariables[selectedIndex]);
+                                  }
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  setShowAutocomplete(false);
+                                  setPartialVariable('');
+                                  setAutocompleteContext(null);
+                                }
+                              }
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => setShowAutocomplete(false), 200);
+                            }}
+                            placeholder={JSON.stringify(paramDef.default || [], null, 2)}
+                            className="font-mono text-xs"
+                            rows={3}
+                          />
+                          {showAutocomplete && filteredVariables.length > 0 && autocompleteContext?.inputId === `param-${paramName}` && (
+                            <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover shadow-md max-h-60 overflow-auto">
+                              <div className="p-1">
+                                {filteredVariables.map((variable, index) => (
+                                  <div
+                                    key={variable}
+                                    onClick={() => insertVariable(variable)}
+                                    className={`px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent ${
+                                      index === selectedIndex ? 'bg-accent' : ''
+                                    }`}
+                                  >
+                                    {variable}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ) : paramType === 'object' ? (
-                        <Textarea
-                          id={`param-${paramName}`}
-                          value={typeof paramValue === 'object' && paramValue !== null
-                            ? JSON.stringify(paramValue, null, 2)
-                            : paramDef.default
-                              ? JSON.stringify(paramDef.default, null, 2)
-                              : '{}'}
-                          onChange={(e) => {
-                            try {
-                              const value = JSON.parse(e.target.value);
-                              if (typeof value === 'object' && value !== null) {
-                                setConfig({
-                                  ...config,
-                                  params: { ...toolParams, [paramName]: value },
-                                });
+                        <div className="relative">
+                          <Textarea
+                            id={`param-${paramName}`}
+                            value={typeof paramValue === 'object' && paramValue !== null
+                              ? JSON.stringify(paramValue, null, 2)
+                              : paramDef.default
+                                ? JSON.stringify(paramDef.default, null, 2)
+                                : '{}'}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Check for autocomplete trigger
+                              const paramRef = { current: e.target };
+                              checkForAutocomplete(value, e.target.selectionStart || 0, {
+                                ref: paramRef,
+                                value,
+                                onChange: (newValue) => {
+                                  try {
+                                    const parsed = JSON.parse(newValue);
+                                    if (typeof parsed === 'object' && parsed !== null) {
+                                      setConfig({
+                                        ...config,
+                                        params: { ...toolParams, [paramName]: parsed },
+                                      });
+                                    }
+                                  } catch {
+                                    // Invalid JSON, keep as is - might be in middle of typing
+                                    setConfig({
+                                      ...config,
+                                      params: { ...toolParams, [paramName]: newValue },
+                                    });
+                                  }
+                                },
+                              });
+                              // Also try to parse JSON
+                              try {
+                                const parsed = JSON.parse(value);
+                                if (typeof parsed === 'object' && parsed !== null) {
+                                  setConfig({
+                                    ...config,
+                                    params: { ...toolParams, [paramName]: parsed },
+                                  });
+                                }
+                              } catch {
+                                // Invalid JSON, keep as is
                               }
-                            } catch {
-                              // Invalid JSON, keep as is
-                            }
-                          }}
-                          placeholder={JSON.stringify(paramDef.default || {}, null, 2)}
-                          className="font-mono text-xs"
-                          rows={4}
-                        />
+                            }}
+                            onKeyDown={(e) => {
+                              // Handle keyboard navigation for autocomplete
+                              if (showAutocomplete && filteredVariables.length > 0) {
+                                if (e.key === 'ArrowDown') {
+                                  e.preventDefault();
+                                  setSelectedIndex(prev => Math.min(prev + 1, filteredVariables.length - 1));
+                                } else if (e.key === 'ArrowUp') {
+                                  e.preventDefault();
+                                  setSelectedIndex(prev => Math.max(prev - 1, 0));
+                                } else if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  if (filteredVariables[selectedIndex]) {
+                                    insertVariable(filteredVariables[selectedIndex]);
+                                  }
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  setShowAutocomplete(false);
+                                  setPartialVariable('');
+                                  setAutocompleteContext(null);
+                                }
+                              }
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => setShowAutocomplete(false), 200);
+                            }}
+                            placeholder={JSON.stringify(paramDef.default || {}, null, 2)}
+                            className="font-mono text-xs"
+                            rows={4}
+                          />
+                          {showAutocomplete && filteredVariables.length > 0 && autocompleteContext?.inputId === `param-${paramName}` && (
+                            <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover shadow-md max-h-60 overflow-auto">
+                              <div className="p-1">
+                                {filteredVariables.map((variable, index) => (
+                                  <div
+                                    key={variable}
+                                    onClick={() => insertVariable(variable)}
+                                    className={`px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent ${
+                                      index === selectedIndex ? 'bg-accent' : ''
+                                    }`}
+                                  >
+                                    {variable}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <Input
-                          id={`param-${paramName}`}
-                          type="text"
-                          value={paramValue ?? paramDef.default ?? ''}
-                          onChange={(e) =>
-                            setConfig({
-                              ...config,
-                              params: { ...toolParams, [paramName]: e.target.value },
-                            })
-                          }
-                          placeholder={paramDef.default || paramDef.description || ''}
-                          className="text-xs"
-                        />
+                        <div className="relative">
+                          <Input
+                            id={`param-${paramName}`}
+                            type="text"
+                            value={paramValue ?? paramDef.default ?? ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setConfig({
+                                ...config,
+                                params: { ...toolParams, [paramName]: value },
+                              });
+                              // Check for autocomplete trigger
+                              const paramRef = { current: e.target };
+                              checkForAutocomplete(value, e.target.selectionStart || 0, {
+                                inputId: `param-${paramName}`,
+                                ref: paramRef,
+                                value,
+                                onChange: (newValue) => {
+                                  setConfig({
+                                    ...config,
+                                    params: { ...toolParams, [paramName]: newValue },
+                                  });
+                                },
+                              });
+                            }}
+                            onKeyDown={(e) => {
+                              // Handle keyboard navigation for autocomplete
+                              if (showAutocomplete && filteredVariables.length > 0) {
+                                if (e.key === 'ArrowDown') {
+                                  e.preventDefault();
+                                  setSelectedIndex(prev => Math.min(prev + 1, filteredVariables.length - 1));
+                                } else if (e.key === 'ArrowUp') {
+                                  e.preventDefault();
+                                  setSelectedIndex(prev => Math.max(prev - 1, 0));
+                                } else if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  if (filteredVariables[selectedIndex]) {
+                                    insertVariable(filteredVariables[selectedIndex]);
+                                  }
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  setShowAutocomplete(false);
+                                  setPartialVariable('');
+                                  setAutocompleteContext(null);
+                                }
+                              }
+                            }}
+                            onBlur={() => {
+                              // Close autocomplete when input loses focus (with delay to allow click)
+                              setTimeout(() => setShowAutocomplete(false), 200);
+                            }}
+                            placeholder={paramDef.default || paramDef.description || ''}
+                            className="text-xs"
+                          />
+                          {showAutocomplete && filteredVariables.length > 0 && autocompleteContext?.inputId === `param-${paramName}` && (
+                            <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover shadow-md max-h-60 overflow-auto">
+                              <div className="p-1">
+                                {filteredVariables.length === 0 ? (
+                                  <div className="px-2 py-1.5 text-sm text-muted-foreground">No variables found</div>
+                                ) : (
+                                  filteredVariables.map((variable, index) => (
+                                    <div
+                                      key={variable}
+                                      onClick={() => insertVariable(variable)}
+                                      className={`px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent ${
+                                        index === selectedIndex ? 'bg-accent' : ''
+                                      }`}
+                                    >
+                                      {variable}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       )}
+                      </div>
                     </div>
                   );
                 })}
@@ -728,19 +1043,18 @@ export function BlockConfigPanel({ node, onUpdate, allNodes = [], autoSave = tru
   };
 
   return (
-    <div className="p-4">
-      <Card>
-        <CardContent className="space-y-4">
-          {renderConfigFields()}
-          
-          
+    <Card>
+      <CardContent className="p-6 space-y-4">
+        {renderConfigFields()}
+        
+        {!autoSave && (
           <Button onClick={handleSave} className="w-full" size="sm">
             <Save className="w-4 h-4 mr-2" />
             Save Configuration
           </Button>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
