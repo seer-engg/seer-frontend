@@ -52,6 +52,37 @@ interface BlockConfigPanelProps {
   liveUpdateDelayMs?: number;
 }
 
+const sanitizeAlias = (value?: string | null): string | null => {
+  if (!value) return null;
+  const alias = value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!alias) return null;
+  return /^\d/.test(alias) ? `_${alias}` : alias;
+};
+
+const getNodeAlias = (node?: Node<WorkflowNodeData> | null): string => {
+  if (!node) return '';
+  const data = node.data || {};
+  const config = data.config || {};
+  const candidates: Array<string | undefined> = [
+    data.label,
+    (config.tool_name as string) || (config.toolName as string),
+    config.variable_name as string,
+    node.id,
+  ];
+  for (const candidate of candidates) {
+    const alias = sanitizeAlias(candidate);
+    if (alias) {
+      return alias;
+    }
+  }
+  return '';
+};
+
 export function BlockConfigPanel({
   node,
   onUpdate,
@@ -165,13 +196,13 @@ export function BlockConfigPanel({
     allNodes
       .filter(n => n.data.type === 'input')
       .forEach(inputNode => {
-        const blockLabel = inputNode.data.label || inputNode.id;
+        const blockAlias = getNodeAlias(inputNode);
         const config = inputNode.data.config || {};
         
         // Handle variable_name (legacy)
         if (config.variable_name) {
           variables.push(config.variable_name);
-          variables.push(`${blockLabel}.${config.variable_name}`);
+          variables.push(`${blockAlias}.${config.variable_name}`);
         }
         
         // Handle fields array (new format)
@@ -180,8 +211,8 @@ export function BlockConfigPanel({
             // Support both 'id' and 'name' fields (id is preferred)
             const fieldName = field.id || field.name;
             if (fieldName) {
-              // Add as {{BlockLabel.fieldName}} format
-              variables.push(`${blockLabel}.${fieldName}`);
+              // Add as {{alias.fieldName}} format
+              variables.push(`${blockAlias}.${fieldName}`);
               // Also add as simple field name if it's unique
               variables.push(fieldName);
             }
@@ -195,16 +226,17 @@ export function BlockConfigPanel({
     allNodes.forEach(block => {
       if (block.id === node?.id) return; // Skip current block
       
-      const blockLabel = block.data.label || block.id;
+      const blockAlias = getNodeAlias(block);
+      if (!blockAlias) {
+        return;
+      }
       
       // For tool blocks, we can't know outputs without execution, but we can add common ones
       if (block.data.type === 'tool') {
         // Add generic output handle
-        variables.push(`${blockLabel}.output`);
-        variables.push('output'); // Also add as simple name if unique
+        variables.push(`${blockAlias}.output`);
       } else if (block.data.type === 'llm') {
-        variables.push(`${blockLabel}.output`);
-        variables.push('output');
+        variables.push(`${blockAlias}.output`);
         
         // If LLM block has structured output schema, add each field as a variable
         const llmConfig = block.data.config || {};
@@ -212,36 +244,28 @@ export function BlockConfigPanel({
         if (outputSchema && typeof outputSchema === 'object' && outputSchema.properties) {
           // Add each property from the structured output schema
           Object.keys(outputSchema.properties).forEach((fieldName: string) => {
-            // Add with block label prefix (e.g., {{LLM.summary}})
-            variables.push(`${blockLabel}.${fieldName}`);
-            // Also add simple field name if it might be useful
-            if (!variables.includes(fieldName)) {
-              variables.push(fieldName);
-            }
+            // Add with block alias prefix (e.g., {{llm.summary}})
+            variables.push(`${blockAlias}.${fieldName}`);
           });
           // Also add structured_output reference
-          variables.push(`${blockLabel}.structured_output`);
+          variables.push(`${blockAlias}.structured_output`);
         }
       } else if (block.data.type === 'code') {
-        variables.push(`${blockLabel}.output`);
-        variables.push('output');
+        variables.push(`${blockAlias}.output`);
       } else if (block.data.type === 'input') {
         // Input blocks already handled above, but also add output handle
         const config = block.data.config || {};
-        if (config.variable_name) {
-          variables.push(`${blockLabel}.output`);
-        } else if (Array.isArray(config.fields) && config.fields.length > 0) {
-          // Add output handle for input blocks with fields
-          variables.push(`${blockLabel}.output`);
+        if (config.variable_name || (Array.isArray(config.fields) && config.fields.length > 0)) {
+          variables.push(`${blockAlias}.output`);
         }
       } else if (block.data.type === 'if_else') {
-        variables.push(`${blockLabel}.output`);
-        variables.push(`${blockLabel}.condition_result`);
-        variables.push(`${blockLabel}.route`);
+        variables.push(`${blockAlias}.output`);
+        variables.push(`${blockAlias}.condition_result`);
+        variables.push(`${blockAlias}.route`);
       } else if (block.data.type === 'for_loop') {
-        variables.push(`${blockLabel}.output`);
-        variables.push(`${blockLabel}.items`);
-        variables.push(`${blockLabel}.count`);
+        variables.push(`${blockAlias}.output`);
+        variables.push(`${blockAlias}.items`);
+        variables.push(`${blockAlias}.count`);
       }
     });
     

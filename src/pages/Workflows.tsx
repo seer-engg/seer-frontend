@@ -18,7 +18,6 @@ import { Clock, Rocket, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
 import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
