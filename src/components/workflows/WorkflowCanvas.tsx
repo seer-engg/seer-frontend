@@ -240,7 +240,7 @@ export function WorkflowCanvas({
           nodesDraggable={true}
           nodesConnectable={true}
           elementsSelectable={true}
-          panOnDrag={[1, 2]}
+          panOnDrag={[0, 1, 2]}
           zoomOnScroll
           minZoom={0.1}
           maxZoom={2}
