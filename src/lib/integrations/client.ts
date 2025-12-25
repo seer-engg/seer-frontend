@@ -5,11 +5,18 @@
 
 import { getGitHubToolScopes } from './github_tool_scopes';
 
-export type IntegrationType = "sandbox" | "github" | "google_drive" | "asana" | "gmail" | "google_sheets";
+export type IntegrationType =
+  | "sandbox"
+  | "github"
+  | "pull_request"
+  | "google_drive"
+  | "google_sheets"
+  | "asana"
+  | "gmail";
 
 /**
  * OAuth provider type - used for OAuth connections
- * Multiple integration types can map to the same provider (e.g., gmail, googledrive, googlesheets all use 'google')
+ * Multiple integration types can map to the same provider (e.g., gmail, google_drive, google_sheets all use 'google')
  */
 export type OAuthProvider = "google" | "github" | "asana";
 
@@ -17,17 +24,17 @@ export type OAuthProvider = "google" | "github" | "asana";
  * Map integration type to OAuth provider.
  * This is used when initiating OAuth connections - the backend expects the provider, not the integration type.
  * 
- * @param integrationType - The integration type (e.g., 'gmail', 'googledrive', 'googlesheets')
+ * @param integrationType - The integration type (e.g., 'gmail', 'google_drive', 'google_sheets')
  * @returns The OAuth provider to use for the connection (e.g., 'google')
  */
 export function getOAuthProvider(integrationType: IntegrationType): OAuthProvider | null {
   switch (integrationType) {
     case "gmail":
     case "google_drive":
-      return "google";
     case "google_sheets":
       return "google";
     case "github":
+    case "pull_request":
       return "github";
     case "asana":
       return "asana";
@@ -55,6 +62,7 @@ export function getRequiredScopes(
   
   switch (integrationType) {
     case "github":
+    case "pull_request":
       // Use tool-specific scopes if toolName is provided
       if (toolName) {
         return getGitHubToolScopes(toolName);

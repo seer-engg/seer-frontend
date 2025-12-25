@@ -4,7 +4,7 @@
 
 import type { IntegrationType } from "./client";
 import { CheckSquare2, Sparkles } from "lucide-react";
-import { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import { getRequiredScopes } from "./client";
 import { GmailIcon } from "@/components/icons/gmail";
 import { GoogleDriveIcon } from "@/components/icons/googledrive";
@@ -14,7 +14,7 @@ import { GitHubIcon } from "@/components/icons/github";
 export interface IntegrationConfig {
   type: IntegrationType;
   displayName: string;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   toolkitSlug: string;
   requiresResourceSelection: boolean;
   resourceLabel?: string; // e.g., "Repository", "Folder", "Workspace"
@@ -40,14 +40,23 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     resourceLabel: "Repository",
     requiredScopes: getRequiredScopes("github"),
   },
-  googledrive: {
-    type: "googledrive",
+  pull_request: {
+    type: "pull_request",
+    displayName: "GitHub Pull Requests",
+    icon: GitHubIcon,
+    toolkitSlug: "github",
+    requiresResourceSelection: true,
+    resourceLabel: "Repository",
+    requiredScopes: getRequiredScopes("github"),
+  },
+  google_drive: {
+    type: "google_drive",
     displayName: "Google Drive",
     icon: GoogleDriveIcon,
     toolkitSlug: "googledrive",
     requiresResourceSelection: false, // Optional
     resourceLabel: "Folder",
-    requiredScopes: getRequiredScopes("googledrive"),
+    requiredScopes: getRequiredScopes("google_drive"),
   },
   asana: {
     type: "asana",
@@ -67,14 +76,14 @@ export const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     resourceLabel: "Mailbox",
     requiredScopes: getRequiredScopes("gmail"),
   },
-  googlesheets: {
-    type: "googlesheets",
+  google_sheets: {
+    type: "google_sheets",
     displayName: "Google Sheets",
     icon: GoogleSheetsIcon,
     toolkitSlug: "googlesheets",
     requiresResourceSelection: false,
     resourceLabel: "Spreadsheet",
-    requiredScopes: getRequiredScopes("googlesheets"),
+    requiredScopes: getRequiredScopes("google_sheets"),
   },
 };
 

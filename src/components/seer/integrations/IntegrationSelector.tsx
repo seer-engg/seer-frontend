@@ -29,7 +29,7 @@ import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useIntegrationContext } from "@/contexts/IntegrationContext";
 
-const INTEGRATION_ORDER: IntegrationType[] = ["github", "googledrive", "asana", "gmail"];
+const INTEGRATION_ORDER: IntegrationType[] = ["github", "google_drive", "google_sheets", "asana", "gmail"];
 
 export function IntegrationSelector() {
   const [open, setOpen] = useState(false);
@@ -393,7 +393,7 @@ function IntegrationCommandItem({
                       onRepoSelected={onResourceSelected}
                     />
                   )}
-                  {type === "googledrive" && (
+                  {type === "google_drive" && (
                     <GoogleDriveFolderSelector
                       connectionId={connectionId}
                       onFolderSelected={onResourceSelected}

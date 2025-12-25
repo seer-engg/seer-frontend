@@ -254,17 +254,14 @@ export function BuildAndChatPanel({
   };
 
   const formatGroupLabel = (value: string) => {
-    // "google_drive" -> "Google drive", "googlesheets" -> "Googlesheets"
+    // "google_drive" -> "Google drive"
     const normalized = value.replace(/[_-]+/g, ' ').trim();
     if (!normalized) return 'Other';
     return normalized.charAt(0).toUpperCase() + normalized.slice(1);
   };
 
   const normalizeIntegrationTypeKey = (value: string) => {
-    const v = value.toLowerCase().trim();
-    if (v === 'google_drive') return 'googledrive';
-    if (v === 'google_sheets') return 'googlesheets';
-    return v;
+    return value.toLowerCase().trim();
   };
 
   const getProviderIcon = (provider: string) => {
@@ -285,8 +282,10 @@ export function BuildAndChatPanel({
       case 'gmail':
         return <GmailIcon className="w-3.5 h-3.5 text-muted-foreground" />;
       case 'googledrive':
+      case 'google_drive':
         return <GoogleDriveIcon className="w-3.5 h-3.5 text-muted-foreground" />;
       case 'googlesheets':
+      case 'google_sheets':
         return <GoogleSheetsIcon className="w-3.5 h-3.5 text-muted-foreground" />;
       case 'pull_request':
         return <GitPullRequest className="w-3.5 h-3.5 text-muted-foreground" />;
@@ -301,8 +300,10 @@ export function BuildAndChatPanel({
       case 'gmail':
         return 'Gmail';
       case 'googledrive':
+      case 'google_drive':
         return 'Google Drive';
       case 'googlesheets':
+      case 'google_sheets':
         return 'Google Sheets';
       case 'pull_request':
         return 'Pull Requests';

@@ -373,7 +373,7 @@ export async function initiateConnection(params: {
   provider: string;
   scope: string; // REQUIRED - OAuth scopes (frontend controls)
   callbackUrl?: string;
-  integrationType?: string; // Integration type that triggered this (e.g., 'gmail', 'googlesheets')
+  integrationType?: string; // Integration type that triggered this (e.g., 'gmail', 'google_sheets')
 }): Promise<ConnectResponse> {
   const searchParams = new URLSearchParams();
   searchParams.append("user_id", params.userId);

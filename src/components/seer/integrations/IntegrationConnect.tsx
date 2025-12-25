@@ -5,7 +5,7 @@
  * 
  * Connection status is determined by checking if the OAuth provider connection
  * has all required scopes for this integration type. Multiple integration types
- * (gmail, googlesheets, googledrive) share the same Google OAuth connection.
+ * (gmail, google_sheets, google_drive) share the same Google OAuth connection.
  */
 
 import { IntegrationType, formatScopes, getOAuthProvider } from "@/lib/integrations/client";

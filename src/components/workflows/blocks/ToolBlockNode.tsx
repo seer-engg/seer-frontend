@@ -5,7 +5,7 @@
  * Shows connect button for tools requiring authorization.
  */
 import { memo, useCallback, useMemo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, type Node as FlowNode } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
@@ -31,14 +31,18 @@ import { InlineBlockConfig } from '../InlineBlockConfig';
  * Get icon for integration type
  */
 function getIntegrationIcon(integrationType: IntegrationType | null) {
-  switch (integrationType) {
+  const key = integrationType?.toLowerCase() ?? '';
+  switch (key) {
     case 'gmail':
       return <GmailSVG width={16} height={16} />;
+    case 'google_drive':
     case 'googledrive':
       return <GoogleDriveSVG width={16} height={16} />;
+    case 'google_sheets':
     case 'googlesheets':
       return <GoogleSheetsSVG width={16} height={16} />;
     case 'github':
+    case 'pull_request':
       return <GitHubSVG width={16} height={16} />;
     default:
       return <Wrench className="w-4 h-4" />;
@@ -49,11 +53,18 @@ function getIntegrationIcon(integrationType: IntegrationType | null) {
  * Get display name for integration type
  */
 function getIntegrationDisplayName(integrationType: IntegrationType | null): string {
-  switch (integrationType) {
+  const key = integrationType?.toLowerCase() ?? '';
+  switch (key) {
     case 'gmail':
       return 'Gmail';
+    case 'google_drive':
     case 'googledrive':
       return 'Google Drive';
+    case 'google_sheets':
+    case 'googlesheets':
+      return 'Google Sheets';
+    case 'pull_request':
+      return 'GitHub Pull Requests';
     case 'github':
       return 'GitHub';
     case 'asana':
@@ -65,8 +76,10 @@ function getIntegrationDisplayName(integrationType: IntegrationType | null): str
   }
 }
 
+type WorkflowNode = FlowNode<WorkflowNodeData>;
+
 export const ToolBlockNode = memo(function ToolBlockNode(
-  props: NodeProps<WorkflowNodeData>
+  props: NodeProps<WorkflowNode>
 ) {
   const { data, selected, id } = props;
   
