@@ -109,6 +109,7 @@ export function BlockConfigPanel({
     onChange: (value: string) => void;
   } | null>(null);
   const systemPromptRef = useRef<HTMLTextAreaElement>(null);
+  const userPromptRef = useRef<HTMLTextAreaElement>(null);
   const lastSyncedNodeStateRef = useRef<{ nodeId: string | null; signature: string }>({
     nodeId: null,
     signature: '',
@@ -1064,10 +1065,38 @@ export function BlockConfigPanel({
                 onChange={(e) => {
                   const value = e.target.value;
                   setConfig({ ...config, system_prompt: value });
+                  // Update autocomplete context if it's for this field
+                  if (autocompleteContext?.inputId === 'system-prompt') {
+                    setAutocompleteContext({
+                      ...autocompleteContext,
+                      value,
+                    });
+                  }
                   // Check if {{ was just typed
-                  checkForAutocomplete(value, e.target.selectionStart);
+                  checkForAutocomplete(
+                    value,
+                    e.target.selectionStart,
+                    autocompleteContext?.inputId === 'system-prompt' ? {
+                      inputId: 'system-prompt',
+                      ref: systemPromptRef,
+                      value,
+                      onChange: (newValue: string) => {
+                        setConfig({ ...config, system_prompt: newValue });
+                      },
+                    } : undefined
+                  );
                 }}
                 onKeyDown={handleKeyDown}
+                onFocus={() => {
+                  setAutocompleteContext({
+                    inputId: 'system-prompt',
+                    ref: systemPromptRef,
+                    value: config.system_prompt || '',
+                    onChange: (newValue: string) => {
+                      setConfig({ ...config, system_prompt: newValue });
+                    },
+                  });
+                }}
                 onBlur={() => {
                   // Close autocomplete when textarea loses focus (with delay to allow click)
                   setTimeout(() => setShowAutocomplete(false), 200);
@@ -1076,7 +1105,81 @@ export function BlockConfigPanel({
                 rows={6}
                 className="max-h-[200px] overflow-y-auto"
               />
-              {showAutocomplete && filteredVariables.length > 0 && (
+              {showAutocomplete && filteredVariables.length > 0 && autocompleteContext?.inputId === 'system-prompt' && (
+                <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover shadow-md max-h-60 overflow-auto">
+                  <div className="p-1">
+                    {filteredVariables.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No variables found</div>
+                    ) : (
+                      filteredVariables.map((variable, index) => (
+                        <div
+                          key={variable}
+                          onClick={() => insertVariable(variable)}
+                          className={`px-2 py-1.5 text-sm cursor-pointer rounded-sm hover:bg-accent ${
+                            index === selectedIndex ? 'bg-accent' : ''
+                          }`}
+                        >
+                          {variable}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              <Label htmlFor="user-prompt">
+                User Prompt <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                ref={userPromptRef}
+                id="user-prompt"
+                value={config.user_prompt || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setConfig({ ...config, user_prompt: value });
+                  // Update autocomplete context if it's for this field
+                  if (autocompleteContext?.inputId === 'user-prompt') {
+                    setAutocompleteContext({
+                      ...autocompleteContext,
+                      value,
+                    });
+                  }
+                  // Check if {{ was just typed
+                  checkForAutocomplete(
+                    value,
+                    e.target.selectionStart,
+                    autocompleteContext?.inputId === 'user-prompt' ? {
+                      inputId: 'user-prompt',
+                      ref: userPromptRef,
+                      value,
+                      onChange: (newValue: string) => {
+                        setConfig({ ...config, user_prompt: newValue });
+                      },
+                    } : undefined
+                  );
+                }}
+                onKeyDown={handleKeyDown}
+                onFocus={() => {
+                  setAutocompleteContext({
+                    inputId: 'user-prompt',
+                    ref: userPromptRef,
+                    value: config.user_prompt || '',
+                    onChange: (newValue: string) => {
+                      setConfig({ ...config, user_prompt: newValue });
+                    },
+                  });
+                }}
+                onBlur={() => {
+                  // Close autocomplete when textarea loses focus (with delay to allow click)
+                  setTimeout(() => setShowAutocomplete(false), 200);
+                }}
+                placeholder="Enter your message or question..."
+                rows={6}
+                className="max-h-[200px] overflow-y-auto"
+                required
+              />
+              {showAutocomplete && filteredVariables.length > 0 && autocompleteContext?.inputId === 'user-prompt' && (
                 <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover shadow-md max-h-60 overflow-auto">
                   <div className="p-1">
                     {filteredVariables.length === 0 ? (

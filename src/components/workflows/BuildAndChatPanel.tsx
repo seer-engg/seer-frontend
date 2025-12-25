@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { GmailIcon } from '@/components/icons/gmail';
 import { GoogleDriveIcon } from '@/components/icons/googledrive';
 import { GoogleSheetsIcon } from '@/components/icons/googlesheets';
@@ -42,7 +43,8 @@ import {
   Send,
   Bot,
   Check,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
@@ -146,6 +148,7 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   proposal?: WorkflowProposal | null;
+  proposalError?: string | null;
   thinking?: string[];
   timestamp: Date;
   model?: string;
@@ -429,6 +432,7 @@ export function BuildAndChatPanel({
         content: msg.content,
         thinking: msg.thinking ? msg.thinking.split('\n') : undefined,
         proposal: msg.proposal || undefined,
+        proposalError: undefined, // Historical messages don't have proposal_error
         timestamp: new Date(msg.created_at),
       }));
     },
@@ -478,6 +482,7 @@ export function BuildAndChatPanel({
       const response = await backendApiClient.request<{
         response: string;
         proposal?: WorkflowProposal | null;
+        proposal_error?: string | null;
         session_id?: number;
         thread_id?: string;
         thinking?: string[];
@@ -525,6 +530,7 @@ export function BuildAndChatPanel({
         role: 'assistant',
         content: response.response,
         proposal: response.proposal || undefined,
+        proposalError: response.proposal_error || undefined,
         thinking: response.thinking,
         interruptRequired: response.interrupt_required,
         interruptData: response.interrupt_data,
@@ -972,6 +978,17 @@ export function BuildAndChatPanel({
                                   )}
                                 </div>
                               )}
+                              {message.proposalError && (
+                                <div className="mt-3 pt-3 border-t border-border/50">
+                                  <Alert variant="destructive">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertTitle>Proposal Validation Error</AlertTitle>
+                                    <AlertDescription className="text-xs">
+                                      {message.proposalError}
+                                    </AlertDescription>
+                                  </Alert>
+                                </div>
+                              )}
                               {message.proposal && (
                                 <div className="mt-3 pt-3 border-t border-border/50 space-y-3">
                                   <div className="flex items-start justify-between gap-3">
@@ -1024,7 +1041,7 @@ export function BuildAndChatPanel({
                                       <Button
                                         size="sm"
                                         className="flex-1"
-                                        disabled={proposalActionLoading === message.proposal.id}
+                                        disabled={proposalActionLoading === message.proposal.id || !!message.proposalError}
                                         onClick={() => handleAcceptProposal(message.proposal!.id)}
                                       >
                                         <Check className="w-3 h-3 mr-2" />
@@ -1034,7 +1051,7 @@ export function BuildAndChatPanel({
                                         size="sm"
                                         variant="outline"
                                         className="flex-1"
-                                        disabled={proposalActionLoading === message.proposal.id}
+                                        disabled={proposalActionLoading === message.proposal.id || !!message.proposalError}
                                         onClick={() => handleRejectProposal(message.proposal!.id)}
                                       >
                                         <X className="w-3 h-3 mr-2" />
