@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/components/ui/sonner';
 import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -98,21 +99,53 @@ const BUILT_IN_BLOCKS: BuiltInBlock[] = [
   },
 ];
 
-interface WorkflowEdit {
-  operation: string;
-  block_id?: string;
-  block_type?: string;
-  config?: Record<string, any>;
-  position?: { x: number; y: number };
-  source_id?: string;
-  target_id?: string;
-  branch?: 'true' | 'false';
+interface UserSummary {
+  user_id: string;
+  email?: string | null;
+  full_name?: string | null;
+}
+
+interface WorkflowProposalPatchOp {
+  op: string;
+  description?: string;
+  node_id?: string;
+  node?: Record<string, any>;
+  edge_id?: string;
+  edge?: Record<string, any>;
+  source?: string;
+  target?: string;
+}
+
+interface WorkflowGraphPayload {
+  nodes?: Node<WorkflowNodeData & Record<string, unknown>>[];
+  edges?: WorkflowEdge[];
+}
+
+interface WorkflowProposal {
+  id: number;
+  workflow_id: number;
+  session_id?: number | null;
+  created_by: UserSummary;
+  summary: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  patch_ops: WorkflowProposalPatchOp[];
+  preview_graph?: Record<string, any> | null;
+  applied_graph?: Record<string, any> | null;
+  metadata?: Record<string, any> | null;
+  decided_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface WorkflowProposalActionResponse {
+  proposal: WorkflowProposal;
+  workflow_graph?: WorkflowGraphPayload | null;
 }
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
-  suggestedEdits?: WorkflowEdit[];
+  proposal?: WorkflowProposal | null;
   thinking?: string[];
   timestamp: Date;
   model?: string;
@@ -143,7 +176,7 @@ interface BuildAndChatPanelProps {
   // @xyflow/react's Node<T> expects T to satisfy Record<string, unknown>
   nodes: Node<WorkflowNodeData & Record<string, unknown>>[];
   edges: WorkflowEdge[];
-  onApplyEdits?: (edits: WorkflowEdit[]) => void;
+  onWorkflowGraphSync?: (graph?: WorkflowGraphPayload | null) => void;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
 }
@@ -153,7 +186,7 @@ export function BuildAndChatPanel({
   workflowId,
   nodes,
   edges,
-  onApplyEdits,
+  onWorkflowGraphSync,
   collapsed: externalCollapsed,
   onCollapseChange,
 }: BuildAndChatPanelProps) {
@@ -185,6 +218,7 @@ export function BuildAndChatPanel({
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set());
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false);
+  const [proposalActionLoading, setProposalActionLoading] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
@@ -384,7 +418,7 @@ export function BuildAndChatPanel({
           role: string;
           content: string;
           thinking?: string;
-          suggested_edits?: WorkflowEdit[];
+          proposal?: WorkflowProposal | null;
           created_at: string;
         }>;
       }>(`/api/workflows/${workflowId}/chat/sessions/${currentSessionId}`, {
@@ -394,7 +428,7 @@ export function BuildAndChatPanel({
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
         thinking: msg.thinking ? msg.thinking.split('\n') : undefined,
-        suggestedEdits: msg.suggested_edits,
+        proposal: msg.proposal || undefined,
         timestamp: new Date(msg.created_at),
       }));
     },
@@ -443,7 +477,7 @@ export function BuildAndChatPanel({
     try {
       const response = await backendApiClient.request<{
         response: string;
-        suggested_edits: WorkflowEdit[];
+        proposal?: WorkflowProposal | null;
         session_id?: number;
         thread_id?: string;
         thinking?: string[];
@@ -490,7 +524,7 @@ export function BuildAndChatPanel({
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: response.response,
-        suggestedEdits: response.suggested_edits || [],
+        proposal: response.proposal || undefined,
         thinking: response.thinking,
         interruptRequired: response.interrupt_required,
         interruptData: response.interrupt_data,
@@ -563,9 +597,50 @@ export function BuildAndChatPanel({
     });
   };
 
-  const handleApplyEdits = (edits: WorkflowEdit[]) => {
-    if (onApplyEdits) {
-      onApplyEdits(edits);
+  const updateProposalInMessages = (updatedProposal: WorkflowProposal) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.proposal?.id === updatedProposal.id ? { ...message, proposal: updatedProposal } : message
+      )
+    );
+  };
+
+  const handleAcceptProposal = async (proposalId: number) => {
+    if (!workflowId) return;
+    setProposalActionLoading(proposalId);
+    try {
+      const response = await backendApiClient.request<WorkflowProposalActionResponse>(
+        `/api/workflows/${workflowId}/proposals/${proposalId}/accept`,
+        { method: 'POST' }
+      );
+      updateProposalInMessages(response.proposal);
+      if (response.workflow_graph) {
+        onWorkflowGraphSync?.(response.workflow_graph);
+      }
+      toast.success('Proposal accepted');
+    } catch (error) {
+      console.error('Failed to accept proposal:', error);
+      toast.error('Failed to accept proposal');
+    } finally {
+      setProposalActionLoading(null);
+    }
+  };
+
+  const handleRejectProposal = async (proposalId: number) => {
+    if (!workflowId) return;
+    setProposalActionLoading(proposalId);
+    try {
+      const response = await backendApiClient.request<WorkflowProposalActionResponse>(
+        `/api/workflows/${workflowId}/proposals/${proposalId}/reject`,
+        { method: 'POST' }
+      );
+      updateProposalInMessages(response.proposal);
+      toast.success('Proposal rejected');
+    } catch (error) {
+      console.error('Failed to reject proposal:', error);
+      toast.error('Failed to reject proposal');
+    } finally {
+      setProposalActionLoading(null);
     }
   };
 
@@ -897,32 +972,76 @@ export function BuildAndChatPanel({
                                   )}
                                 </div>
                               )}
-                              {message.suggestedEdits && message.suggestedEdits.length > 0 && (
-                                <div className="mt-3 pt-3 border-t border-border/50">
-                                  <p className="text-xs font-medium mb-2">Suggested edits:</p>
-                                  <div className="space-y-2">
-                                    {message.suggestedEdits.map((edit, editIndex) => (
+                              {message.proposal && (
+                                <div className="mt-3 pt-3 border-t border-border/50 space-y-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-xs font-medium">AI Proposal</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {message.proposal.summary}
+                                      </p>
+                                    </div>
+                                    <Badge
+                                      className={cn(
+                                        'capitalize',
+                                        message.proposal.status === 'pending' && 'bg-amber-100 text-amber-900',
+                                        message.proposal.status === 'accepted' && 'bg-emerald-100 text-emerald-900',
+                                        message.proposal.status === 'rejected' && 'bg-rose-100 text-rose-900'
+                                      )}
+                                    >
+                                      {message.proposal.status}
+                                    </Badge>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {message.proposal.patch_ops.map((op, opIndex) => (
                                       <div
-                                        key={editIndex}
-                                        className="text-xs bg-background/50 p-2 rounded"
+                                        key={`${message.proposal?.id}-${opIndex}`}
+                                        className="text-xs bg-background/60 p-2 rounded text-left"
                                       >
-                                        <span className="font-medium">{edit.operation}</span>
-                                        {edit.block_type && (
-                                          <span className="text-muted-foreground">
-                                            {' '}({edit.block_type})
+                                        <span className="font-semibold uppercase tracking-wide">
+                                          {op.op}
+                                        </span>
+                                        {op.description && (
+                                          <span className="ml-1 text-muted-foreground">
+                                            {op.description}
+                                          </span>
+                                        )}
+                                        {!op.description && (op.node_id || op.edge_id) && (
+                                          <span className="ml-1 text-muted-foreground">
+                                            {op.node_id || op.edge_id}
                                           </span>
                                         )}
                                       </div>
                                     ))}
-                                    <Button
-                                      size="sm"
-                                      className="w-full mt-2"
-                                      onClick={() => handleApplyEdits(message.suggestedEdits!)}
-                                    >
-                                      <Check className="w-3 h-3 mr-2" />
-                                      Apply Edits
-                                    </Button>
+                                    {message.proposal.patch_ops.length === 0 && (
+                                      <div className="text-xs text-muted-foreground">
+                                        No operations provided.
+                                      </div>
+                                    )}
                                   </div>
+                                  {message.proposal.status === 'pending' && (
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                      <Button
+                                        size="sm"
+                                        className="flex-1"
+                                        disabled={proposalActionLoading === message.proposal.id}
+                                        onClick={() => handleAcceptProposal(message.proposal!.id)}
+                                      >
+                                        <Check className="w-3 h-3 mr-2" />
+                                        Accept
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1"
+                                        disabled={proposalActionLoading === message.proposal.id}
+                                        onClick={() => handleRejectProposal(message.proposal!.id)}
+                                      >
+                                        <X className="w-3 h-3 mr-2" />
+                                        Reject
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>

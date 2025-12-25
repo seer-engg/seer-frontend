@@ -55,6 +55,67 @@ const normalizeEdges = (rawEdges?: any[]): WorkflowEdge[] => {
   return rawEdges.map((edge) => normalizeEdge(edge));
 };
 
+const normalizeNodes = (rawNodes?: any[]): Node<WorkflowNodeData>[] => {
+  if (!Array.isArray(rawNodes)) {
+    return [];
+  }
+  return rawNodes.map((node) => {
+    const data = node?.data ?? {};
+    const position = node?.position ?? { x: 0, y: 0 };
+    const resolvedType = (node?.type || data?.type || 'tool') as WorkflowNodeData['type'];
+
+    return {
+      ...node,
+      type: resolvedType,
+      position,
+      data: {
+        ...data,
+        type: data?.type || resolvedType,
+        label: data?.label ?? node?.id ?? '',
+        config: data?.config ?? {},
+      },
+    } as Node<WorkflowNodeData>;
+  });
+};
+
+const withDefaultBlockConfig = (
+  blockType: string,
+  config: Record<string, any> = {},
+): Record<string, any> => {
+  const defaults: Record<string, any> = (() => {
+    switch (blockType) {
+      case 'llm':
+        return {
+          system_prompt: '',
+          model: 'gpt-5-mini',
+          temperature: 0.2,
+        };
+      case 'if_else':
+        return {
+          condition: '',
+        };
+      case 'for_loop':
+        return {
+          array_var: 'items',
+          item_var: 'item',
+        };
+      case 'input':
+        return {
+          variable_name: '',
+          type: 'text',
+          required: true,
+        };
+      default:
+        return {};
+    }
+  })();
+
+  return {
+    ...defaults,
+    ...config,
+  };
+};
+
 export default function Workflows() {
   const navigate = useNavigate();
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
@@ -82,15 +143,7 @@ export default function Workflows() {
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
       // Set default config based on block type
-      let defaultConfig = block.config || {};
-      if (block.type === 'llm') {
-        defaultConfig = {
-          system_prompt: '',
-          model: 'gpt-5-mini',
-          temperature: 0.2,
-          ...defaultConfig,
-        };
-      }
+      const defaultConfig = withDefaultBlockConfig(block.type, block.config);
       
       const newNode: Node<WorkflowNodeData> = {
         id: `node-${Date.now()}`,
@@ -251,7 +304,7 @@ export default function Workflows() {
     setSelectedWorkflowId(workflow.id);
     setWorkflowName(workflow.name);
     if (workflow.graph_data) {
-      setNodes(workflow.graph_data.nodes || []);
+      setNodes(normalizeNodes(workflow.graph_data.nodes));
       setEdges(normalizeEdges(workflow.graph_data.edges));
     }
     resetSavedData(); // Reset autosave tracking when loading a workflow
@@ -321,136 +374,11 @@ export default function Workflows() {
     }
   }, [createWorkflow, resetSavedData]);
 
-  const handleApplyChatEdits = useCallback((edits: Array<{
-    operation: string;
-    block_id?: string;
-    block_type?: string;
-    label?: string;
-    config?: Record<string, any>;
-    position?: { x: number; y: number };
-    source_id?: string;
-    target_id?: string;
-    branch?: 'true' | 'false';
-  }>) => {
-    // Apply edits to workflow
-    // Process blocks first, then edges to ensure blocks exist when edges are created
-    const blockEdits = edits.filter(e => ['add_block', 'modify_block', 'remove_block'].includes(e.operation));
-    const edgeEdits = edits.filter(e => ['add_edge', 'remove_edge'].includes(e.operation));
-    
-    let newNodes = [...nodes];
-    let newEdges = [...edges];
-
-    // Process block operations first
-    for (const edit of blockEdits) {
-      if (edit.operation === 'add_block' && edit.block_type) {
-        // Process config: transform inputs to params for tool blocks, handle fields for input blocks
-        let processedConfig = edit.config || {};
-        
-        // Transform inputs to params for tool blocks (backward compatibility)
-        if (edit.block_type === 'tool' && processedConfig.inputs && !processedConfig.params) {
-          processedConfig = {
-            ...processedConfig,
-            params: processedConfig.inputs,
-          };
-          delete processedConfig.inputs;
-        }
-        
-        // Add new block
-        const newNode: Node<WorkflowNodeData> = {
-          id: edit.block_id || `node-${Date.now()}`,
-          type: edit.block_type as any,
-          position: edit.position || {
-            x: Math.random() * 400 + 100,
-            y: Math.random() * 400 + 100,
-          },
-          data: {
-            type: edit.block_type as any,
-            label: edit.label || edit.block_type.charAt(0).toUpperCase() + edit.block_type.slice(1),
-            config: processedConfig,
-          },
-        };
-        newNodes.push(newNode);
-      } else if (edit.operation === 'modify_block' && edit.block_id) {
-        // Transform inputs to params if present
-        let processedConfig = edit.config || {};
-        if (processedConfig.inputs && !processedConfig.params) {
-          processedConfig = {
-            ...processedConfig,
-            params: processedConfig.inputs,
-          };
-          delete processedConfig.inputs;
-        }
-        
-        // Modify existing block
-        newNodes = newNodes.map((node) =>
-          node.id === edit.block_id
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  config: { ...node.data.config, ...processedConfig },
-                },
-              }
-            : node
-        );
-      } else if (edit.operation === 'remove_block' && edit.block_id) {
-        // Remove block
-        newNodes = newNodes.filter((node) => node.id !== edit.block_id);
-        // Also remove connected edges
-        newEdges = newEdges.filter(
-          (edge) => edge.source !== edit.block_id && edge.target !== edit.block_id
-        );
-      }
-    }
-
-    // Process edge operations after blocks are created
-    for (const edit of edgeEdits) {
-      if (edit.operation === 'add_edge' && edit.source_id && edit.target_id) {
-        const sourceExists = newNodes.some((n) => n.id === edit.source_id);
-        const targetExists = newNodes.some((n) => n.id === edit.target_id);
-
-        if (!sourceExists) {
-          console.warn(`[handleApplyChatEdits] Source block ${edit.source_id} not found for edge`);
-        }
-        if (!targetExists) {
-          console.warn(`[handleApplyChatEdits] Target block ${edit.target_id} not found for edge`);
-        }
-
-        if (sourceExists && targetExists) {
-          const normalizedBranch =
-            edit.branch === 'true' || edit.branch === 'false'
-              ? edit.branch
-              : undefined;
-          const branch =
-            normalizedBranch ||
-            getNextBranchForSource(edit.source_id, newNodes, newEdges);
-
-          const newEdge: WorkflowEdge = {
-            id: `edge-${edit.source_id}-${edit.target_id}`,
-            source: edit.source_id,
-            target: edit.target_id,
-            data: branch ? { branch } : undefined,
-          };
-
-          if (!newEdges.some((e) => e.source === edit.source_id && e.target === edit.target_id)) {
-            console.log(`[handleApplyChatEdits] Adding edge from ${edit.source_id} to ${edit.target_id}`);
-            newEdges.push(newEdge);
-          } else {
-            console.log(`[handleApplyChatEdits] Edge from ${edit.source_id} to ${edit.target_id} already exists`);
-          }
-        }
-      } else if (edit.operation === 'remove_edge') {
-        if (edit.source_id && edit.target_id) {
-          newEdges = newEdges.filter(
-            (edge) => !(edge.source === edit.source_id && edge.target === edit.target_id)
-          );
-        }
-      }
-    }
-
-    setNodes(newNodes);
-    setEdges(newEdges);
-  }, [nodes, edges]);
+  const handleWorkflowGraphSync = useCallback((graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
+    if (!graph) return;
+    setNodes(normalizeNodes(graph.nodes));
+    setEdges(normalizeEdges(graph.edges));
+  }, []);
 
   const [buildChatCollapsed, setBuildChatCollapsed] = useState(() => {
     const saved = localStorage.getItem('buildChatPanelCollapsed');
@@ -581,7 +509,7 @@ export default function Workflows() {
                 workflowId={selectedWorkflowId}
                 nodes={nodes}
                 edges={edges}
-                onApplyEdits={handleApplyChatEdits}
+                onWorkflowGraphSync={handleWorkflowGraphSync}
                 collapsed={buildChatCollapsed}
                 onCollapseChange={handleBuildChatCollapseChange}
               />
