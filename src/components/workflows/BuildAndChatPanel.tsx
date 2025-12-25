@@ -73,12 +73,6 @@ const BUILT_IN_BLOCKS: BuiltInBlock[] = [
     icon: <Sparkles className="w-4 h-4" />,
   },
   {
-    type: 'code',
-    label: 'Code',
-    description: 'Execute Python code',
-    icon: <Code className="w-4 h-4" />,
-  },
-  {
     type: 'if_else',
     label: 'If/Else',
     description: 'Conditional logic',

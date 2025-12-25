@@ -4,6 +4,7 @@
  */
 
 import { getGitHubToolScopes } from './github_tool_scopes';
+import { getGmailToolScopes } from './gmail_tool_scopes';
 
 export type IntegrationType = "sandbox" | "github" | "google_drive" | "asana" | "gmail" | "google_sheets";
 
@@ -74,7 +75,11 @@ export function getRequiredScopes(
       ];
     
     case "gmail":
-      // Read-only Gmail scope
+      // Use tool-specific scopes if toolName is provided
+      if (toolName) {
+        return [...baseScopes, ...getGmailToolScopes(toolName)];
+      }
+      // Fallback to read-only Gmail scope
       return [
         ...baseScopes,
         "https://www.googleapis.com/auth/gmail.readonly",

@@ -17,7 +17,7 @@ import { GmailIcon } from '@/components/icons/gmail';
 import { GoogleDriveIcon } from '@/components/icons/googledrive';
 import { GoogleSheetsIcon } from '@/components/icons/googlesheets';
 import { GitHubIcon } from '@/components/icons/github';
-import { Search, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Clock, FileEdit, Trash2, Play, Check, X, Globe, Wrench, GitPullRequest, Plug } from 'lucide-react';
+import { Search, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Clock, FileEdit, Trash2, Play, Check, X, Globe, Wrench, GitPullRequest, Plug } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { backendApiClient } from '@/lib/api-client';
 
@@ -43,12 +43,6 @@ const BUILT_IN_BLOCKS: BuiltInBlock[] = [
     label: 'LLM',
     description: 'Invoke LLM with system prompt',
     icon: <Sparkles className="w-4 h-4" />,
-  },
-  {
-    type: 'code',
-    label: 'Code',
-    description: 'Execute Python code',
-    icon: <Code className="w-4 h-4" />,
   },
   {
     type: 'if_else',

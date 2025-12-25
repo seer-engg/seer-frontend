@@ -258,18 +258,18 @@ export interface ListConnectedAccountsResponse {
 }
 
 /**
- * Tool connection status - indicates whether a specific tool has the required OAuth scopes
+ * Tool connection status - indicates whether a specific tool has a connection
+ * Note: Frontend validates scopes using its own mappings, backend only provides connection info
  */
 export interface ToolConnectionStatus {
   tool_name: string;
   integration_type: string | null;
   provider: string | null;
   connected: boolean;
-  has_required_scopes: boolean;
   has_refresh_token?: boolean;  // Whether refresh_token exists (needed for token refresh)
-  missing_scopes: string[];
   connection_id: string | null;
   provider_account_id?: string;
+  scopes?: string;  // Granted scopes (for frontend validation)
 }
 
 export interface ToolsConnectionStatusResponse {
@@ -278,14 +278,13 @@ export interface ToolsConnectionStatusResponse {
 
 /**
  * Integration status - shows connection status for an integration type
+ * Note: Frontend validates scopes using its own mappings, backend only provides connection info
  */
 export interface IntegrationStatus {
   integration_type: string;
   provider: string;
   connected: boolean;
-  has_required_scopes: boolean;
   granted_scopes: string[];
-  missing_scopes: string[];
   connection_id: string | null;
   provider_account_id?: string;
 }

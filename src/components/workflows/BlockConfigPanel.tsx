@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProviderType } from './OAuthScopeSelector';
 import { WorkflowNodeData, BlockType } from './types';
-import { Code, HelpCircle, Save } from 'lucide-react';
+import { HelpCircle, Save } from 'lucide-react';
 import { backendApiClient } from '@/lib/api-client';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StructuredOutputEditor } from './StructuredOutputEditor';
@@ -62,7 +62,6 @@ export function BlockConfigPanel({
   liveUpdateDelayMs = 350,
 }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
-  const [pythonCode, setPythonCode] = useState('');
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
   const [inputRefs, setInputRefs] = useState<Record<string, string>>({});
   const [useStructuredOutput, setUseStructuredOutput] = useState(false);
@@ -86,7 +85,6 @@ export function BlockConfigPanel({
   // Use refs to track latest values for auto-save on unmount
   const configRef = useRef(config);
   const inputRefsRef = useRef(inputRefs);
-  const pythonCodeRef = useRef(pythonCode);
   const oauthScopeRef = useRef(oauthScope);
   const isSavingRef = useRef(false); // Track if save is in progress to prevent concurrent saves
   const originalNodeRef = useRef(node); // Track original node to detect changes
@@ -96,9 +94,8 @@ export function BlockConfigPanel({
   useEffect(() => {
     configRef.current = config;
     inputRefsRef.current = inputRefs;
-    pythonCodeRef.current = pythonCode;
     oauthScopeRef.current = oauthScope;
-  }, [config, inputRefs, pythonCode, oauthScope]);
+  }, [config, inputRefs, oauthScope]);
 
   const toolName = config.tool_name || config.toolName || '';
 
@@ -136,7 +133,6 @@ export function BlockConfigPanel({
         // Fallback to single input handle
         return ['input'];
       
-      case 'code':
       case 'llm':
       case 'if_else':
       case 'for_loop':
@@ -222,9 +218,6 @@ export function BlockConfigPanel({
           // Also add structured_output reference
           variables.push(`${blockLabel}.structured_output`);
         }
-      } else if (block.data.type === 'code') {
-        variables.push(`${blockLabel}.output`);
-        variables.push('output');
       } else if (block.data.type === 'input') {
         // Input blocks already handled above, but also add output handle
         const config = block.data.config || {};
@@ -240,8 +233,8 @@ export function BlockConfigPanel({
         variables.push(`${blockLabel}.route`);
       } else if (block.data.type === 'for_loop') {
         variables.push(`${blockLabel}.output`);
-        variables.push(`${blockLabel}.items`);
-        variables.push(`${blockLabel}.count`);
+        variables.push(`${blockLabel}.item`);
+        variables.push(`${blockLabel}.done`);
       }
     });
     
@@ -257,7 +250,6 @@ export function BlockConfigPanel({
     const nodeConfig = node.data.config || {};
     const signature = JSON.stringify({
       config: nodeConfig,
-      python_code: node.data.python_code || '',
       oauth_scope: node.data.oauth_scope,
       input_refs: node.data.config?.input_refs || {},
     });
@@ -275,7 +267,6 @@ export function BlockConfigPanel({
     };
 
     setConfig(nodeConfig);
-    setPythonCode(node.data.python_code || '');
     setOAuthScope(node.data.oauth_scope);
     setInputRefs(node.data.config?.input_refs || {});
     setUseStructuredOutput(!!nodeConfig.output_schema);
@@ -292,7 +283,6 @@ export function BlockConfigPanel({
 
     const hasChanges =
       JSON.stringify(config) !== JSON.stringify(nodeConfig) ||
-      pythonCode !== (node.data.python_code || '') ||
       oauthScope !== node.data.oauth_scope ||
       JSON.stringify(inputRefs) !== JSON.stringify(nodeInputRefs);
 
@@ -313,7 +303,6 @@ export function BlockConfigPanel({
           input_refs: inputRefs,
           output_schema: config.output_schema,
         },
-        python_code: pythonCode,
         oauth_scope: oauthScope,
       });
       liveUpdateTimeoutRef.current = null;
@@ -333,7 +322,6 @@ export function BlockConfigPanel({
     node,
     oauthScope,
     onUpdate,
-    pythonCode,
   ]);
 
   // Auto-save config changes when component unmounts (modal closes)
@@ -351,7 +339,6 @@ export function BlockConfigPanel({
         // Check if data actually changed before saving
         const hasChanges = 
           JSON.stringify(configRef.current) !== JSON.stringify(originalNode.data.config || {}) ||
-          pythonCodeRef.current !== (originalNode.data.python_code || '') ||
           oauthScopeRef.current !== originalNode.data.oauth_scope ||
           JSON.stringify(inputRefsRef.current) !== JSON.stringify(originalNode.data.config?.input_refs || {});
         
@@ -366,7 +353,6 @@ export function BlockConfigPanel({
               input_refs: inputRefsRef.current,
               output_schema: configRef.current.output_schema,
             },
-            python_code: pythonCodeRef.current,
             oauth_scope: oauthScopeRef.current,
           });
           // Reset flag after a delay to allow save to complete
@@ -527,7 +513,6 @@ export function BlockConfigPanel({
           input_refs: inputRefs,
           output_schema: config.output_schema, // Explicitly include output_schema
         },
-        python_code: pythonCode,
         oauth_scope: oauthScope,
       });
       toast.success('Configuration saved', {
@@ -1008,26 +993,6 @@ export function BlockConfigPanel({
           </div>
         );
 
-      case 'code':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="python-code" className="flex items-center gap-2">
-                <Code className="w-4 h-4" />
-                Python Code
-              </Label>
-              <Textarea
-                id="python-code"
-                value={pythonCode}
-                onChange={(e) => setPythonCode(e.target.value)}
-                placeholder="# Your Python code here&#10;result = input_data * 2"
-                className="font-mono text-xs"
-                rows={12}
-              />
-            </div>
-          </div>
-        );
-
       case 'llm':
         return (
           <div className="space-y-4">
@@ -1191,11 +1156,11 @@ export function BlockConfigPanel({
               <Label htmlFor="item-var">Item Variable Name</Label>
               <Input
                 id="item-var"
-                value={config.item_var || 'item'}
+                value={config.item_var || ''}
                 onChange={(e) =>
                   setConfig({ ...config, item_var: e.target.value })
                 }
-                placeholder="e.g., email"
+                placeholder="e.g., email (default: item)"
               />
             </div>
           </div>

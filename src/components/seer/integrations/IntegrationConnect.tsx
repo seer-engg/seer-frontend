@@ -8,7 +8,7 @@
  * (gmail, googlesheets, googledrive) share the same Google OAuth connection.
  */
 
-import { IntegrationType, formatScopes, getOAuthProvider } from "@/lib/integrations/client";
+import { IntegrationType, formatScopes, getOAuthProvider, getRequiredScopes } from "@/lib/integrations/client";
 import { INTEGRATION_CONFIGS, ConnectionStatus, ConnectedAccount } from "@/lib/integrations/config";
 import {
   listConnectedAccounts,
@@ -105,17 +105,24 @@ export function IntegrationConnect({
       // Clear any previous errors on successful fetch
       setConnectionError(null);
 
-      if (status.connected && status.has_required_scopes) {
-        // Connected with all required scopes
-        console.log(`[IntegrationConnect] ${type} is connected with all required scopes`);
-        setConnectionId(status.connection_id);
-        setConnectionStatus("connected");
-        onConnected?.(status.connection_id!);
-      } else if (status.connected && !status.has_required_scopes) {
-        // Connected but missing some scopes - user needs to re-auth to add scopes
-        console.log(`[IntegrationConnect] ${type} connected but missing scopes:`, status.missing_scopes);
-        setConnectionId(status.connection_id);
-        setConnectionStatus("needs-auth"); // Show as needing auth to add more scopes
+      if (status.connected) {
+        // Validate scopes using frontend mappings
+        const requiredScopes = getRequiredScopes(type);
+        const grantedScopes = new Set(status.granted_scopes || []);
+        const hasAllScopes = requiredScopes.every(scope => grantedScopes.has(scope));
+        
+        if (hasAllScopes) {
+          // Connected with all required scopes
+          console.log(`[IntegrationConnect] ${type} is connected with all required scopes`);
+          setConnectionId(status.connection_id);
+          setConnectionStatus("connected");
+          onConnected?.(status.connection_id!);
+        } else {
+          // Connected but missing some scopes - user needs to re-auth to add scopes
+          console.log(`[IntegrationConnect] ${type} connected but missing scopes`);
+          setConnectionId(status.connection_id);
+          setConnectionStatus("needs-auth"); // Show as needing auth to add more scopes
+        }
       } else {
         // Not connected at all
         console.log(`[IntegrationConnect] ${type} not connected`);

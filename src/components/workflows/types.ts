@@ -2,7 +2,6 @@ import { Edge, Node } from '@xyflow/react';
 
 export type BlockType =
   | 'tool'
-  | 'code'
   | 'llm'
   | 'if_else'
   | 'for_loop'

@@ -97,3 +97,29 @@ You can override the built-in defaults via environment variables:
 | `VITE_AGENT_CHAT_ASSISTANT_ID` | Optional global assistant ID fallback | _none_ |
 | `VITE_EVAL_AGENT_ID` | Eval graph ID | `eval_agent` |
 | `VITE_SUPERVISOR_AGENT_ID` | Supervisor graph ID | `supervisor` |
+
+## OAuth Scope Management
+
+**Critical**: OAuth scopes are defined and controlled entirely in the frontend. This is a core architectural principle.
+
+### How It Works
+
+1. **Scope Definitions**: OAuth scopes are defined in frontend scope mapping files:
+   - `src/lib/integrations/gmail_tool_scopes.ts` - Maps Gmail tool names to OAuth scopes
+   - `src/lib/integrations/github_tool_scopes.ts` - Maps GitHub tool names to OAuth scopes
+   - `src/lib/integrations/client.ts` - `getRequiredScopes()` function determines which scopes to request
+
+2. **Scope Requests**: When initiating OAuth, the frontend calls `getRequiredScopes(integrationType, toolName)` to determine which scopes to request from the OAuth provider.
+
+3. **Scope Validation**: The frontend validates if a connection has required scopes by:
+   - Getting required scopes via `getRequiredScopes(integrationType, toolName)`
+   - Checking if the connection's granted scopes (from backend) include all required scopes
+
+4. **Backend Role**: The backend only provides connection information including granted scopes. It does NOT validate scopes - frontend handles all scope validation.
+
+### Adding New Tools
+
+When adding a new OAuth tool:
+1. Add the tool-to-scope mapping in the appropriate scope mapping file (e.g., `gmail_tool_scopes.ts`)
+2. Update `getRequiredScopes()` in `client.ts` if needed
+3. The backend tool should NOT have a `required_scopes` field - it's not used
