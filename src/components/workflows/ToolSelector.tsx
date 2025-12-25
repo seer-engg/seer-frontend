@@ -51,12 +51,18 @@ interface ToolSelectorProps {
  */
 function getIntegrationIcon(integrationType: IntegrationType | null, className?: string) {
   const iconClass = cn('w-4 h-4', className);
-  switch (integrationType) {
+  const key = integrationType?.toLowerCase() ?? '';
+  switch (key) {
     case 'gmail':
       return <Mail className={iconClass} />;
     case 'googledrive':
+    case 'google_drive':
+      return <FolderOpen className={iconClass} />;
+    case 'googlesheets':
+    case 'google_sheets':
       return <FolderOpen className={iconClass} />;
     case 'github':
+    case 'pull_request':
       return <Github className={iconClass} />;
     case 'sandbox':
       return <Sparkles className={iconClass} />;
@@ -69,11 +75,18 @@ function getIntegrationIcon(integrationType: IntegrationType | null, className?:
  * Get display name for integration type
  */
 function getIntegrationDisplayName(integrationType: IntegrationType | null): string {
-  switch (integrationType) {
+  const key = integrationType?.toLowerCase() ?? '';
+  switch (key) {
     case 'gmail':
       return 'Gmail';
     case 'googledrive':
+    case 'google_drive':
       return 'Google Drive';
+    case 'googlesheets':
+    case 'google_sheets':
+      return 'Google Sheets';
+    case 'pull_request':
+      return 'GitHub Pull Requests';
     case 'github':
       return 'GitHub';
     case 'asana':

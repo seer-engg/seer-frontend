@@ -36,7 +36,7 @@ export async function checkBackendHealth(): Promise<boolean> {
  * Hook to check backend health with polling
  */
 
-export function useBackendHealth(intervalMs: number = 5000) {
+export function useBackendHealth(intervalMs: number = 10000) {
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
 
@@ -44,7 +44,7 @@ export function useBackendHealth(intervalMs: number = 5000) {
     setIsChecking(true);
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       
       await backendApiClient.request('/api/workflows', {
         method: 'GET',

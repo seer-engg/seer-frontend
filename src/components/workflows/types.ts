@@ -16,7 +16,7 @@ export interface ToolBlockConfig extends Record<string, any> {
   arguments?: Record<string, any>;
 }
 
-export interface WorkflowNodeData {
+export interface WorkflowNodeData extends Record<string, unknown> {
   type: BlockType;
   label: string;
   config?: ToolBlockConfig;

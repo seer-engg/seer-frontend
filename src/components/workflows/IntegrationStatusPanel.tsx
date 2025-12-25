@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import { IntegrationType, formatScopes, getRequiredScopes } from '@/lib/integrations/client';
+import { IntegrationType } from '@/lib/integrations/client';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +34,7 @@ import {
   Sparkles,
   RefreshCw,
   Plug,
+  GitPullRequest,
 } from 'lucide-react';
 
 interface IntegrationStatusPanelProps {
@@ -57,8 +58,10 @@ interface IntegrationInfo {
 
 const INTEGRATION_META: Record<IntegrationType, { displayName: string; icon: React.ReactNode }> = {
   gmail: { displayName: 'Gmail', icon: <Mail className="w-4 h-4" /> },
-  googledrive: { displayName: 'Google Drive', icon: <FolderOpen className="w-4 h-4" /> },
+  google_drive: { displayName: 'Google Drive', icon: <FolderOpen className="w-4 h-4" /> },
+  google_sheets: { displayName: 'Google Sheets', icon: <FolderOpen className="w-4 h-4" /> },
   github: { displayName: 'GitHub', icon: <Github className="w-4 h-4" /> },
+  pull_request: { displayName: 'GitHub Pull Requests', icon: <GitPullRequest className="w-4 h-4" /> },
   asana: { displayName: 'Asana', icon: <Plug className="w-4 h-4" /> },
   sandbox: { displayName: 'Sandbox', icon: <Sparkles className="w-4 h-4" /> },
 };

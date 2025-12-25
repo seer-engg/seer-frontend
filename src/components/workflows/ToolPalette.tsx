@@ -17,7 +17,7 @@ import { GmailIcon } from '@/components/icons/gmail';
 import { GoogleDriveIcon } from '@/components/icons/googledrive';
 import { GoogleSheetsIcon } from '@/components/icons/googlesheets';
 import { GitHubIcon } from '@/components/icons/github';
-import { Search, Code, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Clock, FileEdit, Trash2, Play, Check, X, Globe, Wrench, GitPullRequest, Plug } from 'lucide-react';
+import { Search, Sparkles, GitBranch, Repeat, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Clock, FileEdit, Trash2, Play, Check, X, Globe, Wrench, GitPullRequest, Plug } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { backendApiClient } from '@/lib/api-client';
 
@@ -27,7 +27,7 @@ interface Tool {
   toolkit?: string;
   slug?: string;
   provider?: string;  // OAuth provider (e.g., 'google', 'github')
-  integration_type?: string;  // Integration type (e.g., 'gmail', 'googlesheets')
+  integration_type?: string;  // Integration type (e.g., 'gmail', 'google_sheets')
 }
 
 interface BuiltInBlock {
@@ -43,12 +43,6 @@ const BUILT_IN_BLOCKS: BuiltInBlock[] = [
     label: 'LLM',
     description: 'Invoke LLM with system prompt',
     icon: <Sparkles className="w-4 h-4" />,
-  },
-  {
-    type: 'code',
-    label: 'Code',
-    description: 'Execute Python code',
-    icon: <Code className="w-4 h-4" />,
   },
   {
     type: 'if_else',
@@ -191,10 +185,7 @@ export function ToolPalette({
   };
 
   const normalizeIntegrationTypeKey = (value: string) => {
-    const v = value.toLowerCase().trim();
-    if (v === 'google_drive') return 'googledrive';
-    if (v === 'google_sheets') return 'googlesheets';
-    return v;
+    return value.toLowerCase().trim();
   };
 
   const getProviderIcon = (provider: string) => {
@@ -215,8 +206,10 @@ export function ToolPalette({
       case 'gmail':
         return <GmailIcon className="w-3.5 h-3.5 text-muted-foreground" />;
       case 'googledrive':
+      case 'google_drive':
         return <GoogleDriveIcon className="w-3.5 h-3.5 text-muted-foreground" />;
       case 'googlesheets':
+      case 'google_sheets':
         return <GoogleSheetsIcon className="w-3.5 h-3.5 text-muted-foreground" />;
       case 'pull_request':
         return <GitPullRequest className="w-3.5 h-3.5 text-muted-foreground" />;
@@ -231,8 +224,10 @@ export function ToolPalette({
       case 'gmail':
         return 'Gmail';
       case 'googledrive':
+      case 'google_drive':
         return 'Google Drive';
       case 'googlesheets':
+      case 'google_sheets':
         return 'Google Sheets';
       case 'pull_request':
         return 'Pull Requests';

@@ -31,9 +31,12 @@ const STORAGE_KEY = "seer_integrations_state";
 
 const defaultState = {
   github: null,
-  googledrive: null,
+  pull_request: null,
+  google_drive: null,
+  google_sheets: null,
   asana: null,
   gmail: null,
+  sandbox: null,
 } satisfies IntegrationState;
 
 const IntegrationContext = createContext<IntegrationContextValue | undefined>(
