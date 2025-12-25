@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import { IntegrationType, formatScopes, getRequiredScopes } from '@/lib/integrations/client';
+import { IntegrationType } from '@/lib/integrations/client';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

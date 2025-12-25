@@ -12,7 +12,7 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { backendApiClient, listConnectedAccounts, initiateConnection, ConnectedAccount, getToolsConnectionStatus, ToolConnectionStatus } from '@/lib/api-client';
-import { IntegrationType, formatScopes, getRequiredScopes, getOAuthProvider } from '@/lib/integrations/client';
+import { IntegrationType, formatScopes, getOAuthProvider } from '@/lib/integrations/client';
 import { useUser } from '@clerk/clerk-react';
 
 /**
@@ -223,10 +223,7 @@ export function useIntegrationTools() {
 
   const getIntegrationScopesForType = useCallback((integrationType: IntegrationType): string[] => {
     const backendScopes = integrationScopesMap.get(integrationType);
-    if (backendScopes && backendScopes.size > 0) {
-      return Array.from(backendScopes);
-    }
-    return getRequiredScopes(integrationType);
+    return backendScopes ? Array.from(backendScopes) : [];
   }, [integrationScopesMap]);
 
   /**
@@ -257,7 +254,7 @@ export function useIntegrationTools() {
     }
     
     // Fallback: Check scopes manually for each integration type
-    const integrationTypes: IntegrationType[] = ['gmail', 'google_sheets', 'google_drive', 'github', 'pull_request', 'asana'];
+    const integrationTypes = Array.from(integrationScopesMap.keys());
     
     for (const integrationType of integrationTypes) {
       const oauthProvider = getIntegrationProviderForType(integrationType);
@@ -268,6 +265,7 @@ export function useIntegrationTools() {
       
       // Check if provider has required scopes for this integration type
       const requiredScopes = getIntegrationScopesForType(integrationType);
+      if (!requiredScopes.length) continue;
       const hasAllScopes = requiredScopes.every(scope => providerConn.scopes.has(scope));
       
       if (hasAllScopes) {
@@ -280,7 +278,7 @@ export function useIntegrationTools() {
     }
     
     return connected;
-  }, [tools, toolStatusMap, providerConnectionsMap, getToolIntegrationType, getIntegrationProviderForType, getIntegrationScopesForType]);
+  }, [tools, toolStatusMap, providerConnectionsMap, getToolIntegrationType, getIntegrationProviderForType, getIntegrationScopesForType, integrationScopesMap]);
 
   /**
    * Get integration status for a specific tool
@@ -420,6 +418,9 @@ export function useIntegrationTools() {
     if (!providerConn) return false;
     
     const requiredScopes = getIntegrationScopesForType(type);
+    if (!requiredScopes.length) {
+      return false;
+    }
     return requiredScopes.every(scope => providerConn.scopes.has(scope));
   }, [connectedIntegrations, providerConnectionsMap, getIntegrationProviderForType, getIntegrationScopesForType]);
 
