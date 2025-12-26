@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Code, GitBranch, Repeat, Sparkles } from 'lucide-react';
+import { ArrowRight, Code, FunctionSquare, GitBranch, Repeat, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import type { BuiltInBlock } from './types';
@@ -10,6 +10,7 @@ const BLOCK_ICON_COMPONENTS: Record<string, LucideIcon> = {
   if_else: GitBranch,
   for_loop: Repeat,
   input: ArrowRight,
+  variable: FunctionSquare,
 };
 
 export function getBlockIconForType(blockType: string): React.ReactNode {
@@ -47,6 +48,12 @@ export const BUILT_IN_BLOCKS: BuiltInBlock[] = [
     label: 'Input',
     description: 'Workflow entry point',
     icon: getBlockIconForType('input'),
+  },
+  {
+    type: 'variable',
+    label: 'Variable',
+    description: 'Store reusable literal values',
+    icon: getBlockIconForType('variable'),
   },
 ];
 

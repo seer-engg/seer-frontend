@@ -83,6 +83,9 @@ export const collectAvailableVariables = (
           }
         }
         break;
+      case 'variable':
+        variables.push(`${blockAlias}.output`);
+        break;
       default:
         break;
     }

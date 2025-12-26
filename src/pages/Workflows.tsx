@@ -121,6 +121,11 @@ function withDefaultBlockConfig(
           type: 'text',
           required: true,
         };
+      case 'variable':
+        return {
+          input_type: 'string',
+          input: '',
+        };
       default:
         return {};
     }

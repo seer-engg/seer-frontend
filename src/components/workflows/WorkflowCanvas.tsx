@@ -37,6 +37,7 @@ import { LLMBlockNode } from './blocks/LLMBlockNode';
 import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
 import { InputBlockNode } from './blocks/InputBlockNode';
+import { VariableBlockNode } from './blocks/VariableBlockNode';
 
 /**
  * Extract tool names from workflow nodes
@@ -57,6 +58,7 @@ const nodeTypes = {
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
   input: InputBlockNode,
+  variable: VariableBlockNode,
 };
 
 interface WorkflowCanvasProps {

@@ -21,6 +21,7 @@ import {
   IfElseBlockSection,
   ForLoopBlockSection,
   InputBlockSection,
+  VariableBlockSection,
   DefaultBlockSection,
   ToolMetadata,
 } from './block-config';
@@ -291,6 +292,8 @@ export function BlockConfigPanel({
         return <ForLoopBlockSection config={config} setConfig={setConfig} />;
       case 'input':
         return <InputBlockSection config={config} setConfig={setConfig} />;
+      case 'variable':
+        return <VariableBlockSection config={config} setConfig={setConfig} />;
       default:
         return <DefaultBlockSection />;
     }
