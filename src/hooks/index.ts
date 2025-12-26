@@ -14,7 +14,6 @@ export {
 
 // Workflow
 export { useWorkflowBuilder, type Workflow, type WorkflowExecution } from './useWorkflowBuilder';
-export { useWorkflow } from './useWorkflow';
 
 
 // UI hooks
