@@ -24,6 +24,7 @@ export interface ToolBlockConfig extends Record<string, any> {
   toolName?: string; // Legacy support
   connection_id?: string;
   arguments?: Record<string, any>;
+  params?: Record<string, any>;
 }
 
 export interface WorkflowNodeData extends Record<string, unknown> {
