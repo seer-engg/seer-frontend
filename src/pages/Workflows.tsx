@@ -54,6 +54,8 @@ const normalizeEdges = (rawEdges?: any[]): WorkflowEdge[] => {
   return rawEdges.map((edge) => normalizeEdge(edge));
 };
 
+const DEFAULT_LLM_USER_PROMPT = 'Enter your prompt here';
+
 const normalizeNodes = (rawNodes?: any[]): Node<WorkflowNodeData>[] => {
   if (!Array.isArray(rawNodes)) {
     return [];
@@ -62,6 +64,10 @@ const normalizeNodes = (rawNodes?: any[]): Node<WorkflowNodeData>[] => {
     const data = node?.data ?? {};
     const position = node?.position ?? { x: 0, y: 0 };
     const resolvedType = (node?.type || data?.type || 'tool') as WorkflowNodeData['type'];
+    const configWithDefaults = withDefaultBlockConfig(
+      resolvedType,
+      data?.config ?? {},
+    );
 
     return {
       ...node,
@@ -71,21 +77,22 @@ const normalizeNodes = (rawNodes?: any[]): Node<WorkflowNodeData>[] => {
         ...data,
         type: data?.type || resolvedType,
         label: data?.label ?? node?.id ?? '',
-        config: data?.config ?? {},
+        config: configWithDefaults,
       },
     } as Node<WorkflowNodeData>;
   });
 };
 
-const withDefaultBlockConfig = (
+function withDefaultBlockConfig(
   blockType: string,
   config: Record<string, any> = {},
-): Record<string, any> => {
+): Record<string, any> {
   const defaults: Record<string, any> = (() => {
     switch (blockType) {
       case 'llm':
         return {
           system_prompt: '',
+          user_prompt: DEFAULT_LLM_USER_PROMPT,
           model: 'gpt-5-mini',
           temperature: 0.2,
         };
@@ -113,7 +120,7 @@ const withDefaultBlockConfig = (
     ...defaults,
     ...config,
   };
-};
+}
 
 export default function Workflows() {
   const navigate = useNavigate();
