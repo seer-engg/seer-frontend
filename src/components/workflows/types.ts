@@ -9,6 +9,16 @@ export type BlockType =
   | 'input'
   | 'variable';
 
+export interface FunctionBlockSchema {
+  type: BlockType;
+  label: string;
+  category: string;
+  description: string;
+  defaults: Record<string, any>;
+  config_schema: Record<string, any>;
+  tags?: string[] | null;
+}
+
 export interface ToolBlockConfig extends Record<string, any> {
   tool_name?: string;
   toolName?: string; // Legacy support

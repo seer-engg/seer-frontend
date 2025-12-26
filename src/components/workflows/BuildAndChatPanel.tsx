@@ -21,6 +21,7 @@ import type {
   Tool,
   WorkflowProposal,
   WorkflowProposalActionResponse,
+  BuiltInBlock,
 } from './build-and-chat/types';
 import { filterSystemPrompt } from './build-and-chat/utils';
 
@@ -32,6 +33,7 @@ export function BuildAndChatPanel({
   onWorkflowGraphSync,
   collapsed: externalCollapsed,
   onCollapseChange,
+  functionBlocks,
 }: BuildAndChatPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(() => {
     const saved = localStorage.getItem('buildChatPanelCollapsed');
@@ -302,7 +304,12 @@ export function BuildAndChatPanel({
     <div className="flex flex-col h-full bg-card border-l w-full">
       <ResizablePanelGroup direction="vertical" className="flex-1">
         <ResizablePanel defaultSize={50} minSize={0} collapsible>
-          <BuildPanel tools={tools} isLoadingTools={isLoadingTools} onBlockSelect={onBlockSelect} />
+          <BuildPanel
+            tools={tools}
+            isLoadingTools={isLoadingTools}
+            onBlockSelect={onBlockSelect}
+            blocks={functionBlocks}
+          />
         </ResizablePanel>
 
         <ResizableHandle withHandle />

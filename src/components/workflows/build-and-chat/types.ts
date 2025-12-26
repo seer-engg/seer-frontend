@@ -99,5 +99,6 @@ export interface BuildAndChatPanelProps {
   onWorkflowGraphSync?: (graph?: WorkflowGraphPayload | null) => void;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
+  functionBlocks?: BuiltInBlock[];
 }
 
