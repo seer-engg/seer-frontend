@@ -8,7 +8,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
-import { WorkflowNodeData, WorkflowEdge, getNextBranchForSource } from '@/components/workflows/types';
+import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';

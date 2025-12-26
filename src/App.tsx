@@ -4,8 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import LiveRun from "./pages/LiveRun";
-import ToolOrchestrator from "./pages/ToolOrchestrator";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -15,7 +13,6 @@ import WorkflowExecution from "./pages/WorkflowExecution";
 import BlockConfiguration from "./pages/BlockConfiguration";
 import Traces from "./pages/Traces";
 import TraceDetail from "./pages/TraceDetail";
-
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 
@@ -55,27 +52,6 @@ const App = () => (
                 <div className="min-h-screen flex items-center justify-center bg-background p-4">
                   <SignUp routing="path" path="/sign-up" />
                 </div>
-              }
-            />
-
-            <Route
-              path="/run/:id"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <LiveRun />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/tool-orchestrator"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <ToolOrchestrator />
-                  </SeerLayout>
-                </ProtectedRoute>
               }
             />
             <Route
