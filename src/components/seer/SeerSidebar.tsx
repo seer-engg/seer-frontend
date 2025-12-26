@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
-  TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUsageGate } from "@/hooks/useUsageGate";
@@ -29,7 +28,6 @@ import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
   { name: "Workflows", href: "/workflows", icon: Workflow },
-  { name: "Orchestrator", href: "/tool-orchestrator", icon: Zap },
   { name: "Traces", href: "/traces", icon: Activity }
 ] as const;
 
