@@ -4,7 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import LiveRun from "./pages/LiveRun";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -53,17 +52,6 @@ const App = () => (
                 <div className="min-h-screen flex items-center justify-center bg-background p-4">
                   <SignUp routing="path" path="/sign-up" />
                 </div>
-              }
-            />
-
-            <Route
-              path="/run/:id"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <LiveRun />
-                  </SeerLayout>
-                </ProtectedRoute>
               }
             />
             <Route
