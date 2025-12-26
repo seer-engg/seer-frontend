@@ -110,7 +110,9 @@ function withDefaultBlockConfig(
         };
       case 'for_loop':
         return {
-          array_var: 'items',
+          array_mode: 'variable',
+          array_variable: 'items',
+          array_literal: [],
           item_var: 'item',
         };
       case 'input':

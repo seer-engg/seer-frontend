@@ -186,11 +186,25 @@ export function WorkflowCanvas({
         return;
       }
 
-      const branch = getNextBranchForSource(params.source, nodes, edges);
+      const branchFromHandle =
+        params.sourceHandle &&
+        ['true', 'false', 'loop', 'exit'].includes(params.sourceHandle)
+          ? (params.sourceHandle as 'true' | 'false' | 'loop' | 'exit')
+          : undefined;
+      const branch = branchFromHandle ?? getNextBranchForSource(params.source, nodes, edges);
+      const sourceNode = nodes.find((node) => node.id === params.source);
+
+      if (!branch && sourceNode && (sourceNode.type === 'if_else' || sourceNode.type === 'for_loop')) {
+        console.warn(`All branch handles are already used for node ${sourceNode.id}`);
+        return;
+      }
+
       const newEdge: WorkflowEdge = {
         id: `edge-${params.source}-${params.target}`,
         source: params.source,
         target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
         data: branch ? { branch } : undefined,
         markerEnd: {
           type: MarkerType.ArrowClosed,
