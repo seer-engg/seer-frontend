@@ -18,7 +18,5 @@ export { CodeBlockNode } from './blocks/CodeBlockNode';
 export { LLMBlockNode } from './blocks/LLMBlockNode';
 export { IfElseBlockNode } from './blocks/IfElseBlockNode';
 export { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
-export { VariableBlockNode } from './blocks/VariableBlockNode';
 export { InputBlockNode } from './blocks/InputBlockNode';
-export { OutputBlockNode } from './blocks/OutputBlockNode';
 
