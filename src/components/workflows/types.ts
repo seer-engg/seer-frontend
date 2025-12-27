@@ -9,11 +9,22 @@ export type BlockType =
   | 'input'
   | 'variable';
 
+export interface FunctionBlockSchema {
+  type: BlockType;
+  label: string;
+  category: string;
+  description: string;
+  defaults: Record<string, any>;
+  config_schema: Record<string, any>;
+  tags?: string[] | null;
+}
+
 export interface ToolBlockConfig extends Record<string, any> {
   tool_name?: string;
   toolName?: string; // Legacy support
   connection_id?: string;
   arguments?: Record<string, any>;
+  params?: Record<string, any>;
 }
 
 export interface WorkflowNodeData extends Record<string, unknown> {
@@ -27,7 +38,7 @@ export interface WorkflowNodeData extends Record<string, unknown> {
 }
 
 export type WorkflowEdgeData = {
-  branch?: 'true' | 'false';
+  branch?: 'true' | 'false' | 'loop' | 'exit';
 };
 
 export type WorkflowEdge = Edge<WorkflowEdgeData>;
@@ -36,25 +47,39 @@ export function getNextBranchForSource(
   sourceId: string | null | undefined,
   nodes: Node<WorkflowNodeData>[],
   edges: WorkflowEdge[],
-): 'true' | 'false' | undefined {
+): 'true' | 'false' | 'loop' | 'exit' | undefined {
   if (!sourceId) {
     return undefined;
   }
 
   const sourceNode = nodes.find((node) => node.id === sourceId);
-  if (!sourceNode || sourceNode.type !== 'if_else') {
+  if (!sourceNode) {
     return undefined;
   }
 
   const outgoing = edges.filter((edge) => edge.source === sourceId);
-  const hasTrue = outgoing.some((edge) => edge.data?.branch === 'true');
-  const hasFalse = outgoing.some((edge) => edge.data?.branch === 'false');
-
-  if (!hasTrue) {
-    return 'true';
+  if (sourceNode.type === 'if_else') {
+    const hasTrue = outgoing.some((edge) => edge.data?.branch === 'true');
+    const hasFalse = outgoing.some((edge) => edge.data?.branch === 'false');
+    if (!hasTrue) {
+      return 'true';
+    }
+    if (!hasFalse) {
+      return 'false';
+    }
+    return undefined;
   }
-  if (!hasFalse) {
-    return 'false';
+
+  if (sourceNode.type === 'for_loop') {
+    const hasLoop = outgoing.some((edge) => edge.data?.branch === 'loop');
+    const hasExit = outgoing.some((edge) => edge.data?.branch === 'exit');
+    if (!hasLoop) {
+      return 'loop';
+    }
+    if (!hasExit) {
+      return 'exit';
+    }
+    return undefined;
   }
 
   return undefined;

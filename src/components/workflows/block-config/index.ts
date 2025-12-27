@@ -7,6 +7,7 @@ export * from './sections/ForLoopBlockSection';
 export * from './sections/IfElseBlockSection';
 export * from './sections/InputBlockSection';
 export * from './sections/LlmBlockSection';
+export * from './sections/VariableBlockSection';
 export * from './sections/ToolBlockSection';
 export * from './widgets/VariableAutocompleteDropdown';
 export * from './types';

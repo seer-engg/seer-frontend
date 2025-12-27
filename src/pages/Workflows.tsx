@@ -8,11 +8,12 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
-import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
+import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema } from '@/components/workflows/types';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
+import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { Button } from '@/components/ui/button';
 import { Clock, Rocket, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
+import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 
 const isBranchValue = (value: unknown): value is 'true' | 'false' =>
   value === 'true' || value === 'false';
@@ -54,7 +56,12 @@ const normalizeEdges = (rawEdges?: any[]): WorkflowEdge[] => {
   return rawEdges.map((edge) => normalizeEdge(edge));
 };
 
-const normalizeNodes = (rawNodes?: any[]): Node<WorkflowNodeData>[] => {
+const DEFAULT_LLM_USER_PROMPT = 'Enter your prompt here';
+
+const normalizeNodes = (
+  rawNodes?: any[],
+  functionBlockMap?: Map<string, FunctionBlockSchema>,
+): Node<WorkflowNodeData>[] => {
   if (!Array.isArray(rawNodes)) {
     return [];
   }
@@ -62,6 +69,11 @@ const normalizeNodes = (rawNodes?: any[]): Node<WorkflowNodeData>[] => {
     const data = node?.data ?? {};
     const position = node?.position ?? { x: 0, y: 0 };
     const resolvedType = (node?.type || data?.type || 'tool') as WorkflowNodeData['type'];
+    const configWithDefaults = withDefaultBlockConfig(
+      resolvedType,
+      data?.config ?? {},
+      functionBlockMap,
+    );
 
     return {
       ...node,
@@ -71,21 +83,24 @@ const normalizeNodes = (rawNodes?: any[]): Node<WorkflowNodeData>[] => {
         ...data,
         type: data?.type || resolvedType,
         label: data?.label ?? node?.id ?? '',
-        config: data?.config ?? {},
+        config: configWithDefaults,
       },
     } as Node<WorkflowNodeData>;
   });
 };
 
-const withDefaultBlockConfig = (
+function withDefaultBlockConfig(
   blockType: string,
   config: Record<string, any> = {},
-): Record<string, any> => {
-  const defaults: Record<string, any> = (() => {
+  functionBlockMap?: Map<string, FunctionBlockSchema>,
+): Record<string, any> {
+  const schemaDefaults = functionBlockMap?.get(blockType)?.defaults;
+  const defaults: Record<string, any> = schemaDefaults ?? (() => {
     switch (blockType) {
       case 'llm':
         return {
           system_prompt: '',
+          user_prompt: DEFAULT_LLM_USER_PROMPT,
           model: 'gpt-5-mini',
           temperature: 0.2,
         };
@@ -95,7 +110,9 @@ const withDefaultBlockConfig = (
         };
       case 'for_loop':
         return {
-          array_var: 'items',
+          array_mode: 'variable',
+          array_variable: 'items',
+          array_literal: [],
           item_var: 'item',
         };
       case 'input':
@@ -103,6 +120,11 @@ const withDefaultBlockConfig = (
           variable_name: '',
           type: 'text',
           required: true,
+        };
+      case 'variable':
+        return {
+          input_type: 'string',
+          input: '',
         };
       default:
         return {};
@@ -113,7 +135,7 @@ const withDefaultBlockConfig = (
     ...defaults,
     ...config,
   };
-};
+}
 
 export default function Workflows() {
   const navigate = useNavigate();
@@ -138,11 +160,27 @@ export default function Workflows() {
     isExecuting,
     isDeleting,
   } = useWorkflowBuilder();
+  const {
+    blocks: functionBlockSchemas,
+    blocksByType: functionBlocksMap,
+  } = useFunctionBlocks();
+
+  const availableBlocks = useMemo(() => {
+    if (functionBlockSchemas.length > 0) {
+      return functionBlockSchemas.map((schema) => ({
+        type: schema.type,
+        label: schema.label,
+        description: schema.description,
+        icon: getBlockIconForType(schema.type),
+      }));
+    }
+    return BUILT_IN_BLOCKS;
+  }, [functionBlockSchemas]);
 
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
       // Set default config based on block type
-      const defaultConfig = withDefaultBlockConfig(block.type, block.config);
+      const defaultConfig = withDefaultBlockConfig(block.type, block.config, functionBlocksMap);
       
       const newNode: Node<WorkflowNodeData> = {
         id: `node-${Date.now()}`,
@@ -159,7 +197,7 @@ export default function Workflows() {
       };
       setNodes((nds) => [...nds, newNode]);
     },
-    []
+    [functionBlocksMap],
   );
 
 
@@ -303,13 +341,13 @@ export default function Workflows() {
     setSelectedWorkflowId(workflow.id);
     setWorkflowName(workflow.name);
     if (workflow.graph_data) {
-      setNodes(normalizeNodes(workflow.graph_data.nodes));
+      setNodes(normalizeNodes(workflow.graph_data.nodes, functionBlocksMap));
       setEdges(normalizeEdges(workflow.graph_data.edges));
     }
     resetSavedData(); // Reset autosave tracking when loading a workflow
     // Reset loading flag after a brief delay to prevent immediate autosave
     setTimeout(() => setIsLoadingWorkflow(false), 100);
-  }, [resetSavedData]);
+  }, [resetSavedData, functionBlocksMap]);
 
   const handleDeleteWorkflow = useCallback(async (workflowId: number) => {
     if (!confirm('Are you sure you want to delete this workflow?')) {
@@ -375,9 +413,9 @@ export default function Workflows() {
 
   const handleWorkflowGraphSync = useCallback((graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
     if (!graph) return;
-    setNodes(normalizeNodes(graph.nodes));
+    setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
     setEdges(normalizeEdges(graph.edges));
-  }, []);
+  }, [functionBlocksMap]);
 
   const [buildChatCollapsed, setBuildChatCollapsed] = useState(() => {
     const saved = localStorage.getItem('buildChatPanelCollapsed');
@@ -511,6 +549,7 @@ export default function Workflows() {
                 onWorkflowGraphSync={handleWorkflowGraphSync}
                 collapsed={buildChatCollapsed}
                 onCollapseChange={handleBuildChatCollapseChange}
+              functionBlocks={availableBlocks}
               />
             </ResizablePanel>
           </>

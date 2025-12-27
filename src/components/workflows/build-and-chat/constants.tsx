@@ -1,38 +1,59 @@
 import React from 'react';
-import { ArrowRight, Code, GitBranch, Repeat, Sparkles } from 'lucide-react';
+import { ArrowRight, Code, FunctionSquare, GitBranch, Repeat, Sparkles } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import type { BuiltInBlock } from './types';
+
+const BLOCK_ICON_COMPONENTS: Record<string, LucideIcon> = {
+  llm: Sparkles,
+  code: Code,
+  if_else: GitBranch,
+  for_loop: Repeat,
+  input: ArrowRight,
+  variable: FunctionSquare,
+};
+
+export function getBlockIconForType(blockType: string): React.ReactNode {
+  const Icon = BLOCK_ICON_COMPONENTS[blockType] ?? Sparkles;
+  return <Icon className="w-4 h-4" />;
+}
 
 export const BUILT_IN_BLOCKS: BuiltInBlock[] = [
   {
     type: 'llm',
     label: 'LLM',
     description: 'Invoke LLM with system prompt',
-    icon: <Sparkles className="w-4 h-4" />,
+    icon: getBlockIconForType('llm'),
   },
   {
     type: 'code',
     label: 'Code',
     description: 'Execute Python code',
-    icon: <Code className="w-4 h-4" />,
+    icon: getBlockIconForType('code'),
   },
   {
     type: 'if_else',
     label: 'If/Else',
     description: 'Conditional logic',
-    icon: <GitBranch className="w-4 h-4" />,
+    icon: getBlockIconForType('if_else'),
   },
   {
     type: 'for_loop',
     label: 'For Loop',
     description: 'Iterate over array',
-    icon: <Repeat className="w-4 h-4" />,
+    icon: getBlockIconForType('for_loop'),
   },
   {
     type: 'input',
     label: 'Input',
     description: 'Workflow entry point',
-    icon: <ArrowRight className="w-4 h-4" />,
+    icon: getBlockIconForType('input'),
+  },
+  {
+    type: 'variable',
+    label: 'Variable',
+    description: 'Store reusable literal values',
+    icon: getBlockIconForType('variable'),
   },
 ];
 

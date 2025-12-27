@@ -75,6 +75,16 @@ export const collectAvailableVariables = (
         variables.push(`${blockAlias}.output`);
         variables.push(`${blockAlias}.items`);
         variables.push(`${blockAlias}.count`);
+        {
+          const loopConfig = block.data.config || {};
+          if (loopConfig.item_var) {
+            variables.push(loopConfig.item_var);
+            variables.push(`${blockAlias}.${loopConfig.item_var}`);
+          }
+        }
+        break;
+      case 'variable':
+        variables.push(`${blockAlias}.output`);
         break;
       default:
         break;

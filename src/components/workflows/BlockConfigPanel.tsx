@@ -4,7 +4,7 @@
  * Right sidebar panel for configuring selected block.
  * Supports editing parameters, Python code, and OAuth scopes.
  */
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Node } from '@xyflow/react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,6 +21,7 @@ import {
   IfElseBlockSection,
   ForLoopBlockSection,
   InputBlockSection,
+  VariableBlockSection,
   DefaultBlockSection,
   ToolMetadata,
 } from './block-config';
@@ -51,6 +52,7 @@ export function BlockConfigPanel({
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
   const [inputRefs, setInputRefs] = useState<Record<string, string>>({});
   const [useStructuredOutput, setUseStructuredOutput] = useState(false);
+  const [structuredOutputSchema, setStructuredOutputSchema] = useState<Record<string, any> | undefined>();
   const systemPromptRef = useRef<HTMLTextAreaElement>(null);
   const userPromptRef = useRef<HTMLTextAreaElement>(null);
   const lastSyncedNodeStateRef = useRef<{ nodeId: string | null; signature: string }>({
@@ -128,8 +130,24 @@ export function BlockConfigPanel({
     setOAuthScope(node.data.oauth_scope);
     setInputRefs(node.data.config?.input_refs || {});
     setUseStructuredOutput(!!nodeConfig.output_schema);
+    setStructuredOutputSchema(nodeConfig.output_schema);
     originalNodeRef.current = node; // Update original node reference
   }, [node]);
+
+  const handleStructuredOutputSchemaChange = useCallback(
+    (schema?: Record<string, any>) => {
+      setStructuredOutputSchema(schema);
+      setConfig(prev => {
+        if (schema) {
+          return { ...prev, output_schema: schema };
+        }
+        const next = { ...prev };
+        delete next.output_schema;
+        return next;
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!liveUpdate || !node) {
@@ -280,6 +298,8 @@ export function BlockConfigPanel({
             setConfig={setConfig}
             useStructuredOutput={useStructuredOutput}
             setUseStructuredOutput={setUseStructuredOutput}
+            structuredOutputSchema={structuredOutputSchema}
+            onStructuredOutputSchemaChange={handleStructuredOutputSchemaChange}
             systemPromptRef={systemPromptRef}
             userPromptRef={userPromptRef}
             templateAutocomplete={templateAutocomplete}
@@ -291,6 +311,8 @@ export function BlockConfigPanel({
         return <ForLoopBlockSection config={config} setConfig={setConfig} />;
       case 'input':
         return <InputBlockSection config={config} setConfig={setConfig} />;
+      case 'variable':
+        return <VariableBlockSection config={config} setConfig={setConfig} />;
       default:
         return <DefaultBlockSection />;
     }

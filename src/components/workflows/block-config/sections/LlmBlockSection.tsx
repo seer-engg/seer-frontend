@@ -17,6 +17,8 @@ interface LlmBlockSectionProps {
   setConfig: Dispatch<SetStateAction<Record<string, any>>>;
   useStructuredOutput: boolean;
   setUseStructuredOutput: (value: boolean) => void;
+  structuredOutputSchema?: Record<string, any>;
+  onStructuredOutputSchemaChange: (schema?: Record<string, any>) => void;
   systemPromptRef: RefObject<HTMLTextAreaElement>;
   userPromptRef: RefObject<HTMLTextAreaElement>;
   templateAutocomplete: TemplateAutocompleteControls;
@@ -34,10 +36,13 @@ export function LlmBlockSection({
   setConfig,
   useStructuredOutput,
   setUseStructuredOutput,
+  structuredOutputSchema,
+  onStructuredOutputSchemaChange,
   systemPromptRef,
   userPromptRef,
   templateAutocomplete,
 }: LlmBlockSectionProps) {
+  const outputSchema = structuredOutputSchema ?? config.output_schema;
   const {
     autocompleteContext,
     checkForAutocomplete,
@@ -193,19 +198,12 @@ export function LlmBlockSection({
             const isChecked = checked === true;
             setUseStructuredOutput(isChecked);
             if (!isChecked) {
-              setConfig(prev => {
-                const next = { ...prev };
-                delete next.output_schema;
-                return next;
+              onStructuredOutputSchemaChange(undefined);
+            } else if (!outputSchema) {
+              onStructuredOutputSchemaChange({
+                type: 'object',
+                properties: {},
               });
-            } else if (!config.output_schema) {
-              setConfig(prev => ({
-                ...prev,
-                output_schema: {
-                  type: 'object',
-                  properties: {},
-                },
-              }));
             }
           }}
         />
@@ -216,8 +214,8 @@ export function LlmBlockSection({
 
       {useStructuredOutput && (
         <StructuredOutputEditor
-          value={config.output_schema}
-          onChange={schema => setConfig(prev => ({ ...prev, output_schema: schema }))}
+          value={outputSchema}
+          onChange={schema => onStructuredOutputSchemaChange(schema)}
         />
       )}
     </div>
