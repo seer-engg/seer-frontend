@@ -5,6 +5,7 @@
  * Supports connecting to self-hosted backend via ?backend= URL parameter.
  */
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema } from '@/components/workflows/types';
@@ -137,6 +138,7 @@ function withDefaultBlockConfig(
 }
 
 export default function Workflows() {
+  const navigate = useNavigate();
   const buildChatSupported = true;
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
   const [edges, setEdges] = useState<WorkflowEdge[]>([]);
@@ -485,6 +487,14 @@ export default function Workflows() {
           <Menu className="w-4 h-4" />
         </Button>
         <div className="flex-1 flex items-center justify-end gap-2">
+          <Button
+            onClick={() => selectedWorkflowId && navigate(`/workflows/${selectedWorkflowId}/executions`)}
+            disabled={!selectedWorkflowId}
+            size="sm"
+            variant="outline"
+          >
+            View Runs
+          </Button>
           <Button
             onClick={handleExecute}
             disabled={!selectedWorkflowId || isExecuting}
