@@ -1,29 +1,20 @@
-import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Search,
-  Zap,
   Activity,
-  Package,
   Settings,
   LogOut,
-  Sparkles,
-  Lock, // Add Lock icon for coming soon
   Workflow,
-  List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useUsageGate } from "@/hooks/useUsageGate";
-import { Key } from "lucide-react";
 import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
@@ -35,79 +26,35 @@ const secondaryNav = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-// Update the NavItem type to handle comingSoon
 type NavItemType = {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  comingSoon?: boolean;
 };
 
 interface SeerSidebarProps {
   collapsed?: boolean;
-  onCollapsedChange?: (collapsed: boolean) => void;
   forceCollapsed?: boolean;
 }
 
-export function SeerSidebar({ collapsed: externalCollapsed, onCollapsedChange, forceCollapsed }: SeerSidebarProps = {}) {
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  
-  const collapsed = forceCollapsed ? true : (externalCollapsed !== undefined ? externalCollapsed : internalCollapsed);
-  
-  const setCollapsed = (value: boolean) => {
-    if (forceCollapsed) return; // Don't allow changing if force collapsed
-    if (externalCollapsed === undefined) {
-      setInternalCollapsed(value);
-    }
-    onCollapsedChange?.(value);
-  };
+export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: SeerSidebarProps) {
+  const collapsed = forceCollapsed ? true : (externalCollapsed ?? false);
   const { user } = useUser();
   const { signOut } = useClerk();
   const location = useLocation();
-  const { remainingFreeQueries, hasApiKey, isLoading: usageLoading } = useUsageGate();
   const userEmail =
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
     "";
 
   const NavItem = ({ item, isActive }: { item: NavItemType; isActive: boolean }) => {
-    // Handle coming soon items
-    if (item.comingSoon) {
-      return (
-        <Tooltip delayDuration={0}>
-          <TooltipTrigger asChild>
-            <div
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-not-allowed opacity-60",
-                "text-muted-foreground"
-              )}
-            >
-            <item.icon className="h-4 w-4 shrink-0" />
-            <motion.span
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: "auto" }}
-              exit={{ opacity: 0, width: 0 }}
-              className="whitespace-nowrap flex items-center gap-2"
-            >
-              {item.name}
-              <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
-                Soon
-              </Badge>
-            </motion.span>
-            </div>
-          </TooltipTrigger>
-        </Tooltip>
-      );
-    }
-
-    // Existing NavItem code for non-coming-soon items
     return (
       <Tooltip delayDuration={0}>
         <TooltipTrigger asChild>
           <NavLink
             to={item.href}
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+              "w-full flex items-center justify-start gap-3 min-w-0 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left",
               isActive
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
@@ -118,7 +65,7 @@ export function SeerSidebar({ collapsed: externalCollapsed, onCollapsedChange, f
               initial={{ opacity: 0, width: 0 }}
               animate={{ opacity: 1, width: "auto" }}
               exit={{ opacity: 0, width: 0 }}
-              className="whitespace-nowrap"
+              className="whitespace-nowrap truncate min-w-0 flex-1"
             >
               {item.name}
             </motion.span>
@@ -129,7 +76,7 @@ export function SeerSidebar({ collapsed: externalCollapsed, onCollapsedChange, f
   };
 
   // When collapsed, render nothing (0 width) - controlled by hamburger menu in top bar
-  if (collapsed || forceCollapsed) {
+  if (collapsed) {
     return null;
   }
 
@@ -138,10 +85,10 @@ export function SeerSidebar({ collapsed: externalCollapsed, onCollapsedChange, f
       initial={false}
       animate={{ width: 220 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="h-screen bg-sidebar border-r border-sidebar-border flex flex-col shrink-0"
+      className="fixed inset-y-0 left-0 z-10 h-screen bg-sidebar border-r border-sidebar-border flex flex-col"
     >
       {/* Logo */}
-      <div className="h-14 flex items-center justify-between px-3 border-b border-sidebar-border">
+      <div className="h-14 flex items-center px-3 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-seer to-indigo-500 flex items-center justify-center">
             <Search className="h-4 w-4 text-white" />
@@ -157,7 +104,7 @@ export function SeerSidebar({ collapsed: externalCollapsed, onCollapsedChange, f
       </div>
 
       {/* Primary Navigation */}
-      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto text-left">
         {primaryNav.map((item) => (
           <NavItem
             key={item.name}
@@ -168,7 +115,7 @@ export function SeerSidebar({ collapsed: externalCollapsed, onCollapsedChange, f
       </nav>
 
       {/* Secondary Navigation */}
-      <div className="px-2 py-2 space-y-1 border-t border-sidebar-border">
+      <div className="px-3 py-2 space-y-1 border-t border-sidebar-border text-left">
         {secondaryNav.map((item) => (
           <NavItem
             key={item.name}
@@ -176,43 +123,18 @@ export function SeerSidebar({ collapsed: externalCollapsed, onCollapsedChange, f
             isActive={location.pathname === item.href}
           />
         ))}
-      </div>
-
-      {/* Theme Switcher */}
-      <div className="px-3 py-2 border-t border-sidebar-border">
-        <div className="flex items-center gap-2">
-          <ThemeSwitcher />
-          <span className="text-xs text-muted-foreground">Theme</span>
+        {/* Theme Switcher */}
+        <div className="w-full flex items-center justify-start gap-3 min-w-0 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left text-muted-foreground hover:text-foreground hover:bg-accent/50">
+          <div className="shrink-0">
+            <ThemeSwitcher className="h-4 w-4 p-0 hover:bg-transparent" />
+          </div>
+          <span className="whitespace-nowrap truncate min-w-0 flex-1">Theme</span>
         </div>
       </div>
-
-      {/* Usage Badge */}
-      {!usageLoading && (
-        <div className="px-3 py-2 border-t border-sidebar-border">
-          {hasApiKey ? (
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Badge variant="outline" className="w-full justify-center text-xs border-success/30 bg-success/10 text-success">
-                  <Key className="h-3 w-3 mr-1" />
-                  API Key Active
-                </Badge>
-              </TooltipTrigger>
-            </Tooltip>
-          ) : (
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Badge variant="outline" className="w-full justify-center text-xs border-warning/30 bg-warning/10 text-warning">
-                  {remainingFreeQueries} free {remainingFreeQueries === 1 ? 'query' : 'queries'} left
-                </Badge>
-              </TooltipTrigger>
-            </Tooltip>
-          )}
-        </div>
-      )}
 
       {/* User Profile */}
-      <div className="px-2 py-3 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 px-2">
+      <div className="px-3 py-3">
+        <div className="flex items-center gap-3 px-0">
           <Avatar className="h-8 w-8">
             <AvatarImage src={user?.imageUrl} />
             <AvatarFallback className="bg-accent text-xs">

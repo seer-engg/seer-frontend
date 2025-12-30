@@ -5,7 +5,7 @@
  * Supports connecting to self-hosted backend via ?backend= URL parameter.
  */
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema } from '@/components/workflows/types';
@@ -23,6 +23,7 @@ import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
+import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 
 const isBranchValue = (value: unknown): value is 'true' | 'false' =>
   value === 'true' || value === 'false';
@@ -139,7 +140,10 @@ function withDefaultBlockConfig(
 
 export default function Workflows() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { workflowId: urlWorkflowId } = useParams<{ workflowId?: string }>();
   const buildChatSupported = true;
+  const { refresh: refreshIntegrationTools } = useIntegrationTools();
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
   const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -341,23 +345,10 @@ export default function Workflows() {
 
   const handleLoadWorkflow = useCallback(
     async (workflow: WorkflowListItem) => {
-      setIsLoadingWorkflow(true);
-      try {
-        const fullWorkflow = await getWorkflow(workflow.workflow_id);
-        setSelectedWorkflowId(fullWorkflow.workflow_id);
-        setWorkflowName(fullWorkflow.name);
-        setLoadedWorkflow(fullWorkflow);
-        setNodes(normalizeNodes(fullWorkflow.graph.nodes, functionBlocksMap));
-        setEdges(normalizeEdges(fullWorkflow.graph.edges));
-        resetSavedData();
-      } catch (error) {
-        console.error('Failed to load workflow:', error);
-        toast.error('Failed to load workflow');
-      } finally {
-        setTimeout(() => setIsLoadingWorkflow(false), 100);
-      }
+      // Navigate to the workflow URL - the useEffect will handle loading
+      navigate(`/workflows/${workflow.workflow_id}`, { replace: true });
     },
-    [functionBlocksMap, getWorkflow, resetSavedData],
+    [navigate],
   );
 
   const handleDeleteWorkflow = useCallback(async (workflowId: string) => {
@@ -366,19 +357,15 @@ export default function Workflows() {
     }
     try {
       await deleteWorkflow(workflowId);
-      // Clear canvas if the deleted workflow was selected
+      // Navigate to /workflows if the deleted workflow was selected
       if (selectedWorkflowId === workflowId) {
-        setSelectedWorkflowId(null);
-        setWorkflowName('My Workflow');
-        setNodes([]);
-        setEdges([]);
-        setLoadedWorkflow(null);
+        navigate('/workflows', { replace: true });
       }
     } catch (error) {
       console.error('Failed to delete workflow:', error);
       toast.error('Failed to delete workflow');
     }
-  }, [deleteWorkflow, selectedWorkflowId]);
+  }, [deleteWorkflow, selectedWorkflowId, navigate]);
 
   const handleRenameWorkflow = useCallback(async (workflowId: string, newName: string) => {
     if (!newName.trim()) {
@@ -405,26 +392,14 @@ export default function Workflows() {
   const handleNewWorkflow = useCallback(async () => {
     try {
       const workflow = await createWorkflow('Untitled', undefined, { nodes: [], edges: [] });
-      setSelectedWorkflowId(workflow.workflow_id);
-      setLoadedWorkflow(workflow);
-      setWorkflowName('Untitled');
-      setNodes([]);
-      setEdges([]);
-      setSelectedNodeId(null);
-      resetSavedData(); // Reset autosave tracking for new workflow
+      // Navigate to the new workflow's URL - the useEffect will handle loading
+      navigate(`/workflows/${workflow.workflow_id}`, { replace: true });
       // Workflow will appear in list automatically via React Query cache invalidation
     } catch (error) {
       console.error('Failed to create new workflow:', error);
       toast.error('Failed to create new workflow');
-      // Fallback to clearing canvas without creating workflow
-      setSelectedWorkflowId(null);
-      setWorkflowName('My Workflow');
-      setNodes([]);
-      setEdges([]);
-      setSelectedNodeId(null);
-      resetSavedData();
     }
-  }, [createWorkflow, resetSavedData]);
+  }, [createWorkflow, navigate]);
 
   const handleWorkflowGraphSync = useCallback((graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
     if (!graph) return;
@@ -474,6 +449,63 @@ export default function Workflows() {
     }
   }, [isHealthy]);
 
+  // Handle OAuth connection redirect - refresh integration status when connected
+  useEffect(() => {
+    const connectedParam = searchParams.get('connected');
+    if (connectedParam) {
+      // Refresh integration tools status to reflect new connection
+      refreshIntegrationTools();
+      
+      // Show success toast
+      toast.success('Integration Connected', {
+        description: `Successfully connected to ${connectedParam}`,
+        duration: 3000,
+      });
+      
+      // Remove query parameter from URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('connected');
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [searchParams, refreshIntegrationTools, setSearchParams]);
+
+  // Sync URL param with state - load workflow when URL changes
+  useEffect(() => {
+    // If URL has workflowId but loaded workflow doesn't match, load the workflow
+    if (urlWorkflowId && urlWorkflowId !== loadedWorkflow?.workflow_id) {
+      const loadWorkflowFromUrl = async () => {
+        setIsLoadingWorkflow(true);
+        try {
+          const fullWorkflow = await getWorkflow(urlWorkflowId);
+          setSelectedWorkflowId(fullWorkflow.workflow_id);
+          setWorkflowName(fullWorkflow.name);
+          setLoadedWorkflow(fullWorkflow);
+          setNodes(normalizeNodes(fullWorkflow.graph.nodes, functionBlocksMap));
+          setEdges(normalizeEdges(fullWorkflow.graph.edges));
+          resetSavedData();
+        } catch (error) {
+          console.error('Failed to load workflow from URL:', error);
+          toast.error('Failed to load workflow', {
+            description: 'The workflow may not exist or you may not have access to it.',
+          });
+          // Redirect to /workflows if workflow doesn't exist
+          navigate('/workflows', { replace: true });
+        } finally {
+          setTimeout(() => setIsLoadingWorkflow(false), 100);
+        }
+      };
+      loadWorkflowFromUrl();
+    } else if (!urlWorkflowId && loadedWorkflow) {
+      // If URL doesn't have workflowId but we have a loaded workflow, clear the selection
+      setSelectedWorkflowId(null);
+      setWorkflowName('My Workflow');
+      setNodes([]);
+      setEdges([]);
+      setLoadedWorkflow(null);
+      resetSavedData();
+    }
+  }, [urlWorkflowId, loadedWorkflow?.workflow_id, getWorkflow, functionBlocksMap, resetSavedData, navigate]);
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Unified Top Bar */}
@@ -488,8 +520,13 @@ export default function Workflows() {
         </Button>
         <div className="flex-1 flex items-center justify-end gap-2">
           <Button
-            onClick={() => selectedWorkflowId && navigate(`/workflows/${selectedWorkflowId}/executions`)}
-            disabled={!selectedWorkflowId}
+            onClick={() => {
+              const workflowId = urlWorkflowId || selectedWorkflowId;
+              if (workflowId) {
+                navigate(`/workflows/${workflowId}/executions`);
+              }
+            }}
+            disabled={!urlWorkflowId && !selectedWorkflowId}
             size="sm"
             variant="outline"
           >

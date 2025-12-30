@@ -21,5 +21,4 @@ export { useToast } from './use-toast';
 export { useMobile } from './use-mobile';
 export { useMediaQuery } from './useMediaQuery';
 export { useQueryState } from './useQueryState';
-export { useUsageGate } from './useUsageGate';
 

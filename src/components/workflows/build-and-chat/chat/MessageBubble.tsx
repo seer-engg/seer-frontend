@@ -35,8 +35,6 @@ export function MessageBubble({
     return message.content;
   }, [filteredContent, message.content, message.role]);
 
-  const proposalPatchOps = message.proposal?.patch_ops ?? [];
-
   if (!showContent && message.role === 'assistant') {
     return null;
   }
@@ -103,20 +101,6 @@ export function MessageBubble({
                 >
                   {message.proposal.status}
                 </Badge>
-              </div>
-              <div className="space-y-1">
-                {proposalPatchOps.map((op, opIndex) => (
-                  <div key={`${message.proposal?.id}-${opIndex}`} className="text-xs bg-background/60 p-2 rounded text-left">
-                    <span className="font-semibold uppercase tracking-wide">{op.op}</span>
-                    {op.description && <span className="ml-1 text-muted-foreground">{op.description}</span>}
-                    {!op.description && (op.node_id || op.edge_id) && (
-                      <span className="ml-1 text-muted-foreground">{op.node_id || op.edge_id}</span>
-                    )}
-                  </div>
-                ))}
-                {proposalPatchOps.length === 0 && (
-                  <div className="text-xs text-muted-foreground">No operations provided.</div>
-                )}
               </div>
               {message.proposal.status === 'pending' && (
                 <div className="flex flex-col gap-2 sm:flex-row">

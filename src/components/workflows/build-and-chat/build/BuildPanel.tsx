@@ -21,7 +21,6 @@ export function BuildPanel({
   blocks = BUILT_IN_BLOCKS,
 }: BuildPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProvider] = useState<string | null>(null);
 
   const filteredBlocks = useMemo(() => {
     return blocks.filter(
@@ -59,7 +58,6 @@ export function BuildPanel({
           tools={tools}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          selectedProvider={selectedProvider}
           onSelectTool={handleToolSelect}
           isLoading={isLoadingTools}
         />

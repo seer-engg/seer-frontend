@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Node } from '@xyflow/react';
 
-import { WorkflowEdge, WorkflowNodeData } from '../../types';
+import { WorkflowEdge, WorkflowNodeData } from '../types';
 import type { WorkflowSpec } from '@/types/workflow-spec';
 
 export interface Tool {
@@ -26,17 +26,6 @@ export interface UserSummary {
   full_name?: string | null;
 }
 
-export interface WorkflowProposalPatchOp {
-  op: string;
-  description?: string;
-  node_id?: string;
-  node?: Record<string, any>;
-  edge_id?: string;
-  edge?: Record<string, any>;
-  source?: string;
-  target?: string;
-}
-
 export interface WorkflowGraphPayload {
   nodes?: Node<WorkflowNodeData & Record<string, unknown>>[];
   edges?: WorkflowEdge[];
@@ -49,7 +38,6 @@ export interface WorkflowProposal {
   created_by: UserSummary;
   summary: string;
   status: 'pending' | 'accepted' | 'rejected';
-  patch_ops?: WorkflowProposalPatchOp[] | null;
   spec: WorkflowSpec;
   preview_graph?: Record<string, any> | null;
   applied_graph?: Record<string, any> | null;

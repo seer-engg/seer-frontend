@@ -13,7 +13,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { MoreHorizontal, Plus, FileEdit, Trash2, Copy, CopyCheck } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { MoreHorizontal, Plus, FileEdit, Trash2, Copy, CopyCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface WorkflowListRow {
@@ -50,6 +55,7 @@ export function FloatingWorkflowsPanel({
   const [editingName, setEditingName] = useState<string>('');
   const [isRenaming, setIsRenaming] = useState(false);
   const [copiedWorkflowId, setCopiedWorkflowId] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   const handleStartRename = (e: React.MouseEvent, workflow: WorkflowListRow) => {
     e.stopPropagation();
@@ -122,24 +128,42 @@ export function FloatingWorkflowsPanel({
 
   return (
     <div className="absolute top-4 left-4 z-50 w-[280px] bg-card border border-border rounded-lg shadow-lg backdrop-blur-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h3 className="text-sm font-semibold">Workflows</h3>
-        {onNewWorkflow && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onNewWorkflow}
-            className="h-6 w-6"
-            title="New workflow"
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
-        )}
-      </div>
+      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div className="flex items-center gap-2">
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                title={isExpanded ? 'Collapse workflows' : 'Expand workflows'}
+              >
+                {isExpanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <h3 className="text-sm font-semibold">Workflows</h3>
+          </div>
+          {onNewWorkflow && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onNewWorkflow}
+              className="h-6 w-6"
+              title="New workflow"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
 
-      {/* Workflows List */}
-      <div className="max-h-[400px] overflow-y-auto">
+        {/* Workflows List */}
+        <CollapsibleContent>
+          <div className="max-h-[400px] overflow-y-auto">
         {isLoadingWorkflows ? (
           <div className="text-sm text-muted-foreground text-left py-4 px-4">
             Loading workflows...
@@ -240,7 +264,9 @@ export function FloatingWorkflowsPanel({
             ))}
           </div>
         )}
-      </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
