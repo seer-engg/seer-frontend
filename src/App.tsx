@@ -9,7 +9,6 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
-import WorkflowExecution from "./pages/WorkflowExecution";
 import BlockConfiguration from "./pages/BlockConfiguration";
 import Traces from "./pages/Traces";
 import TraceDetail from "./pages/TraceDetail";
@@ -70,16 +69,6 @@ const App = () => (
                 <ProtectedRoute>
                   <SeerLayout>
                     <Workflows />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/workflows/:workflowId/execution/:executionId?"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <WorkflowExecution />
                   </SeerLayout>
                 </ProtectedRoute>
               }

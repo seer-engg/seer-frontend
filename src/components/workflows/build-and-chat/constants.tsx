@@ -26,12 +26,6 @@ export const BUILT_IN_BLOCKS: BuiltInBlock[] = [
     icon: getBlockIconForType('llm'),
   },
   {
-    type: 'code',
-    label: 'Code',
-    description: 'Execute Python code',
-    icon: getBlockIconForType('code'),
-  },
-  {
     type: 'if_else',
     label: 'If/Else',
     description: 'Conditional logic',
@@ -48,12 +42,6 @@ export const BUILT_IN_BLOCKS: BuiltInBlock[] = [
     label: 'Input',
     description: 'Workflow entry point',
     icon: getBlockIconForType('input'),
-  },
-  {
-    type: 'variable',
-    label: 'Variable',
-    description: 'Store reusable literal values',
-    icon: getBlockIconForType('variable'),
   },
 ];
 

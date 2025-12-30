@@ -5,17 +5,16 @@
  * Supports connecting to self-hosted backend via ?backend= URL parameter.
  */
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema } from '@/components/workflows/types';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
-import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
+import { useWorkflowBuilder, WorkflowListItem, WorkflowModel } from '@/hooks/useWorkflowBuilder';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { Button } from '@/components/ui/button';
-import { Clock, Rocket, Menu } from 'lucide-react';
+import { Rocket, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
@@ -138,16 +137,17 @@ function withDefaultBlockConfig(
 }
 
 export default function Workflows() {
-  const navigate = useNavigate();
+  const buildChatSupported = true;
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
   const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState('My Workflow');
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [showInputDialog, setShowInputDialog] = useState(false);
   const [inputData, setInputData] = useState<Record<string, any>>({});
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
   
   const {
     workflows,
@@ -156,6 +156,7 @@ export default function Workflows() {
     updateWorkflow,
     deleteWorkflow,
     executeWorkflow,
+    getWorkflow,
     isCreating,
     isExecuting,
     isDeleting,
@@ -206,17 +207,16 @@ export default function Workflows() {
     
     try {
       if (selectedWorkflowId) {
-        // Update existing workflow
-        await updateWorkflow(selectedWorkflowId, {
+        const updated = await updateWorkflow(selectedWorkflowId, {
           name: workflowName,
-          graph_data: graphData,
+          graph: graphData,
         });
+        setLoadedWorkflow(updated);
         toast.success('Workflow saved successfully!');
       } else {
-        // Fallback: create workflow if somehow we don't have a selectedWorkflowId
-        // This shouldn't normally happen since workflows are created on "+ New"
         const workflow = await createWorkflow(workflowName || 'Untitled', undefined, graphData);
-        setSelectedWorkflowId(workflow.id);
+        setSelectedWorkflowId(workflow.workflow_id);
+        setLoadedWorkflow(workflow);
         toast.success('Workflow created and saved!');
       }
     } catch (error) {
@@ -233,10 +233,11 @@ export default function Workflows() {
 
     setAutosaveStatus('saving');
     try {
-      await updateWorkflow(selectedWorkflowId, {
+      const updated = await updateWorkflow(selectedWorkflowId, {
         name: data.workflowName,
-        graph_data: { nodes: data.nodes, edges: data.edges },
+        graph: { nodes: data.nodes, edges: data.edges },
       });
+      setLoadedWorkflow(updated);
       setAutosaveStatus('saved');
       // Reset status after 2 seconds
       setTimeout(() => setAutosaveStatus('idle'), 2000);
@@ -304,7 +305,7 @@ export default function Workflows() {
     } else {
       // No input blocks, execute immediately
       try {
-        await executeWorkflow(selectedWorkflowId, {}, false);
+        await executeWorkflow(selectedWorkflowId, {});
         alert('Workflow execution started!');
       } catch (error) {
         console.error('Failed to execute workflow:', error);
@@ -326,7 +327,7 @@ export default function Workflows() {
     });
 
     try {
-      await executeWorkflow(selectedWorkflowId, transformedInputData, false);
+      await executeWorkflow(selectedWorkflowId, transformedInputData);
       setShowInputDialog(false);
       setInputData({});
       alert('Workflow execution started!');
@@ -336,20 +337,28 @@ export default function Workflows() {
     }
   }, [selectedWorkflowId, executeWorkflow, inputData, inputFields]);
 
-  const handleLoadWorkflow = useCallback((workflow: typeof workflows[0]) => {
-    setIsLoadingWorkflow(true);
-    setSelectedWorkflowId(workflow.id);
-    setWorkflowName(workflow.name);
-    if (workflow.graph_data) {
-      setNodes(normalizeNodes(workflow.graph_data.nodes, functionBlocksMap));
-      setEdges(normalizeEdges(workflow.graph_data.edges));
-    }
-    resetSavedData(); // Reset autosave tracking when loading a workflow
-    // Reset loading flag after a brief delay to prevent immediate autosave
-    setTimeout(() => setIsLoadingWorkflow(false), 100);
-  }, [resetSavedData, functionBlocksMap]);
+  const handleLoadWorkflow = useCallback(
+    async (workflow: WorkflowListItem) => {
+      setIsLoadingWorkflow(true);
+      try {
+        const fullWorkflow = await getWorkflow(workflow.workflow_id);
+        setSelectedWorkflowId(fullWorkflow.workflow_id);
+        setWorkflowName(fullWorkflow.name);
+        setLoadedWorkflow(fullWorkflow);
+        setNodes(normalizeNodes(fullWorkflow.graph.nodes, functionBlocksMap));
+        setEdges(normalizeEdges(fullWorkflow.graph.edges));
+        resetSavedData();
+      } catch (error) {
+        console.error('Failed to load workflow:', error);
+        toast.error('Failed to load workflow');
+      } finally {
+        setTimeout(() => setIsLoadingWorkflow(false), 100);
+      }
+    },
+    [functionBlocksMap, getWorkflow, resetSavedData],
+  );
 
-  const handleDeleteWorkflow = useCallback(async (workflowId: number) => {
+  const handleDeleteWorkflow = useCallback(async (workflowId: string) => {
     if (!confirm('Are you sure you want to delete this workflow?')) {
       return;
     }
@@ -361,6 +370,7 @@ export default function Workflows() {
         setWorkflowName('My Workflow');
         setNodes([]);
         setEdges([]);
+        setLoadedWorkflow(null);
       }
     } catch (error) {
       console.error('Failed to delete workflow:', error);
@@ -368,7 +378,7 @@ export default function Workflows() {
     }
   }, [deleteWorkflow, selectedWorkflowId]);
 
-  const handleRenameWorkflow = useCallback(async (workflowId: number, newName: string) => {
+  const handleRenameWorkflow = useCallback(async (workflowId: string, newName: string) => {
     if (!newName.trim()) {
       toast.error('Workflow name cannot be empty');
       return;
@@ -378,6 +388,9 @@ export default function Workflows() {
       // Update local workflow name if it's the currently selected workflow
       if (selectedWorkflowId === workflowId) {
         setWorkflowName(newName.trim());
+        setLoadedWorkflow((prev) =>
+          prev ? { ...prev, name: newName.trim() } : prev,
+        );
       }
       toast.success('Workflow renamed successfully');
     } catch (error) {
@@ -389,9 +402,9 @@ export default function Workflows() {
 
   const handleNewWorkflow = useCallback(async () => {
     try {
-      // Create a new workflow immediately with "Untitled" name
       const workflow = await createWorkflow('Untitled', undefined, { nodes: [], edges: [] });
-      setSelectedWorkflowId(workflow.id);
+      setSelectedWorkflowId(workflow.workflow_id);
+      setLoadedWorkflow(workflow);
       setWorkflowName('Untitled');
       setNodes([]);
       setEdges([]);
@@ -481,26 +494,17 @@ export default function Workflows() {
             <Rocket className="w-4 h-4 mr-2" />
             Run
           </Button>
-          {selectedWorkflowId && (
-            <Button
-              onClick={() => navigate(`/workflows/${selectedWorkflowId}/execution`)}
-              size="sm"
-              variant="outline"
-              title="View execution history and details"
-            >
-              <Clock className="w-4 h-4 mr-2" />
-              Executions
-            </Button>
-          )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => handleBuildChatCollapseChange(!buildChatCollapsed)}
-          title={buildChatCollapsed ? "Show Build & Chat panel" : "Hide Build & Chat panel"}
-        >
-          <Menu className="w-4 h-4" />
-        </Button>
+        {buildChatSupported && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleBuildChatCollapseChange(!buildChatCollapsed)}
+            title={buildChatCollapsed ? "Show Build & Chat panel" : "Hide Build & Chat panel"}
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
+        )}
       </header>
 
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
@@ -532,7 +536,7 @@ export default function Workflows() {
         </ResizablePanel>
         
         {/* Build & Chat Panel - Conditionally render to avoid residue width */}
-        {!buildChatCollapsed && (
+        {buildChatSupported && !buildChatCollapsed && (
           <>
             <ResizableHandle withHandle />
             <ResizablePanel 

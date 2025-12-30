@@ -9,7 +9,7 @@ import { MessagesList } from './MessagesList';
 import type { SessionsStatus } from './types';
 
 interface ChatPanelProps {
-  workflowId: number | null;
+  workflowId: string | null;
   messages: ChatMessage[];
   isLoading: boolean;
   input: string;

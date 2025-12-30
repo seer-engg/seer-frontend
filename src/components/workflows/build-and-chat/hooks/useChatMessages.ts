@@ -18,7 +18,7 @@ type ChatSessionMessagesResponse = {
   messages: SessionMessageResponse[];
 };
 
-export function useChatMessages(workflowId: number | null, currentSessionId: number | null) {
+export function useChatMessages(workflowId: string | null, currentSessionId: number | null) {
   return useQuery<ChatMessage[]>({
     queryKey: ['chat-session-messages', currentSessionId],
     queryFn: async () => {

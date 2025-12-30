@@ -279,6 +279,16 @@ export function BlockConfigPanel({
       return null;
     }
 
+    if (node.data.type === 'code' || node.data.type === 'variable') {
+      return (
+        <div className="text-sm text-muted-foreground">
+          {node.data.type === 'code'
+            ? 'Code blocks are temporarily disabled while we migrate to the new workflow engine.'
+            : 'Variable blocks are temporarily disabled while we migrate to the new workflow engine.'}
+        </div>
+      );
+    }
+
     switch (node.data.type) {
       case 'tool':
         return (
@@ -289,8 +299,8 @@ export function BlockConfigPanel({
             templateAutocomplete={templateAutocomplete}
           />
         );
-      case 'code':
-        return <CodeBlockSection pythonCode={pythonCode} setPythonCode={setPythonCode} />;
+      // case 'code':
+      //   return <CodeBlockSection pythonCode={pythonCode} setPythonCode={setPythonCode} />;
       case 'llm':
         return (
           <LlmBlockSection
@@ -311,8 +321,8 @@ export function BlockConfigPanel({
         return <ForLoopBlockSection config={config} setConfig={setConfig} />;
       case 'input':
         return <InputBlockSection config={config} setConfig={setConfig} />;
-      case 'variable':
-        return <VariableBlockSection config={config} setConfig={setConfig} />;
+      // case 'variable':
+      //   return <VariableBlockSection config={config} setConfig={setConfig} />;
       default:
         return <DefaultBlockSection />;
     }

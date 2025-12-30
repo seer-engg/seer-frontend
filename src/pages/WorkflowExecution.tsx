@@ -90,7 +90,7 @@ export default function WorkflowExecution() {
     queryKey: ['workflow', workflowId],
     queryFn: async () => {
       const response = await backendApiClient.request<Workflow>(
-        `/api/workflows/${workflowId}`,
+        `/api/v1/workflows/${workflowId}`,
         { method: 'GET' }
       );
       return response;
@@ -103,7 +103,7 @@ export default function WorkflowExecution() {
     queryKey: ['executions', workflowId],
     queryFn: async () => {
       const response = await backendApiClient.request<Execution[]>(
-        `/api/workflows/${workflowId}/executions`,
+        `/api/v1/workflows/${workflowId}/executions`,
         { method: 'GET' }
       );
       return response;

@@ -15,21 +15,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { backendApiClient } from '@/lib/api-client';
 import { toast } from '@/components/ui/sonner';
-import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
-
-interface Workflow {
-  id: number;
-  name: string;
-  description?: string;
-  graph_data: {
-    nodes: Node<WorkflowNodeData>[];
-    edges: WorkflowEdge[];
-  };
-  schema_version: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
+import { useWorkflowBuilder, WorkflowModel } from '@/hooks/useWorkflowBuilder';
+import { workflowSpecToGraph } from '@/lib/workflow-graph';
+import type { WorkflowResponse } from '@/types/workflow-spec';
 
 export default function BlockConfiguration() {
   const { workflowId, blockId } = useParams<{ workflowId: string; blockId: string }>();
@@ -37,36 +25,38 @@ export default function BlockConfiguration() {
   const queryClient = useQueryClient();
   const { updateWorkflow } = useWorkflowBuilder();
 
-  // Fetch workflow data
-  const { data: workflow, isLoading, error } = useQuery<Workflow>({
+  const { data: workflow, isLoading, error } = useQuery<WorkflowModel>({
     queryKey: ['workflow', workflowId],
     queryFn: async () => {
       if (!workflowId) throw new Error('Workflow ID is required');
-      const response = await backendApiClient.request<Workflow>(
-        `/api/workflows/${workflowId}`,
-        { method: 'GET' }
+      const response = await backendApiClient.request<WorkflowResponse>(
+        `/api/v1/workflows/${workflowId}`,
+        { method: 'GET' },
       );
-      return response;
+      return {
+        ...response,
+        graph: workflowSpecToGraph(response.spec),
+      };
     },
     enabled: !!workflowId,
   });
 
   // Extract the specific node from workflow graph_data
   const node = useMemo(() => {
-    if (!workflow?.graph_data?.nodes || !blockId) return null;
-    return workflow.graph_data.nodes.find((n) => n.id === blockId) || null;
+    if (!workflow?.graph?.nodes || !blockId) return null;
+    return workflow.graph.nodes.find((n) => n.id === blockId) || null;
   }, [workflow, blockId]);
 
   const allNodes = useMemo(() => {
-    return workflow?.graph_data?.nodes || [];
+    return workflow?.graph?.nodes || [];
   }, [workflow]);
 
   // Update workflow mutation
   const updateMutation = useMutation({
     mutationFn: async (updates: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[] }) => {
       if (!workflowId) throw new Error('Workflow ID is required');
-      return await updateWorkflow(Number(workflowId), {
-        graph_data: updates,
+      return await updateWorkflow(workflowId, {
+        graph: updates,
       });
     },
     onSuccess: () => {
@@ -85,18 +75,21 @@ export default function BlockConfiguration() {
     },
   });
 
-  const handleNodeUpdate = useCallback((nodeId: string, updates: Partial<WorkflowNodeData>) => {
-    if (!workflow?.graph_data) return;
+  const handleNodeUpdate = useCallback(
+    (nodeId: string, updates: Partial<WorkflowNodeData>) => {
+      if (!workflow?.graph) return;
 
-    const updatedNodes = workflow.graph_data.nodes.map((n) =>
-      n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
-    );
+      const updatedNodes = workflow.graph.nodes.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n,
+      );
 
-    updateMutation.mutate({
-      nodes: updatedNodes,
-      edges: workflow.graph_data.edges,
-    });
-  }, [workflow?.graph_data, updateMutation]);
+      updateMutation.mutate({
+        nodes: updatedNodes,
+        edges: workflow.graph.edges,
+      });
+    },
+    [updateMutation, workflow?.graph],
+  );
 
   const handleBack = () => {
     navigate(`/workflows`);

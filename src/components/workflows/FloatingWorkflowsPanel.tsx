@@ -16,23 +16,23 @@ import { Input } from '@/components/ui/input';
 import { MoreHorizontal, Plus, FileEdit, Trash2, Copy, CopyCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface Workflow {
-  id: number;
+interface WorkflowListRow {
+  workflow_id: string;
   name: string;
   updated_at: string;
-  graph_data?: any;
+  description?: string | null;
 }
 
 interface FloatingWorkflowsPanelProps {
-  workflows?: Workflow[];
+  workflows?: WorkflowListRow[];
   isLoadingWorkflows?: boolean;
-  selectedWorkflowId?: number | null;
-  onLoadWorkflow?: (workflow: Workflow) => void;
-  onDeleteWorkflow?: (workflowId: number) => void;
-  onRenameWorkflow?: (workflowId: number, newName: string) => Promise<void>;
+  selectedWorkflowId?: string | null;
+  onLoadWorkflow?: (workflow: WorkflowListRow) => void;
+  onDeleteWorkflow?: (workflowId: string) => void;
+  onRenameWorkflow?: (workflowId: string, newName: string) => Promise<void>;
   onNewWorkflow?: () => void;
-  onCopyLink?: (workflowId: number) => void;
-  onDuplicateWorkflow?: (workflowId: number) => void;
+  onCopyLink?: (workflowId: string) => void;
+  onDuplicateWorkflow?: (workflowId: string) => void;
 }
 
 export function FloatingWorkflowsPanel({
@@ -46,14 +46,14 @@ export function FloatingWorkflowsPanel({
   onCopyLink,
   onDuplicateWorkflow,
 }: FloatingWorkflowsPanelProps) {
-  const [editingWorkflowId, setEditingWorkflowId] = useState<number | null>(null);
+  const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
   const [isRenaming, setIsRenaming] = useState(false);
-  const [copiedWorkflowId, setCopiedWorkflowId] = useState<number | null>(null);
+  const [copiedWorkflowId, setCopiedWorkflowId] = useState<string | null>(null);
 
-  const handleStartRename = (e: React.MouseEvent, workflow: Workflow) => {
+  const handleStartRename = (e: React.MouseEvent, workflow: WorkflowListRow) => {
     e.stopPropagation();
-    setEditingWorkflowId(workflow.id);
+    setEditingWorkflowId(workflow.workflow_id);
     setEditingName(workflow.name);
   };
 
@@ -62,14 +62,14 @@ export function FloatingWorkflowsPanel({
     setEditingName('');
   };
 
-  const handleSaveRename = async (workflowId: number) => {
+  const handleSaveRename = async (workflowId: string) => {
     if (!onRenameWorkflow || !editingName.trim()) {
       handleCancelRename();
       return;
     }
 
     const trimmedName = editingName.trim();
-    if (trimmedName === workflows.find(w => w.id === workflowId)?.name) {
+    if (trimmedName === workflows.find((w) => w.workflow_id === workflowId)?.name) {
       handleCancelRename();
       return;
     }
@@ -87,7 +87,7 @@ export function FloatingWorkflowsPanel({
     }
   };
 
-  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, workflowId: number) => {
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, workflowId: string) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       handleSaveRename(workflowId);
@@ -97,7 +97,7 @@ export function FloatingWorkflowsPanel({
     }
   };
 
-  const handleCopyLink = (workflowId: number) => {
+  const handleCopyLink = (workflowId: string) => {
     if (onCopyLink) {
       onCopyLink(workflowId);
     } else {
@@ -108,13 +108,13 @@ export function FloatingWorkflowsPanel({
     }
   };
 
-  const handleDuplicate = (workflowId: number) => {
+  const handleDuplicate = (workflowId: string) => {
     if (onDuplicateWorkflow) {
       onDuplicateWorkflow(workflowId);
     }
   };
 
-  const handleDelete = (workflowId: number) => {
+  const handleDelete = (workflowId: string) => {
     if (onDeleteWorkflow && confirm('Are you sure you want to delete this workflow?')) {
       onDeleteWorkflow(workflowId);
     }
@@ -152,24 +152,24 @@ export function FloatingWorkflowsPanel({
           <div className="py-2">
             {workflows.map((workflow) => (
               <div
-                key={workflow.id}
+                key={workflow.workflow_id}
                 className={cn(
                   'px-4 py-2 hover:bg-accent transition-colors cursor-pointer flex items-center justify-between group',
-                  selectedWorkflowId === workflow.id && 'bg-accent'
+                  selectedWorkflowId === workflow.workflow_id && 'bg-accent',
                 )}
                 onClick={() => {
-                  if (editingWorkflowId !== workflow.id && onLoadWorkflow) {
+                  if (editingWorkflowId !== workflow.workflow_id && onLoadWorkflow) {
                     onLoadWorkflow(workflow);
                   }
                 }}
               >
                 <div className="flex-1 min-w-0 text-left">
-                  {editingWorkflowId === workflow.id ? (
+                  {editingWorkflowId === workflow.workflow_id ? (
                     <Input
                       value={editingName}
                       onChange={(e) => setEditingName(e.target.value)}
-                      onBlur={() => handleSaveRename(workflow.id)}
-                      onKeyDown={(e) => handleRenameKeyDown(e, workflow.id)}
+                      onBlur={() => handleSaveRename(workflow.workflow_id)}
+                      onKeyDown={(e) => handleRenameKeyDown(e, workflow.workflow_id)}
                       className="h-7 text-sm"
                       disabled={isRenaming}
                       autoFocus
@@ -184,7 +184,7 @@ export function FloatingWorkflowsPanel({
                     </div>
                   )}
                 </div>
-                {editingWorkflowId !== workflow.id && (
+                {editingWorkflowId !== workflow.workflow_id && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -198,8 +198,8 @@ export function FloatingWorkflowsPanel({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       {onCopyLink && (
-                        <DropdownMenuItem onClick={() => handleCopyLink(workflow.id)}>
-                          {copiedWorkflowId === workflow.id ? (
+                        <DropdownMenuItem onClick={() => handleCopyLink(workflow.workflow_id)}>
+                          {copiedWorkflowId === workflow.workflow_id ? (
                             <>
                               <CopyCheck className="w-4 h-4 mr-2" />
                               Link copied
@@ -219,14 +219,14 @@ export function FloatingWorkflowsPanel({
                         </DropdownMenuItem>
                       )}
                       {onDuplicateWorkflow && (
-                        <DropdownMenuItem onClick={() => handleDuplicate(workflow.id)}>
+                        <DropdownMenuItem onClick={() => handleDuplicate(workflow.workflow_id)}>
                           <Copy className="w-4 h-4 mr-2" />
                           Duplicate page
                         </DropdownMenuItem>
                       )}
                       {onDeleteWorkflow && (
                         <DropdownMenuItem
-                          onClick={() => handleDelete(workflow.id)}
+                          onClick={() => handleDelete(workflow.workflow_id)}
                           className="text-destructive focus:text-destructive"
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
