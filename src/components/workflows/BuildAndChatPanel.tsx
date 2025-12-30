@@ -7,6 +7,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { toast } from '@/components/ui/sonner';
 
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
+import { workflowSpecToGraph } from '@/lib/workflow-graph';
 
 import { BuildPanel } from './build-and-chat/build/BuildPanel';
 import { ChatPanel } from './build-and-chat/chat/ChatPanel';
@@ -133,7 +134,7 @@ export function BuildAndChatPanel({
         thinking?: string[];
         interrupt_required?: boolean;
         interrupt_data?: Record<string, any>;
-      }>(`/api/workflows/${workflowId}/chat`, {
+      }>(`/api/workflow-agent/${workflowId}/chat`, {
         method: 'POST',
         body: JSON.stringify({
           message: messageContent,
@@ -211,7 +212,7 @@ export function BuildAndChatPanel({
     if (!workflowId) return;
     try {
       const response = await backendApiClient.request<ChatSession>(
-        `/api/workflows/${workflowId}/chat/sessions`,
+        `/api/workflow-agent/${workflowId}/chat/sessions`,
         {
           method: 'POST',
           body: JSON.stringify({ title: null }),
@@ -247,11 +248,15 @@ export function BuildAndChatPanel({
     setProposalActionLoading(proposalId);
     try {
       const response = await backendApiClient.request<WorkflowProposalActionResponse>(
-        `/api/workflows/${workflowId}/proposals/${proposalId}/accept`,
+        `/api/workflow-agent/${workflowId}/proposals/${proposalId}/accept`,
         { method: 'POST' },
       );
       updateProposalInMessages(response.proposal);
-      if (response.workflow_graph) {
+      const specGraph =
+        response.proposal?.spec ? workflowSpecToGraph(response.proposal.spec) : null;
+      if (specGraph) {
+        onWorkflowGraphSync?.(specGraph);
+      } else if (response.workflow_graph) {
         onWorkflowGraphSync?.(response.workflow_graph);
       }
       toast.success('Proposal accepted');

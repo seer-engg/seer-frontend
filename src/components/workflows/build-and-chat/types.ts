@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Node } from '@xyflow/react';
 
 import { WorkflowEdge, WorkflowNodeData } from '../../types';
+import type { WorkflowSpec } from '@/types/workflow-spec';
 
 export interface Tool {
   name: string;
@@ -43,12 +44,13 @@ export interface WorkflowGraphPayload {
 
 export interface WorkflowProposal {
   id: number;
-  workflow_id: number;
+  workflow_id: string;
   session_id?: number | null;
   created_by: UserSummary;
   summary: string;
   status: 'pending' | 'accepted' | 'rejected';
-  patch_ops: WorkflowProposalPatchOp[];
+  patch_ops?: WorkflowProposalPatchOp[] | null;
+  spec: WorkflowSpec;
   preview_graph?: Record<string, any> | null;
   applied_graph?: Record<string, any> | null;
   metadata?: Record<string, any> | null;
@@ -76,7 +78,7 @@ export interface ChatMessage {
 
 export interface ChatSession {
   id: number;
-  workflow_id: number;
+  workflow_id: string;
   user_id?: string;
   thread_id: string;
   title?: string;

@@ -9,11 +9,11 @@ export function useChatSessions(workflowId: string | null) {
     queryKey: ['chat-sessions', workflowId],
     queryFn: async ({ pageParam = 0 }) => {
       if (!workflowId) return [];
-      // const response = await backendApiClient.request<ChatSession[]>(
-      //   `/api/workflows/${workflowId}/chat/sessions?offset=${pageParam}&limit=50`,
-      //   { method: 'GET' },
-      // );
-      return [];
+      const response = await backendApiClient.request<ChatSession[]>(
+        `/api/workflow-agent/${workflowId}/chat/sessions?offset=${pageParam}&limit=50`,
+        { method: 'GET' },
+      );
+      return response;
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {

@@ -24,7 +24,7 @@ export function useChatMessages(workflowId: string | null, currentSessionId: num
     queryFn: async () => {
       if (!workflowId || !currentSessionId) return [];
       const response = await backendApiClient.request<ChatSessionMessagesResponse>(
-        `/api/workflows/${workflowId}/chat/sessions/${currentSessionId}`,
+        `/api/workflow-agent/${workflowId}/chat/sessions/${currentSessionId}`,
         {
           method: 'GET',
         },

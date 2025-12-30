@@ -35,6 +35,8 @@ export function MessageBubble({
     return message.content;
   }, [filteredContent, message.content, message.role]);
 
+  const proposalPatchOps = message.proposal?.patch_ops ?? [];
+
   if (!showContent && message.role === 'assistant') {
     return null;
   }
@@ -103,7 +105,7 @@ export function MessageBubble({
                 </Badge>
               </div>
               <div className="space-y-1">
-                {message.proposal.patch_ops.map((op, opIndex) => (
+                {proposalPatchOps.map((op, opIndex) => (
                   <div key={`${message.proposal?.id}-${opIndex}`} className="text-xs bg-background/60 p-2 rounded text-left">
                     <span className="font-semibold uppercase tracking-wide">{op.op}</span>
                     {op.description && <span className="ml-1 text-muted-foreground">{op.description}</span>}
@@ -112,7 +114,7 @@ export function MessageBubble({
                     )}
                   </div>
                 ))}
-                {message.proposal.patch_ops.length === 0 && (
+                {proposalPatchOps.length === 0 && (
                   <div className="text-xs text-muted-foreground">No operations provided.</div>
                 )}
               </div>
