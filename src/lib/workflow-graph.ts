@@ -612,6 +612,11 @@ function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
         config: {
           tool_name: specNode.tool,
           params: convertTemplateStrings(specNode.in ?? {}, 'toBuilder'),
+          ...(specNode.expect_output?.mode === 'json' &&
+          specNode.expect_output.schema &&
+          'schema' in specNode.expect_output.schema
+            ? { output_schema: specNode.expect_output.schema.schema }
+            : {}),
         },
       };
     case 'llm':

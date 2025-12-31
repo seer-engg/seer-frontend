@@ -1,4 +1,4 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -47,6 +47,21 @@ export function ToolBlockSection({
     selectedIndex,
     showAutocomplete,
   } = templateAutocomplete;
+
+  useEffect(() => {
+    if (!toolSchema?.output_schema) {
+      return;
+    }
+    setConfig(prev => {
+      if (prev.output_schema) {
+        return prev;
+      }
+      return {
+        ...prev,
+        output_schema: toolSchema.output_schema,
+      };
+    });
+  }, [toolSchema?.output_schema, setConfig]);
 
   const updateParams = (updater: (prev: Record<string, any>) => Record<string, any>) => {
     setConfig(prev => ({

@@ -45,6 +45,7 @@ export function BuildPanel({
         tool_name: tool.slug || tool.name,
         provider: tool.provider,
         integration_type: tool.integration_type,
+        ...(tool.output_schema ? { output_schema: tool.output_schema } : {}),
         params: {},
       },
     });

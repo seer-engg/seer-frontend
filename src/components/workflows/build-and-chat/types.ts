@@ -11,6 +11,7 @@ export interface Tool {
   slug?: string;
   provider?: string;
   integration_type?: string;
+  output_schema?: Record<string, any> | null;
 }
 
 export interface BuiltInBlock {

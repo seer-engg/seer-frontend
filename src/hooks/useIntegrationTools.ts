@@ -24,6 +24,7 @@ export interface ToolMetadata {
   required_scopes: string[];
   integration_type?: string | null;
   provider?: string | null;  // OAuth provider (e.g., 'google', 'github')
+  output_schema?: Record<string, any> | null;
   parameters: {
     type: string;
     properties: Record<string, any>;
