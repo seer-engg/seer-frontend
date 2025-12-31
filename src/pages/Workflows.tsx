@@ -9,6 +9,7 @@ import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema } from '@/components/workflows/types';
+import type { WorkflowProposalPreview } from '@/components/workflows/build-and-chat/types';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { useWorkflowBuilder, WorkflowListItem, WorkflowModel } from '@/hooks/useWorkflowBuilder';
@@ -176,6 +177,7 @@ export default function Workflows() {
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
   const [showTriggerModal, setShowTriggerModal] = useState(false);
+  const [proposalPreview, setProposalPreview] = useState<WorkflowProposalPreview | null>(null);
   
   const {
     workflows,
@@ -314,6 +316,25 @@ export default function Workflows() {
       });
     }
   }, [autosaveStatus]);
+
+  const previewGraph = useMemo(() => {
+    if (!proposalPreview) {
+      return null;
+    }
+    const previewNodes = normalizeNodes(proposalPreview.graph.nodes ?? [], functionBlocksMap);
+    const previewEdges = normalizeEdges(proposalPreview.graph.edges ?? []);
+    return { nodes: previewNodes, edges: previewEdges };
+  }, [proposalPreview, functionBlocksMap]);
+
+  const isPreviewActive = Boolean(previewGraph);
+  const canvasNodes = previewGraph?.nodes ?? nodes;
+  const canvasEdges = previewGraph?.edges ?? edges;
+
+  useEffect(() => {
+    if (isPreviewActive) {
+      setSelectedNodeId(null);
+    }
+  }, [isPreviewActive]);
 
   // Extract input blocks from current workflow
   const inputBlocks = useMemo(() => {
@@ -470,7 +491,12 @@ export default function Workflows() {
     if (!graph) return;
     setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
     setEdges(normalizeEdges(graph.edges));
+    setProposalPreview(null);
   }, [functionBlocksMap]);
+
+  const handleProposalPreviewChange = useCallback((preview: WorkflowProposalPreview | null) => {
+    setProposalPreview(preview);
+  }, []);
 
   const [buildChatCollapsed, setBuildChatCollapsed] = useState(() => {
     const saved = localStorage.getItem('buildChatPanelCollapsed');
@@ -547,6 +573,7 @@ export default function Workflows() {
           setLoadedWorkflow(fullWorkflow);
           setNodes(normalizeNodes(fullWorkflow.graph.nodes, functionBlocksMap));
           setEdges(normalizeEdges(fullWorkflow.graph.edges));
+          setProposalPreview(null);
           resetSavedData();
         } catch (error) {
           console.error('Failed to load workflow from URL:', error);
@@ -567,6 +594,7 @@ export default function Workflows() {
       setNodes([]);
       setEdges([]);
       setLoadedWorkflow(null);
+      setProposalPreview(null);
       resetSavedData();
     }
   }, [urlWorkflowId, loadedWorkflow?.workflow_id, getWorkflow, functionBlocksMap, resetSavedData, navigate]);
@@ -633,13 +661,22 @@ export default function Workflows() {
           {/* Canvas */}
           <div className="flex-1 relative overflow-hidden">
             <WorkflowCanvas
-              initialNodes={nodes}
-              initialEdges={edges}
-              onNodesChange={setNodes}
-              onEdgesChange={setEdges}
-              onNodeSelect={setSelectedNodeId}
-              selectedNodeId={selectedNodeId}
+              initialNodes={canvasNodes}
+              initialEdges={canvasEdges}
+              onNodesChange={isPreviewActive ? undefined : setNodes}
+              onEdgesChange={isPreviewActive ? undefined : setEdges}
+              onNodeSelect={isPreviewActive ? undefined : setSelectedNodeId}
+              selectedNodeId={isPreviewActive ? null : selectedNodeId}
+              readOnly={isPreviewActive}
             />
+            {proposalPreview && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                <div className="bg-sky-900/90 text-white px-4 py-2 rounded-full shadow-lg max-w-xl text-center">
+                  <p className="text-sm font-medium">Previewing workflow proposal</p>
+                  <p className="text-xs text-slate-100 line-clamp-2">{proposalPreview.proposal.summary}</p>
+                </div>
+              </div>
+            )}
             
             {/* Floating Workflows Panel */}
             <FloatingWorkflowsPanel
@@ -671,6 +708,8 @@ export default function Workflows() {
                 nodes={nodes}
                 edges={edges}
                 onWorkflowGraphSync={handleWorkflowGraphSync}
+                onProposalPreviewChange={handleProposalPreviewChange}
+                activePreviewProposalId={proposalPreview?.proposal.id ?? null}
                 collapsed={buildChatCollapsed}
                 onCollapseChange={handleBuildChatCollapseChange}
               functionBlocks={availableBlocks}

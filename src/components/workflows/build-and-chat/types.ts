@@ -52,6 +52,11 @@ export interface WorkflowProposalActionResponse {
   workflow_graph?: WorkflowGraphPayload | null;
 }
 
+export interface WorkflowProposalPreview {
+  proposal: WorkflowProposal;
+  graph: WorkflowGraphPayload;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -87,6 +92,8 @@ export interface BuildAndChatPanelProps {
   nodes: Node<WorkflowNodeData & Record<string, unknown>>[];
   edges: WorkflowEdge[];
   onWorkflowGraphSync?: (graph?: WorkflowGraphPayload | null) => void;
+  onProposalPreviewChange?: (preview: WorkflowProposalPreview | null) => void;
+  activePreviewProposalId?: number | null;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   functionBlocks?: BuiltInBlock[];

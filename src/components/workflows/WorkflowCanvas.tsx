@@ -65,6 +65,7 @@ interface WorkflowCanvasProps {
   onNodeSelect?: (nodeId: string) => void;
   selectedNodeId?: string | null;
   className?: string;
+  readOnly?: boolean;
 }
 
 export function WorkflowCanvas({
@@ -75,6 +76,7 @@ export function WorkflowCanvas({
   onNodeSelect,
   selectedNodeId,
   className,
+  readOnly = false,
 }: WorkflowCanvasProps) {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
@@ -187,6 +189,9 @@ export function WorkflowCanvas({
   // Handle connections
   const onConnect = useCallback(
     (params: Connection) => {
+      if (readOnly) {
+        return;
+      }
       if (!params.source || !params.target) {
         return;
       }
@@ -230,7 +235,7 @@ export function WorkflowCanvas({
         onEdgesChange([...edges, newEdge]);
       }
     },
-    [edges, nodes, setEdges, onEdgesChange]
+    [edges, nodes, setEdges, onEdgesChange, readOnly]
   );
 
   // Handle node clicks
@@ -260,19 +265,19 @@ export function WorkflowCanvas({
           nodeTypes={nodeTypes as any}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
+          onConnect={readOnly ? undefined : onConnect}
           onNodeClick={handleNodeClick}
           connectionMode={ConnectionMode.Loose}
           fitView
           fitViewOptions={{ padding: 0.2 }}
-          nodesDraggable={true}
-          nodesConnectable={true}
-          elementsSelectable={true}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          elementsSelectable={!readOnly}
           panOnDrag={[0, 1, 2]}
           zoomOnScroll
           minZoom={0.1}
           maxZoom={2}
-          selectNodesOnDrag={false}
+          selectNodesOnDrag={!readOnly}
           deleteKeyCode={['Backspace', 'Delete']}
         >
           <Background

@@ -17,6 +17,7 @@ interface MessageBubbleProps {
   onAcceptProposal: (proposalId: number) => void;
   onRejectProposal: (proposalId: number) => void;
   proposalActionLoading: number | null;
+  isActivePreview?: boolean;
 }
 
 export function MessageBubble({
@@ -27,6 +28,7 @@ export function MessageBubble({
   onAcceptProposal,
   onRejectProposal,
   proposalActionLoading,
+  isActivePreview,
 }: MessageBubbleProps) {
   const showContent = useMemo(() => {
     if (message.role === 'assistant') {
@@ -102,6 +104,14 @@ export function MessageBubble({
                   {message.proposal.status}
                 </Badge>
               </div>
+              {isActivePreview && (
+                <Alert className="bg-sky-100 text-sky-900 border-sky-200">
+                  <AlertTitle className="text-xs font-semibold">Preview Active</AlertTitle>
+                  <AlertDescription className="text-xs">
+                    This proposal is currently rendered on the canvas. Accept or reject to continue editing.
+                  </AlertDescription>
+                </Alert>
+              )}
               {message.proposal.status === 'pending' && (
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Button

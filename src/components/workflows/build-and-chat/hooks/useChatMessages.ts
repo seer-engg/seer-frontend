@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { backendApiClient } from '@/lib/api-client';
+import { getDisplayableAssistantMessage } from '../utils';
 
 import type { ChatMessage, WorkflowProposal } from '../types';
 
@@ -31,7 +32,10 @@ export function useChatMessages(workflowId: string | null, currentSessionId: num
       );
       return response.messages.map((msg) => ({
         role: msg.role as 'user' | 'assistant',
-        content: msg.content,
+        content:
+          msg.role === 'assistant'
+            ? getDisplayableAssistantMessage(msg.content, msg.proposal?.summary)
+            : msg.content,
         thinking: msg.thinking ? msg.thinking.split('\n') : undefined,
         proposal: msg.proposal || undefined,
         proposalError: undefined,
