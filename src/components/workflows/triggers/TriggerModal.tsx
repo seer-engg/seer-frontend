@@ -318,10 +318,10 @@ export function WorkflowTriggerModal({
                     {inputDef.required && <Badge variant="outline">Required</Badge>}
                   </div>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+                <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
                   <div className="flex flex-col gap-2">
                     <Label className="text-xs uppercase text-muted-foreground">Binding mode</Label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         variant={binding?.mode === 'event' ? 'default' : 'outline'}
