@@ -2,7 +2,7 @@
  * Block Configuration Panel
  * 
  * Right sidebar panel for configuring selected block.
- * Supports editing parameters, Python code, and OAuth scopes.
+ * Supports editing parameters and OAuth scopes.
  */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -17,21 +17,19 @@ import {
   useTemplateAutocomplete,
   ToolBlockSection,
   LlmBlockSection,
-  CodeBlockSection,
   IfElseBlockSection,
   ForLoopBlockSection,
   InputBlockSection,
-  VariableBlockSection,
-  DefaultBlockSection,
   ToolMetadata,
 } from './block-config';
-import { WorkflowNodeData } from './types';
+import { WorkflowEdge, WorkflowNodeData } from './types';
 import { backendApiClient } from '@/lib/api-client';
 
 interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;
   onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
   allNodes?: Node<WorkflowNodeData>[]; // All nodes in workflow for reference dropdown
+  allEdges?: WorkflowEdge[];
   autoSave?: boolean; // Enable auto-save on unmount (default: true for backward compatibility)
   variant?: 'panel' | 'inline';
   liveUpdate?: boolean;
@@ -42,13 +40,13 @@ export function BlockConfigPanel({
   node,
   onUpdate,
   allNodes = [],
+  allEdges = [],
   autoSave = true,
   variant = 'panel',
   liveUpdate = false,
   liveUpdateDelayMs = 350,
 }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
-  const [pythonCode, setPythonCode] = useState('');
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
   const [inputRefs, setInputRefs] = useState<Record<string, string>>({});
   const [useStructuredOutput, setUseStructuredOutput] = useState(false);
@@ -63,7 +61,6 @@ export function BlockConfigPanel({
   // Use refs to track latest values for auto-save on unmount
   const configRef = useRef(config);
   const inputRefsRef = useRef(inputRefs);
-  const pythonCodeRef = useRef(pythonCode);
   const oauthScopeRef = useRef(oauthScope);
   const isSavingRef = useRef(false); // Track if save is in progress to prevent concurrent saves
   const originalNodeRef = useRef(node); // Track original node to detect changes
@@ -73,9 +70,8 @@ export function BlockConfigPanel({
   useEffect(() => {
     configRef.current = config;
     inputRefsRef.current = inputRefs;
-    pythonCodeRef.current = pythonCode;
     oauthScopeRef.current = oauthScope;
-  }, [config, inputRefs, pythonCode, oauthScope]);
+  }, [config, inputRefs, oauthScope]);
 
   const toolName = config.tool_name || config.toolName || '';
 
@@ -95,8 +91,8 @@ export function BlockConfigPanel({
   });
 
   const availableVariables = useMemo(
-    () => collectAvailableVariables(allNodes, node),
-    [allNodes, node]
+    () => collectAvailableVariables(allNodes, allEdges, node),
+    [allNodes, allEdges, node]
   );
   const templateAutocomplete = useTemplateAutocomplete(availableVariables);
 
@@ -108,9 +104,10 @@ export function BlockConfigPanel({
     const nodeConfig = node.data.config || {};
     const signature = JSON.stringify({
       config: nodeConfig,
-      python_code: node.data.python_code || '',
       oauth_scope: node.data.oauth_scope,
       input_refs: node.data.config?.input_refs || {},
+      // Include fields in signature to ensure sync when fields change
+      fields: nodeConfig.fields,
     });
 
     if (
@@ -126,7 +123,6 @@ export function BlockConfigPanel({
     };
 
     setConfig(nodeConfig);
-    setPythonCode(node.data.python_code || '');
     setOAuthScope(node.data.oauth_scope);
     setInputRefs(node.data.config?.input_refs || {});
     setUseStructuredOutput(!!nodeConfig.output_schema);
@@ -157,11 +153,19 @@ export function BlockConfigPanel({
     const nodeConfig = node.data.config || {};
     const nodeInputRefs = node.data.config?.input_refs || {};
 
+    // Use refs to get latest values for comparison and saving
+    const currentConfig = configRef.current;
+    const currentInputRefs = inputRefsRef.current;
+    const currentOauthScope = oauthScopeRef.current;
+
+    // Check for changes including fields array
+    const configChanged = JSON.stringify(currentConfig) !== JSON.stringify(nodeConfig);
+    const fieldsChanged = JSON.stringify(currentConfig.fields) !== JSON.stringify(nodeConfig.fields);
     const hasChanges =
-      JSON.stringify(config) !== JSON.stringify(nodeConfig) ||
-      pythonCode !== (node.data.python_code || '') ||
-      oauthScope !== node.data.oauth_scope ||
-      JSON.stringify(inputRefs) !== JSON.stringify(nodeInputRefs);
+      configChanged ||
+      fieldsChanged ||
+      currentOauthScope !== node.data.oauth_scope ||
+      JSON.stringify(currentInputRefs) !== JSON.stringify(nodeInputRefs);
 
     if (!hasChanges) {
       return;
@@ -172,17 +176,32 @@ export function BlockConfigPanel({
     }
 
     liveUpdateTimeoutRef.current = setTimeout(() => {
+      // Use refs to get latest values when timeout fires
+      const latestConfig = configRef.current;
+      const latestInputRefs = inputRefsRef.current;
+      const latestOauthScope = oauthScopeRef.current;
+      
       const originalConfig = node.data.config || {};
-      onUpdate(node.id, {
-        config: {
-          ...originalConfig,
-          ...config,
-          input_refs: inputRefs,
-          output_schema: config.output_schema,
-        },
-        python_code: pythonCode,
-        oauth_scope: oauthScope,
-      });
+      
+      // Build merged config, always preserving fields if present in latestConfig
+      const mergedConfig: Record<string, any> = {
+        ...originalConfig,
+        ...latestConfig,
+        input_refs: latestInputRefs,
+        output_schema: latestConfig.output_schema,
+      };
+      
+      // Always include fields array if it exists in latestConfig (even if empty)
+      if ('fields' in latestConfig) {
+        mergedConfig.fields = latestConfig.fields;
+      }
+      
+      const updatePayload: Partial<WorkflowNodeData> = {
+        config: mergedConfig,
+        oauth_scope: latestOauthScope,
+      };
+      
+      onUpdate(node.id, updatePayload);
       liveUpdateTimeoutRef.current = null;
     }, liveUpdateDelayMs);
 
@@ -193,14 +212,13 @@ export function BlockConfigPanel({
       }
     };
   }, [
-    config,
+    config, // Include config to trigger effect when it changes
     inputRefs,
+    oauthScope,
     liveUpdate,
     liveUpdateDelayMs,
     node,
-    oauthScope,
     onUpdate,
-    pythonCode,
   ]);
 
   // Auto-save config changes when component unmounts (modal closes)
@@ -218,22 +236,28 @@ export function BlockConfigPanel({
         // Check if data actually changed before saving
         const hasChanges = 
           JSON.stringify(configRef.current) !== JSON.stringify(originalNode.data.config || {}) ||
-          pythonCodeRef.current !== (originalNode.data.python_code || '') ||
           oauthScopeRef.current !== originalNode.data.oauth_scope ||
           JSON.stringify(inputRefsRef.current) !== JSON.stringify(originalNode.data.config?.input_refs || {});
         
         if (hasChanges) {
           isSavingRef.current = true;
-          // Start with original node config to preserve all fields, then merge current changes
           const originalConfig = originalNode.data.config || {};
+          
+          // Build merged config, always preserving fields if present
+          const mergedConfig: Record<string, any> = {
+            ...originalConfig,
+            ...configRef.current,
+            input_refs: inputRefsRef.current,
+            output_schema: configRef.current.output_schema,
+          };
+          
+          // Always include fields array if it exists in current config (even if empty)
+          if ('fields' in configRef.current) {
+            mergedConfig.fields = configRef.current.fields;
+          }
+          
           onUpdate(originalNode.id, {
-            config: {
-              ...originalConfig,
-              ...configRef.current,
-              input_refs: inputRefsRef.current,
-              output_schema: configRef.current.output_schema,
-            },
-            python_code: pythonCodeRef.current,
+            config: mergedConfig,
             oauth_scope: oauthScopeRef.current,
           });
           // Reset flag after a delay to allow save to complete
@@ -255,16 +279,23 @@ export function BlockConfigPanel({
 
   const handleSave = () => {
     if (node) {
-      // Start with original node config to preserve all fields, then merge current changes
       const originalConfig = node.data.config || {};
+      
+      // Build merged config, always preserving fields if present
+      const mergedConfig: Record<string, any> = {
+        ...originalConfig,
+        ...config,
+        input_refs: inputRefs,
+        output_schema: config.output_schema,
+      };
+      
+      // Always include fields array if it exists in config (even if empty)
+      if ('fields' in config) {
+        mergedConfig.fields = config.fields;
+      }
+      
       onUpdate(node.id, {
-        config: {
-          ...originalConfig,
-          ...config,
-          input_refs: inputRefs,
-          output_schema: config.output_schema, // Explicitly include output_schema
-        },
-        python_code: pythonCode,
+        config: mergedConfig,
         oauth_scope: oauthScope,
       });
       toast.success('Configuration saved', {
@@ -279,6 +310,14 @@ export function BlockConfigPanel({
       return null;
     }
 
+    if (node.data.type === 'code') {
+      return (
+        <div className="text-sm text-muted-foreground">
+          Code blocks are temporarily disabled while we migrate to the new workflow engine.
+        </div>
+      );
+    }
+
     switch (node.data.type) {
       case 'tool':
         return (
@@ -289,8 +328,6 @@ export function BlockConfigPanel({
             templateAutocomplete={templateAutocomplete}
           />
         );
-      case 'code':
-        return <CodeBlockSection pythonCode={pythonCode} setPythonCode={setPythonCode} />;
       case 'llm':
         return (
           <LlmBlockSection
@@ -311,10 +348,6 @@ export function BlockConfigPanel({
         return <ForLoopBlockSection config={config} setConfig={setConfig} />;
       case 'input':
         return <InputBlockSection config={config} setConfig={setConfig} />;
-      case 'variable':
-        return <VariableBlockSection config={config} setConfig={setConfig} />;
-      default:
-        return <DefaultBlockSection />;
     }
   };
 
@@ -328,7 +361,7 @@ export function BlockConfigPanel({
 
   if (variant === 'inline') {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 w-fit">
         {renderBlockSection()}
         {saveButton}
       </div>
@@ -336,8 +369,8 @@ export function BlockConfigPanel({
   }
 
   return (
-    <Card>
-      <CardContent className="p-6 space-y-4">
+    <Card className="w-fit">
+      <CardContent className="p-6 space-y-4 w-fit">
         {renderBlockSection()}
         {saveButton}
       </CardContent>

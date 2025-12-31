@@ -9,7 +9,7 @@ import { MessagesList } from './MessagesList';
 import type { SessionsStatus } from './types';
 
 interface ChatPanelProps {
-  workflowId: number | null;
+  workflowId: string | null;
   messages: ChatMessage[];
   isLoading: boolean;
   input: string;
@@ -28,6 +28,7 @@ interface ChatPanelProps {
   proposalActionLoading: number | null;
   onAcceptProposal: (proposalId: number) => void;
   onRejectProposal: (proposalId: number) => void;
+  activePreviewProposalId?: number | null;
 }
 
 export function ChatPanel({
@@ -50,6 +51,7 @@ export function ChatPanel({
   proposalActionLoading,
   onAcceptProposal,
   onRejectProposal,
+  activePreviewProposalId,
 }: ChatPanelProps) {
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -86,6 +88,7 @@ export function ChatPanel({
           proposalActionLoading={proposalActionLoading}
           onAcceptProposal={onAcceptProposal}
           onRejectProposal={onRejectProposal}
+          activePreviewProposalId={activePreviewProposalId}
         />
       </ScrollArea>
       <ChatInput

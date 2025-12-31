@@ -24,6 +24,7 @@ export interface ToolMetadata {
   required_scopes: string[];
   integration_type?: string | null;
   provider?: string | null;  // OAuth provider (e.g., 'google', 'github')
+  output_schema?: Record<string, any> | null;
   parameters: {
     type: string;
     properties: Record<string, any>;
@@ -134,10 +135,9 @@ export function useIntegrationTools() {
     queryKey: ['user-connections', userEmail],
     queryFn: async () => {
       const response = await listConnectedAccounts({ userIds: [userEmail] });
-      return response.items || [];
+      return response;
     },
     enabled: isLoaded && !!userEmail,
-    staleTime: 30 * 1000, // 30 seconds
   });
 
   const tools = toolsData || [];
@@ -149,7 +149,13 @@ export function useIntegrationTools() {
     }
     return map;
   }, [toolStatusData]);
-  const connections = connectionsData || [];
+  
+  // Ensure connections is always an array with type guard
+  const connections = Array.isArray(connectionsData?.items) 
+    ? connectionsData.items 
+    : Array.isArray(connectionsData) 
+      ? connectionsData 
+      : [];
 
   /**
    * Build a map of OAuth provider -> connection with scopes
@@ -237,8 +243,9 @@ export function useIntegrationTools() {
     if (toolStatusMap) {
       for (const tool of tools) {
         const status = toolStatusMap.get(tool.name);
-        // Check if fully connected (has scopes AND refresh_token)
-        if (status?.connected && status?.has_required_scopes && (status?.has_refresh_token !== false)) {
+        // Check if connected (has scopes AND access token valid)
+        // (access_token_valid defaults to true for backward compatibility if not present)
+        if (status?.has_required_scopes && (status?.access_token_valid !== false) && status?.connection_id) {
           const integrationType = getToolIntegrationType(tool) || (status.integration_type as IntegrationType | undefined);
           if (integrationType && !connected.has(integrationType)) {
             // Create a synthetic connection object for backward compatibility
@@ -305,10 +312,13 @@ export function useIntegrationTools() {
     if (toolStatusMap) {
       const status = toolStatusMap.get(toolName);
       if (status) {
+        // Connection is valid if scopes present AND access token valid
+        // (access_token_valid defaults to true for backward compatibility if not present)
+        const isConnected = status.has_required_scopes && (status.access_token_valid !== false);
         return {
           tool,
           integrationType,
-          isConnected: status.connected && status.has_required_scopes,
+          isConnected,
           connectionId: status.connection_id,
           requiredScopes: tool.required_scopes,
         };
@@ -362,8 +372,9 @@ export function useIntegrationTools() {
       if (toolStatusMap) {
         const status = toolStatusMap.get(tool.name);
         if (status) {
-          // Connection is fully functional only if it has scopes AND refresh_token
-          const fullyConnected = status.connected && status.has_required_scopes && (status.has_refresh_token !== false);
+          // Connection is functional if scopes present AND access token valid
+          // (access_token_valid defaults to true for backward compatibility if not present)
+          const fullyConnected = status.has_required_scopes && (status.access_token_valid !== false);
           return {
             tool,
             integrationType,
@@ -441,27 +452,45 @@ export function useIntegrationTools() {
 
   /**
    * Initiate OAuth connection for an integration
+   * 
+   * @param type Integration type (e.g., 'gmail', 'google_sheets')
+   * @param options Configuration:
+   *   - toolNames: Array of specific tool names to connect. REQUIRED. Only scopes from these tools will be requested.
+   *   - toolName: Single tool name (deprecated, use toolNames instead)
    */
-  const connectIntegration = useCallback(async (type: IntegrationType, options?: { toolName?: string }): Promise<string | null> => {
+  const connectIntegration = useCallback(async (type: IntegrationType, options: { toolNames?: string[]; toolName?: string }): Promise<string | null> => {
     if (!userEmail) { 
       console.error(`[useIntegrationTools] No user email found`);
       return null; 
     }
-    // Prefer tool-specific scopes when available, otherwise fall back to integration-level scopes
-    let scopes: string[] = [];
-    if (options?.toolName) {
-      const tool = tools.find(t => t.name === options.toolName);
-      if (tool?.required_scopes?.length) {
-        scopes = tool.required_scopes;
-      }
-    }
-    if (scopes.length === 0) {
-      scopes = getIntegrationScopesForType(type);
-    }
-    if (scopes.length === 0 && type !== 'sandbox') {
-      console.error(`[useIntegrationTools] No scopes configured for ${type}`);
+    
+    // Require explicit tool names - no fallbacks
+    const toolNamesToUse = options?.toolNames || (options?.toolName ? [options.toolName] : []);
+    
+    if (toolNamesToUse.length === 0) {
+      console.error(`[useIntegrationTools] connectIntegration requires toolNames. Cannot connect ${type} without specific tool names.`);
       return null;
     }
+    
+    // Collect scopes from specified tools only
+    const scopeSet = new Set<string>();
+    for (const toolName of toolNamesToUse) {
+      const tool = tools.find(t => t.name === toolName);
+      if (tool?.required_scopes?.length) {
+        for (const scope of tool.required_scopes) {
+          scopeSet.add(scope);
+        }
+      }
+    }
+    
+    const scopes = Array.from(scopeSet);
+    
+    if (scopes.length === 0) {
+      console.error(`[useIntegrationTools] No scopes found for tools: ${toolNamesToUse.join(', ')}`);
+      return null;
+    }
+    
+    console.log(`[useIntegrationTools] Connecting ${type} with tools: ${toolNamesToUse.join(', ')}, scopes: ${scopes.join(' ')}`);
 
     // Get the OAuth provider for this integration type
     const provider = getIntegrationProviderForType(type);
@@ -482,7 +511,7 @@ export function useIntegrationTools() {
     });
 
     return result.redirectUrl;
-  }, [userEmail, tools, getIntegrationScopesForType, getIntegrationProviderForType]);
+  }, [userEmail, tools, getIntegrationProviderForType]);
 
   /**
    * Refresh all data
@@ -536,7 +565,7 @@ export function useToolIntegration(toolName: string) {
 
   const initiateAuth = useCallback(async () => {
     if (!status?.integrationType) return null;
-    return connectIntegration(status.integrationType, { toolName: status.tool.name });
+    return connectIntegration(status.integrationType, { toolNames: [status.tool.name] });
   }, [status, connectIntegration]);
 
   return {

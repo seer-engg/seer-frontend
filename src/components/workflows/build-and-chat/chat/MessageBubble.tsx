@@ -17,6 +17,7 @@ interface MessageBubbleProps {
   onAcceptProposal: (proposalId: number) => void;
   onRejectProposal: (proposalId: number) => void;
   proposalActionLoading: number | null;
+  isActivePreview?: boolean;
 }
 
 export function MessageBubble({
@@ -27,6 +28,7 @@ export function MessageBubble({
   onAcceptProposal,
   onRejectProposal,
   proposalActionLoading,
+  isActivePreview,
 }: MessageBubbleProps) {
   const showContent = useMemo(() => {
     if (message.role === 'assistant') {
@@ -102,20 +104,14 @@ export function MessageBubble({
                   {message.proposal.status}
                 </Badge>
               </div>
-              <div className="space-y-1">
-                {message.proposal.patch_ops.map((op, opIndex) => (
-                  <div key={`${message.proposal?.id}-${opIndex}`} className="text-xs bg-background/60 p-2 rounded text-left">
-                    <span className="font-semibold uppercase tracking-wide">{op.op}</span>
-                    {op.description && <span className="ml-1 text-muted-foreground">{op.description}</span>}
-                    {!op.description && (op.node_id || op.edge_id) && (
-                      <span className="ml-1 text-muted-foreground">{op.node_id || op.edge_id}</span>
-                    )}
-                  </div>
-                ))}
-                {message.proposal.patch_ops.length === 0 && (
-                  <div className="text-xs text-muted-foreground">No operations provided.</div>
-                )}
-              </div>
+              {isActivePreview && (
+                <Alert className="bg-sky-100 text-sky-900 border-sky-200">
+                  <AlertTitle className="text-xs font-semibold">Preview Active</AlertTitle>
+                  <AlertDescription className="text-xs">
+                    This proposal is currently rendered on the canvas. Accept or reject to continue editing.
+                  </AlertDescription>
+                </Alert>
+              )}
               {message.proposal.status === 'pending' && (
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Button

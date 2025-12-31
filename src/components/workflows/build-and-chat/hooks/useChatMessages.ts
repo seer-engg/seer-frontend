@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { backendApiClient } from '@/lib/api-client';
+import { getDisplayableAssistantMessage } from '../utils';
 
 import type { ChatMessage, WorkflowProposal } from '../types';
 
@@ -18,20 +19,23 @@ type ChatSessionMessagesResponse = {
   messages: SessionMessageResponse[];
 };
 
-export function useChatMessages(workflowId: number | null, currentSessionId: number | null) {
+export function useChatMessages(workflowId: string | null, currentSessionId: number | null) {
   return useQuery<ChatMessage[]>({
     queryKey: ['chat-session-messages', currentSessionId],
     queryFn: async () => {
       if (!workflowId || !currentSessionId) return [];
       const response = await backendApiClient.request<ChatSessionMessagesResponse>(
-        `/api/workflows/${workflowId}/chat/sessions/${currentSessionId}`,
+        `/api/workflow-agent/${workflowId}/chat/sessions/${currentSessionId}`,
         {
           method: 'GET',
         },
       );
       return response.messages.map((msg) => ({
         role: msg.role as 'user' | 'assistant',
-        content: msg.content,
+        content:
+          msg.role === 'assistant'
+            ? getDisplayableAssistantMessage(msg.content, msg.proposal?.summary)
+            : msg.content,
         thinking: msg.thinking ? msg.thinking.split('\n') : undefined,
         proposal: msg.proposal || undefined,
         proposalError: undefined,

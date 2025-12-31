@@ -5,92 +5,121 @@
  */
 import { useState, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Node } from '@xyflow/react';
-import { backendApiClient, getBackendBaseUrl } from '@/lib/api-client';
-import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
 
-export interface Workflow {
-  id: number;
-  name: string;
-  description?: string;
-  graph_data: {
-    nodes: Node<WorkflowNodeData>[];
-    edges: WorkflowEdge[];
-  };
-  schema_version: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
+import type { WorkflowGraphData } from '@/lib/workflow-graph';
+import { graphToWorkflowSpec, workflowSpecToGraph } from '@/lib/workflow-graph';
+import { backendApiClient } from '@/lib/api-client';
+import type {
+  RunFromWorkflowRequest,
+  RunResponse,
+  WorkflowListResponse,
+  WorkflowResponse,
+  WorkflowSummary,
+} from '@/types/workflow-spec';
 
-export interface WorkflowExecution {
-  id: number;
-  workflow_id: number;
-  status: 'running' | 'completed' | 'failed';
-  input_data?: Record<string, any>;
-  output_data?: Record<string, any>;
-  error_message?: string;
-  started_at: string;
-  completed_at?: string;
+export interface WorkflowListItem extends WorkflowSummary {}
+
+export interface WorkflowModel extends WorkflowResponse {
+  graph: WorkflowGraphData;
 }
 
 export function useWorkflowBuilder() {
   const queryClient = useQueryClient();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  // List workflows
-  const { data: workflows, isLoading } = useQuery({
+  const workflowsQuery = useQuery({
     queryKey: ['workflows'],
     queryFn: async () => {
-      const response = await backendApiClient.request<{ workflows: Workflow[] }>(
-        '/api/workflows',
-        { method: 'GET' }
-      );
-      return response.workflows;
+      const response = await backendApiClient.request<WorkflowListResponse>('/api/v1/workflows', {
+        method: 'GET',
+      });
+      return response.items;
     },
   });
 
-  // Create workflow
-  const createMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string; graph_data: any }) => {
-      return await backendApiClient.request<Workflow>('/api/workflows', {
-        method: 'POST',
-        body: data,
+  const getWorkflow = useCallback(
+    async (workflowId: string): Promise<WorkflowModel> => {
+      return queryClient.fetchQuery({
+        queryKey: ['workflow', workflowId],
+        queryFn: async () => {
+          const response = await backendApiClient.request<WorkflowResponse>(
+            `/api/v1/workflows/${workflowId}`,
+            { method: 'GET' },
+          );
+          return {
+            ...response,
+            graph: workflowSpecToGraph(response.spec),
+          };
+        },
       });
     },
-    onSuccess: (newWorkflow) => {
-      // Optimistically update the cache with the new workflow for immediate UI feedback
-      queryClient.setQueryData<Workflow[]>(['workflows'], (oldWorkflows = []) => {
-        return [...oldWorkflows, newWorkflow];
+    [queryClient],
+  );
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      description?: string;
+      graph: WorkflowGraphData;
+    }) => {
+      const spec = graphToWorkflowSpec(payload.graph);
+      const response = await backendApiClient.request<WorkflowResponse>('/api/v1/workflows', {
+        method: 'POST',
+        body: {
+          name: payload.name,
+          description: payload.description,
+          spec,
+        },
       });
-      // Also invalidate to ensure we have the latest data from server
+      return {
+        ...response,
+        graph: workflowSpecToGraph(response.spec),
+      };
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] });
     },
   });
 
-  // Update workflow
   const updateMutation = useMutation({
     mutationFn: async ({
-      id,
-      data,
+      workflowId,
+      name,
+      description,
+      graph,
     }: {
-      id: number;
-      data: Partial<Workflow>;
+      workflowId: string;
+      name?: string;
+      description?: string;
+      graph?: WorkflowGraphData;
     }) => {
-      return await backendApiClient.request<Workflow>(`/api/workflows/${id}`, {
-        method: 'PUT',
-        body: data,
-      });
+      const existing = queryClient.getQueryData<WorkflowModel>(['workflow', workflowId]);
+      const spec = graph ? graphToWorkflowSpec(graph, existing?.spec) : undefined;
+      const response = await backendApiClient.request<WorkflowResponse>(
+        `/api/v1/workflows/${workflowId}`,
+        {
+          method: 'PUT',
+          body: {
+            name,
+            description,
+            spec,
+          },
+        },
+      );
+      return {
+        ...response,
+        graph: workflowSpecToGraph(response.spec),
+      };
     },
-    onSuccess: (updatedWorkflow) => {
+    onSuccess: (workflow) => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] });
+      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
     },
   });
 
-  // Delete workflow
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await backendApiClient.request(`/api/workflows/${id}`, {
+    mutationFn: async (workflowId: string) => {
+      await backendApiClient.request(`/api/v1/workflows/${workflowId}`, {
         method: 'DELETE',
       });
     },
@@ -99,121 +128,79 @@ export function useWorkflowBuilder() {
     },
   });
 
-  // Execute workflow
   const executeMutation = useMutation({
     mutationFn: async ({
       workflowId,
-      inputData,
-      stream = false,
+      inputs,
+      config,
     }: {
-      workflowId: number;
-      inputData?: Record<string, any>;
-      stream?: boolean;
+      workflowId: string;
+      inputs?: Record<string, any>;
+      config?: Record<string, any>;
     }) => {
-      const endpoint = stream
-        ? `/api/workflows/${workflowId}/execute/stream`
-        : `/api/workflows/${workflowId}/execute`;
-      
-      if (stream) {
-        // Handle streaming execution - use dynamic backend URL
-        const baseUrl = getBackendBaseUrl();
-        const response = await fetch(
-          `${baseUrl}${endpoint}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${await getAuthToken()}`,
-            },
-            body: JSON.stringify({ input_data: inputData, stream: true }),
-          }
-        );
-        return response;
-      } else {
-        return await backendApiClient.request<WorkflowExecution>(endpoint, {
-          method: 'POST',
-          body: { input_data: inputData, stream: false },
-        });
-      }
+      const payload: RunFromWorkflowRequest = {
+        inputs: inputs ?? {},
+        config: config ?? {},
+      };
+      return backendApiClient.request<RunResponse>(`/api/v1/workflows/${workflowId}/runs`, {
+        method: 'POST',
+        body: payload,
+      });
     },
   });
 
-  // Get executions
-  const getExecutions = useCallback(
-    async (workflowId: number) => {
-      const response = await backendApiClient.request<WorkflowExecution[]>(
-        `/api/workflows/${workflowId}/executions`,
-        { method: 'GET' }
-      );
-      return response;
-    },
-    []
-  );
-
   const createWorkflow = useCallback(
-    async (name: string, description?: string, graphData?: any) => {
+    async (name: string, description: string | undefined, graph: WorkflowGraphData) => {
       return createMutation.mutateAsync({
         name,
         description,
-        graph_data: graphData || { nodes: [], edges: [] },
+        graph,
       });
     },
-    [createMutation]
+    [createMutation],
   );
 
   const updateWorkflow = useCallback(
-    async (id: number, updates: Partial<Workflow>) => {
-      return updateMutation.mutateAsync({ id, data: updates });
+    async (workflowId: string, updates: { name?: string; description?: string; graph?: WorkflowGraphData }) => {
+      return updateMutation.mutateAsync({
+        workflowId,
+        ...updates,
+      });
     },
-    [updateMutation]
+    [updateMutation],
   );
 
   const deleteWorkflow = useCallback(
-    async (id: number) => {
-      return deleteMutation.mutateAsync(id);
+    async (workflowId: string) => {
+      return deleteMutation.mutateAsync(workflowId);
     },
-    [deleteMutation]
+    [deleteMutation],
   );
 
   const executeWorkflow = useCallback(
-    async (
-      workflowId: number,
-      inputData?: Record<string, any>,
-      stream = false
-    ) => {
+    async (workflowId: string, inputs?: Record<string, any>, config?: Record<string, any>) => {
       return executeMutation.mutateAsync({
         workflowId,
-        inputData,
-        stream,
+        inputs,
+        config,
       });
     },
-    [executeMutation]
+    [executeMutation],
   );
 
   return {
-    workflows: workflows || [],
-    isLoading,
+    workflows: workflowsQuery.data ?? [],
+    isLoading: workflowsQuery.isLoading,
     selectedNodeId,
     setSelectedNodeId,
     createWorkflow,
     updateWorkflow,
     deleteWorkflow,
     executeWorkflow,
-    getExecutions,
+    getWorkflow,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
     isExecuting: executeMutation.isPending,
   };
-}
-
-async function getAuthToken(): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
-  const clerk = (window as any).Clerk;
-  if (!clerk?.session?.getToken) return null;
-  try {
-    return await clerk.session.getToken({ template: 'user-profile' });
-  } catch {
-    return null;
-  }
 }

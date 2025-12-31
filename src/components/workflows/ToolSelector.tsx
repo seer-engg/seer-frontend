@@ -154,7 +154,16 @@ export function ToolSelector({
   // Handle connect click
   const handleConnect = async (e: React.MouseEvent, integrationType: IntegrationType) => {
     e.stopPropagation();
-    const redirectUrl = await connectIntegration(integrationType);
+    // Find tool names for this integration type
+    const toolsForType = toolsWithStatus.filter(t => t.integrationType === integrationType);
+    
+    if (toolsForType.length === 0) {
+      console.error(`[ToolSelector] No tools found for integration type ${integrationType}. Cannot connect without specific tool names.`);
+      return;
+    }
+    
+    const toolNames = toolsForType.map(t => t.tool.name);
+    const redirectUrl = await connectIntegration(integrationType, { toolNames });
     if (redirectUrl) {
       window.location.href = redirectUrl;
     }

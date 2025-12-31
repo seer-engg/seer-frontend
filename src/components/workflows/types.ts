@@ -6,8 +6,7 @@ export type BlockType =
   | 'llm'
   | 'if_else'
   | 'for_loop'
-  | 'input'
-  | 'variable';
+  | 'input';
 
 export interface FunctionBlockSchema {
   type: BlockType;
@@ -31,7 +30,6 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   type: BlockType;
   label: string;
   config?: ToolBlockConfig;
-  python_code?: string;
   oauth_scope?: string;
   selected?: boolean;
   onSelect?: () => void;

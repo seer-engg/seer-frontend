@@ -4,14 +4,13 @@
  * Supports drag-and-drop blocks, custom node types, and connection validation.
  * Based on ReactFlow (@xyflow/react).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
   Node,
-  Edge,
   Connection,
   addEdge,
   useNodesState,
@@ -26,7 +25,6 @@ import { WorkflowCanvasContext } from './workflow-canvas-context';
 import {
   WorkflowNodeData,
   WorkflowEdge,
-  WorkflowEdgeData,
   ToolBlockConfig,
   getNextBranchForSource,
 } from './types';
@@ -37,7 +35,6 @@ import { LLMBlockNode } from './blocks/LLMBlockNode';
 import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
 import { InputBlockNode } from './blocks/InputBlockNode';
-import { VariableBlockNode } from './blocks/VariableBlockNode';
 
 /**
  * Extract tool names from workflow nodes
@@ -58,7 +55,6 @@ const nodeTypes = {
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
   input: InputBlockNode,
-  variable: VariableBlockNode,
 };
 
 interface WorkflowCanvasProps {
@@ -69,6 +65,7 @@ interface WorkflowCanvasProps {
   onNodeSelect?: (nodeId: string) => void;
   selectedNodeId?: string | null;
   className?: string;
+  readOnly?: boolean;
 }
 
 export function WorkflowCanvas({
@@ -79,6 +76,7 @@ export function WorkflowCanvas({
   onNodeSelect,
   selectedNodeId,
   className,
+  readOnly = false,
 }: WorkflowCanvasProps) {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
@@ -86,9 +84,25 @@ export function WorkflowCanvas({
   const updateNodeData = useCallback(
     (nodeId: string, updates: Partial<WorkflowNodeData>) => {
       setNodes((prevNodes) => {
-        const updatedNodes = prevNodes.map((node) =>
-          node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node,
-        );
+        const updatedNodes = prevNodes.map((node) => {
+          if (node.id === nodeId) {
+            const mergedData = { ...node.data, ...updates };
+            if (updates.config) {
+              // Always preserve fields array if it exists in updates, even if empty
+              const mergedConfig = {
+                ...node.data.config,
+                ...updates.config,
+              };
+              // Explicitly preserve fields array if present in updates
+              if ('fields' in updates.config) {
+                mergedConfig.fields = updates.config.fields;
+              }
+              mergedData.config = mergedConfig;
+            }
+            return { ...node, data: mergedData };
+          }
+          return node;
+        });
         if (onNodesChange) {
           onNodesChange(updatedNodes);
         }
@@ -175,6 +189,9 @@ export function WorkflowCanvas({
   // Handle connections
   const onConnect = useCallback(
     (params: Connection) => {
+      if (readOnly) {
+        return;
+      }
       if (!params.source || !params.target) {
         return;
       }
@@ -218,7 +235,7 @@ export function WorkflowCanvas({
         onEdgesChange([...edges, newEdge]);
       }
     },
-    [edges, nodes, setEdges, onEdgesChange]
+    [edges, nodes, setEdges, onEdgesChange, readOnly]
   );
 
   // Handle node clicks
@@ -234,9 +251,10 @@ export function WorkflowCanvas({
   const contextValue = useMemo(
     () => ({
       nodes,
+      edges,
       updateNodeData,
     }),
-    [nodes, updateNodeData],
+    [nodes, edges, updateNodeData],
   );
 
   return (
@@ -248,19 +266,19 @@ export function WorkflowCanvas({
           nodeTypes={nodeTypes as any}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
+          onConnect={readOnly ? undefined : onConnect}
           onNodeClick={handleNodeClick}
           connectionMode={ConnectionMode.Loose}
           fitView
           fitViewOptions={{ padding: 0.2 }}
-          nodesDraggable={true}
-          nodesConnectable={true}
-          elementsSelectable={true}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          elementsSelectable={!readOnly}
           panOnDrag={[0, 1, 2]}
           zoomOnScroll
           minZoom={0.1}
           maxZoom={2}
-          selectNodesOnDrag={false}
+          selectNodesOnDrag={!readOnly}
           deleteKeyCode={['Backspace', 'Delete']}
         >
           <Background

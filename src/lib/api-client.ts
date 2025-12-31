@@ -266,6 +266,7 @@ export interface ToolConnectionStatus {
   provider: string | null;
   connected: boolean;
   has_required_scopes: boolean;
+  access_token_valid?: boolean;  // Whether access token exists and is not expired
   has_refresh_token?: boolean;  // Whether refresh_token exists (needed for token refresh)
   missing_scopes: string[];
   connection_id: string | null;
@@ -314,17 +315,8 @@ export async function listConnectedAccounts(params: {
   toolkitSlugs?: string[];
   authConfigIds?: string[];
 }): Promise<ListConnectedAccountsResponse> {
-  // We only support user_id now.
-  // Take the first user_id from the list if available
-  const userId = params.userIds?.[0];
-  if (!userId) {
-    return { items: [], total: 0 };
-  }
-
-  const searchParams = new URLSearchParams();
-  searchParams.append("user_id", userId);
-
-  const endpoint = `/api/integrations?${searchParams.toString()}`;
+  // Backend uses authenticated user from JWT token, so user_id query parameter is not needed
+  const endpoint = `/api/integrations`;
   const response = await backendApiClient.request<{ items: ConnectedAccount[] }>(endpoint);
 
   // Filter by toolkitSlugs if provided
@@ -420,9 +412,8 @@ export async function waitForConnection(params: {
 /**
  * Delete a connected account
  */
-export async function deleteConnectedAccount(accountId: string, userId?: string): Promise<void> {
-  const finalUserId = userId || "unknown";
-  await backendApiClient.request<void>(`/api/integrations/${accountId}?user_id=${finalUserId}`, {
+export async function deleteConnectedAccount(accountId: string): Promise<void> {
+  await backendApiClient.request<void>(`/api/integrations/${accountId}`, {
     method: "DELETE",
   });
 }

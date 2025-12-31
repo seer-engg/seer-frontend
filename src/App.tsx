@@ -9,10 +9,10 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
-import WorkflowExecution from "./pages/WorkflowExecution";
 import BlockConfiguration from "./pages/BlockConfiguration";
 import Traces from "./pages/Traces";
 import TraceDetail from "./pages/TraceDetail";
+import WorkflowExecution from "./pages/WorkflowExecution";
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 
@@ -65,21 +65,11 @@ const App = () => (
               }
             />
             <Route
-              path="/workflows"
+              path="/workflows/:workflowId"
               element={
                 <ProtectedRoute>
                   <SeerLayout>
                     <Workflows />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/workflows/:workflowId/execution/:executionId?"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <WorkflowExecution />
                   </SeerLayout>
                 </ProtectedRoute>
               }
@@ -90,6 +80,26 @@ const App = () => (
                 <ProtectedRoute>
                   <SeerLayout>
                     <BlockConfiguration />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows/:workflowId/executions"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <WorkflowExecution />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <Workflows />
                   </SeerLayout>
                 </ProtectedRoute>
               }

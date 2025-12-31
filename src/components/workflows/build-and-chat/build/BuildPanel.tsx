@@ -21,7 +21,6 @@ export function BuildPanel({
   blocks = BUILT_IN_BLOCKS,
 }: BuildPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProvider] = useState<string | null>(null);
 
   const filteredBlocks = useMemo(() => {
     return blocks.filter(
@@ -46,6 +45,7 @@ export function BuildPanel({
         tool_name: tool.slug || tool.name,
         provider: tool.provider,
         integration_type: tool.integration_type,
+        ...(tool.output_schema ? { output_schema: tool.output_schema } : {}),
         params: {},
       },
     });
@@ -59,7 +59,6 @@ export function BuildPanel({
           tools={tools}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          selectedProvider={selectedProvider}
           onSelectTool={handleToolSelect}
           isLoading={isLoadingTools}
         />

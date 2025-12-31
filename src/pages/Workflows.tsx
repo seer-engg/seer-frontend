@@ -5,17 +5,18 @@
  * Supports connecting to self-hosted backend via ?backend= URL parameter.
  */
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema } from '@/components/workflows/types';
+import type { WorkflowProposalPreview } from '@/components/workflows/build-and-chat/types';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
-import { useWorkflowBuilder } from '@/hooks/useWorkflowBuilder';
+import { useWorkflowBuilder, WorkflowListItem, WorkflowModel } from '@/hooks/useWorkflowBuilder';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { Button } from '@/components/ui/button';
-import { Clock, Rocket, Menu } from 'lucide-react';
+import { Rocket, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
@@ -23,6 +24,8 @@ import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
+import { useIntegrationTools } from '@/hooks/useIntegrationTools';
+import { WorkflowTriggerModal } from '@/components/workflows/triggers/TriggerModal';
 
 const isBranchValue = (value: unknown): value is 'true' | 'false' =>
   value === 'true' || value === 'false';
@@ -116,20 +119,40 @@ function withDefaultBlockConfig(
           item_var: 'item',
         };
       case 'input':
-        return {
-          variable_name: '',
-          type: 'text',
-          required: true,
-        };
-      case 'variable':
-        return {
-          input_type: 'string',
-          input: '',
-        };
+        // Only provide defaults if config doesn't have fields OR all fields are empty (no user data)
+        // Check if fields have any actual data (non-empty name values)
+        const hasValidFields = Array.isArray(config.fields) && config.fields.length > 0 &&
+          config.fields.some((f: any) => f.name && f.name.trim() !== '');
+        
+        if (!hasValidFields) {
+          // No valid fields, provide defaults
+          return {
+            fields: [
+              { name: '', displayLabel: '', description: '', type: 'text', required: true, placeholder: '' }
+            ]
+          };
+        }
+        // Has valid fields, don't add defaults
+        return {};
       default:
         return {};
     }
   })();
+
+  // For input blocks, ALWAYS preserve existing fields array if it has valid data
+  if (blockType === 'input') {
+    const hasValidFields = Array.isArray(config.fields) && config.fields.length > 0 &&
+      config.fields.some((f: any) => f.name && f.name.trim() !== '');
+    
+    if (hasValidFields) {
+      // Explicitly preserve fields array - never overwrite user data
+      return {
+        ...defaults,
+        ...config,
+        fields: config.fields, // Explicitly preserve fields array
+      };
+    }
+  }
 
   return {
     ...defaults,
@@ -139,15 +162,22 @@ function withDefaultBlockConfig(
 
 export default function Workflows() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { workflowId: urlWorkflowId } = useParams<{ workflowId?: string }>();
+  const buildChatSupported = true;
+  const { refresh: refreshIntegrationTools } = useIntegrationTools();
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
   const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState('My Workflow');
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [showInputDialog, setShowInputDialog] = useState(false);
   const [inputData, setInputData] = useState<Record<string, any>>({});
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
+  const [showTriggerModal, setShowTriggerModal] = useState(false);
+  const [proposalPreview, setProposalPreview] = useState<WorkflowProposalPreview | null>(null);
   
   const {
     workflows,
@@ -156,6 +186,7 @@ export default function Workflows() {
     updateWorkflow,
     deleteWorkflow,
     executeWorkflow,
+    getWorkflow,
     isCreating,
     isExecuting,
     isDeleting,
@@ -166,15 +197,27 @@ export default function Workflows() {
   } = useFunctionBlocks();
 
   const availableBlocks = useMemo(() => {
+    // Always include built-in blocks (LLM, If/Else, For Loop, Input)
+    const builtInBlocksMap = new Map(BUILT_IN_BLOCKS.map(block => [block.type, block]));
+    
+    // Merge with function blocks from backend, but don't override built-in blocks
+    const mergedBlocks = [...BUILT_IN_BLOCKS];
+    
     if (functionBlockSchemas.length > 0) {
-      return functionBlockSchemas.map((schema) => ({
-        type: schema.type,
-        label: schema.label,
-        description: schema.description,
-        icon: getBlockIconForType(schema.type),
-      }));
+      functionBlockSchemas.forEach((schema) => {
+        // Only add if it's not already a built-in block
+        if (!builtInBlocksMap.has(schema.type)) {
+          mergedBlocks.push({
+            type: schema.type,
+            label: schema.label,
+            description: schema.description,
+            icon: getBlockIconForType(schema.type),
+          });
+        }
+      });
     }
-    return BUILT_IN_BLOCKS;
+    
+    return mergedBlocks;
   }, [functionBlockSchemas]);
 
   const handleBlockSelect = useCallback(
@@ -206,17 +249,16 @@ export default function Workflows() {
     
     try {
       if (selectedWorkflowId) {
-        // Update existing workflow
-        await updateWorkflow(selectedWorkflowId, {
+        const updated = await updateWorkflow(selectedWorkflowId, {
           name: workflowName,
-          graph_data: graphData,
+          graph: graphData,
         });
+        setLoadedWorkflow(updated);
         toast.success('Workflow saved successfully!');
       } else {
-        // Fallback: create workflow if somehow we don't have a selectedWorkflowId
-        // This shouldn't normally happen since workflows are created on "+ New"
         const workflow = await createWorkflow(workflowName || 'Untitled', undefined, graphData);
-        setSelectedWorkflowId(workflow.id);
+        setSelectedWorkflowId(workflow.workflow_id);
+        setLoadedWorkflow(workflow);
         toast.success('Workflow created and saved!');
       }
     } catch (error) {
@@ -233,10 +275,11 @@ export default function Workflows() {
 
     setAutosaveStatus('saving');
     try {
-      await updateWorkflow(selectedWorkflowId, {
+      const updated = await updateWorkflow(selectedWorkflowId, {
         name: data.workflowName,
-        graph_data: { nodes: data.nodes, edges: data.edges },
+        graph: { nodes: data.nodes, edges: data.edges },
       });
+      setLoadedWorkflow(updated);
       setAutosaveStatus('saved');
       // Reset status after 2 seconds
       setTimeout(() => setAutosaveStatus('idle'), 2000);
@@ -274,6 +317,25 @@ export default function Workflows() {
     }
   }, [autosaveStatus]);
 
+  const previewGraph = useMemo(() => {
+    if (!proposalPreview) {
+      return null;
+    }
+    const previewNodes = normalizeNodes(proposalPreview.graph.nodes ?? [], functionBlocksMap);
+    const previewEdges = normalizeEdges(proposalPreview.graph.edges ?? []);
+    return { nodes: previewNodes, edges: previewEdges };
+  }, [proposalPreview, functionBlocksMap]);
+
+  const isPreviewActive = Boolean(previewGraph);
+  const canvasNodes = previewGraph?.nodes ?? nodes;
+  const canvasEdges = previewGraph?.edges ?? edges;
+
+  useEffect(() => {
+    if (isPreviewActive) {
+      setSelectedNodeId(null);
+    }
+  }, [isPreviewActive]);
+
   // Extract input blocks from current workflow
   const inputBlocks = useMemo(() => {
     return nodes.filter((node) => node.data?.type === 'input');
@@ -281,13 +343,45 @@ export default function Workflows() {
 
   // Generate input fields from input blocks
   const inputFields = useMemo(() => {
-    return inputBlocks.map((block) => ({
-      id: block.id,
-      label: block.data?.label || block.id,
-      type: block.data?.config?.type || 'text',
-      required: block.data?.config?.required !== false,
-      variableName: block.data?.config?.variable_name, // Get variable name if set
-    }));
+    const fields: Array<{
+      id: string;
+      label: string;
+      type: string;
+      required: boolean;
+      variableName: string;
+    }> = [];
+
+    inputBlocks.forEach((block) => {
+      const config = block.data?.config || {};
+      
+      // New format: fields array
+      if (Array.isArray(config.fields)) {
+        config.fields.forEach((field: any) => {
+          const fieldName = field.name || '';
+          if (fieldName) {
+            fields.push({
+              id: `${block.id}-${fieldName}`,
+              label: fieldName,
+              type: field.type || 'text',
+              required: field.required !== false,
+              variableName: fieldName,
+            });
+          }
+        });
+      }
+      // Legacy format: single variable_name
+      else if (config.variable_name) {
+        fields.push({
+          id: block.id,
+          label: block.data?.label || config.variable_name || block.id,
+          type: config.type || 'text',
+          required: config.required !== false,
+          variableName: config.variable_name,
+        });
+      }
+    });
+
+    return fields;
   }, [inputBlocks]);
 
   const handleExecute = useCallback(async () => {
@@ -304,7 +398,7 @@ export default function Workflows() {
     } else {
       // No input blocks, execute immediately
       try {
-        await executeWorkflow(selectedWorkflowId, {}, false);
+        await executeWorkflow(selectedWorkflowId, {});
         alert('Workflow execution started!');
       } catch (error) {
         console.error('Failed to execute workflow:', error);
@@ -316,17 +410,16 @@ export default function Workflows() {
   const handleExecuteWithInput = useCallback(async () => {
     if (!selectedWorkflowId) return;
 
-    // Transform input data to use variable names if provided
+    // Transform input data to use variable names
     const transformedInputData: Record<string, any> = {};
     inputFields.forEach((field) => {
       const value = inputData[field.id];
-      // Use variable name if set, otherwise use block id
-      const key = field.variableName || field.id;
-      transformedInputData[key] = value;
+      // Use variable name (field name) as the key
+      transformedInputData[field.variableName] = value;
     });
 
     try {
-      await executeWorkflow(selectedWorkflowId, transformedInputData, false);
+      await executeWorkflow(selectedWorkflowId, transformedInputData);
       setShowInputDialog(false);
       setInputData({});
       alert('Workflow execution started!');
@@ -336,39 +429,31 @@ export default function Workflows() {
     }
   }, [selectedWorkflowId, executeWorkflow, inputData, inputFields]);
 
-  const handleLoadWorkflow = useCallback((workflow: typeof workflows[0]) => {
-    setIsLoadingWorkflow(true);
-    setSelectedWorkflowId(workflow.id);
-    setWorkflowName(workflow.name);
-    if (workflow.graph_data) {
-      setNodes(normalizeNodes(workflow.graph_data.nodes, functionBlocksMap));
-      setEdges(normalizeEdges(workflow.graph_data.edges));
-    }
-    resetSavedData(); // Reset autosave tracking when loading a workflow
-    // Reset loading flag after a brief delay to prevent immediate autosave
-    setTimeout(() => setIsLoadingWorkflow(false), 100);
-  }, [resetSavedData, functionBlocksMap]);
+  const handleLoadWorkflow = useCallback(
+    async (workflow: WorkflowListItem) => {
+      // Navigate to the workflow URL - the useEffect will handle loading
+      navigate(`/workflows/${workflow.workflow_id}`, { replace: true });
+    },
+    [navigate],
+  );
 
-  const handleDeleteWorkflow = useCallback(async (workflowId: number) => {
+  const handleDeleteWorkflow = useCallback(async (workflowId: string) => {
     if (!confirm('Are you sure you want to delete this workflow?')) {
       return;
     }
     try {
       await deleteWorkflow(workflowId);
-      // Clear canvas if the deleted workflow was selected
+      // Navigate to /workflows if the deleted workflow was selected
       if (selectedWorkflowId === workflowId) {
-        setSelectedWorkflowId(null);
-        setWorkflowName('My Workflow');
-        setNodes([]);
-        setEdges([]);
+        navigate('/workflows', { replace: true });
       }
     } catch (error) {
       console.error('Failed to delete workflow:', error);
       toast.error('Failed to delete workflow');
     }
-  }, [deleteWorkflow, selectedWorkflowId]);
+  }, [deleteWorkflow, selectedWorkflowId, navigate]);
 
-  const handleRenameWorkflow = useCallback(async (workflowId: number, newName: string) => {
+  const handleRenameWorkflow = useCallback(async (workflowId: string, newName: string) => {
     if (!newName.trim()) {
       toast.error('Workflow name cannot be empty');
       return;
@@ -378,6 +463,9 @@ export default function Workflows() {
       // Update local workflow name if it's the currently selected workflow
       if (selectedWorkflowId === workflowId) {
         setWorkflowName(newName.trim());
+        setLoadedWorkflow((prev) =>
+          prev ? { ...prev, name: newName.trim() } : prev,
+        );
       }
       toast.success('Workflow renamed successfully');
     } catch (error) {
@@ -389,33 +477,26 @@ export default function Workflows() {
 
   const handleNewWorkflow = useCallback(async () => {
     try {
-      // Create a new workflow immediately with "Untitled" name
       const workflow = await createWorkflow('Untitled', undefined, { nodes: [], edges: [] });
-      setSelectedWorkflowId(workflow.id);
-      setWorkflowName('Untitled');
-      setNodes([]);
-      setEdges([]);
-      setSelectedNodeId(null);
-      resetSavedData(); // Reset autosave tracking for new workflow
+      // Navigate to the new workflow's URL - the useEffect will handle loading
+      navigate(`/workflows/${workflow.workflow_id}`, { replace: true });
       // Workflow will appear in list automatically via React Query cache invalidation
     } catch (error) {
       console.error('Failed to create new workflow:', error);
       toast.error('Failed to create new workflow');
-      // Fallback to clearing canvas without creating workflow
-      setSelectedWorkflowId(null);
-      setWorkflowName('My Workflow');
-      setNodes([]);
-      setEdges([]);
-      setSelectedNodeId(null);
-      resetSavedData();
     }
-  }, [createWorkflow, resetSavedData]);
+  }, [createWorkflow, navigate]);
 
   const handleWorkflowGraphSync = useCallback((graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
     if (!graph) return;
     setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
     setEdges(normalizeEdges(graph.edges));
+    setProposalPreview(null);
   }, [functionBlocksMap]);
+
+  const handleProposalPreviewChange = useCallback((preview: WorkflowProposalPreview | null) => {
+    setProposalPreview(preview);
+  }, []);
 
   const [buildChatCollapsed, setBuildChatCollapsed] = useState(() => {
     const saved = localStorage.getItem('buildChatPanelCollapsed');
@@ -459,6 +540,65 @@ export default function Workflows() {
     }
   }, [isHealthy]);
 
+  // Handle OAuth connection redirect - refresh integration status when connected
+  useEffect(() => {
+    const connectedParam = searchParams.get('connected');
+    if (connectedParam) {
+      // Refresh integration tools status to reflect new connection
+      refreshIntegrationTools();
+      
+      // Show success toast
+      toast.success('Integration Connected', {
+        description: `Successfully connected to ${connectedParam}`,
+        duration: 3000,
+      });
+      
+      // Remove query parameter from URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('connected');
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [searchParams, refreshIntegrationTools, setSearchParams]);
+
+  // Sync URL param with state - load workflow when URL changes
+  useEffect(() => {
+    // If URL has workflowId but loaded workflow doesn't match, load the workflow
+    if (urlWorkflowId && urlWorkflowId !== loadedWorkflow?.workflow_id) {
+      const loadWorkflowFromUrl = async () => {
+        setIsLoadingWorkflow(true);
+        try {
+          const fullWorkflow = await getWorkflow(urlWorkflowId);
+          setSelectedWorkflowId(fullWorkflow.workflow_id);
+          setWorkflowName(fullWorkflow.name);
+          setLoadedWorkflow(fullWorkflow);
+          setNodes(normalizeNodes(fullWorkflow.graph.nodes, functionBlocksMap));
+          setEdges(normalizeEdges(fullWorkflow.graph.edges));
+          setProposalPreview(null);
+          resetSavedData();
+        } catch (error) {
+          console.error('Failed to load workflow from URL:', error);
+          toast.error('Failed to load workflow', {
+            description: 'The workflow may not exist or you may not have access to it.',
+          });
+          // Redirect to /workflows if workflow doesn't exist
+          navigate('/workflows', { replace: true });
+        } finally {
+          setTimeout(() => setIsLoadingWorkflow(false), 100);
+        }
+      };
+      loadWorkflowFromUrl();
+    } else if (!urlWorkflowId && loadedWorkflow) {
+      // If URL doesn't have workflowId but we have a loaded workflow, clear the selection
+      setSelectedWorkflowId(null);
+      setWorkflowName('My Workflow');
+      setNodes([]);
+      setEdges([]);
+      setLoadedWorkflow(null);
+      setProposalPreview(null);
+      resetSavedData();
+    }
+  }, [urlWorkflowId, loadedWorkflow?.workflow_id, getWorkflow, functionBlocksMap, resetSavedData, navigate]);
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Unified Top Bar */}
@@ -473,6 +613,27 @@ export default function Workflows() {
         </Button>
         <div className="flex-1 flex items-center justify-end gap-2">
           <Button
+            onClick={() => {
+              const workflowId = urlWorkflowId || selectedWorkflowId;
+              if (workflowId) {
+                navigate(`/workflows/${workflowId}/executions`);
+              }
+            }}
+            disabled={!urlWorkflowId && !selectedWorkflowId}
+            size="sm"
+            variant="outline"
+          >
+            View Runs
+          </Button>
+          <Button
+            onClick={() => setShowTriggerModal(true)}
+            disabled={!selectedWorkflowId}
+            size="sm"
+            variant="outline"
+          >
+            Manage Triggers
+          </Button>
+          <Button
             onClick={handleExecute}
             disabled={!selectedWorkflowId || isExecuting}
             size="sm"
@@ -481,26 +642,17 @@ export default function Workflows() {
             <Rocket className="w-4 h-4 mr-2" />
             Run
           </Button>
-          {selectedWorkflowId && (
-            <Button
-              onClick={() => navigate(`/workflows/${selectedWorkflowId}/execution`)}
-              size="sm"
-              variant="outline"
-              title="View execution history and details"
-            >
-              <Clock className="w-4 h-4 mr-2" />
-              Executions
-            </Button>
-          )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => handleBuildChatCollapseChange(!buildChatCollapsed)}
-          title={buildChatCollapsed ? "Show Build & Chat panel" : "Hide Build & Chat panel"}
-        >
-          <Menu className="w-4 h-4" />
-        </Button>
+        {buildChatSupported && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleBuildChatCollapseChange(!buildChatCollapsed)}
+            title={buildChatCollapsed ? "Show Build & Chat panel" : "Hide Build & Chat panel"}
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
+        )}
       </header>
 
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
@@ -509,13 +661,22 @@ export default function Workflows() {
           {/* Canvas */}
           <div className="flex-1 relative overflow-hidden">
             <WorkflowCanvas
-              initialNodes={nodes}
-              initialEdges={edges}
-              onNodesChange={setNodes}
-              onEdgesChange={setEdges}
-              onNodeSelect={setSelectedNodeId}
-              selectedNodeId={selectedNodeId}
+              initialNodes={canvasNodes}
+              initialEdges={canvasEdges}
+              onNodesChange={isPreviewActive ? undefined : setNodes}
+              onEdgesChange={isPreviewActive ? undefined : setEdges}
+              onNodeSelect={isPreviewActive ? undefined : setSelectedNodeId}
+              selectedNodeId={isPreviewActive ? null : selectedNodeId}
+              readOnly={isPreviewActive}
             />
+            {proposalPreview && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                <div className="bg-sky-900/90 text-white px-4 py-2 rounded-full shadow-lg max-w-xl text-center">
+                  <p className="text-sm font-medium">Previewing workflow proposal</p>
+                  <p className="text-xs text-slate-100 line-clamp-2">{proposalPreview.proposal.summary}</p>
+                </div>
+              </div>
+            )}
             
             {/* Floating Workflows Panel */}
             <FloatingWorkflowsPanel
@@ -532,7 +693,7 @@ export default function Workflows() {
         </ResizablePanel>
         
         {/* Build & Chat Panel - Conditionally render to avoid residue width */}
-        {!buildChatCollapsed && (
+        {buildChatSupported && !buildChatCollapsed && (
           <>
             <ResizableHandle withHandle />
             <ResizablePanel 
@@ -547,6 +708,8 @@ export default function Workflows() {
                 nodes={nodes}
                 edges={edges}
                 onWorkflowGraphSync={handleWorkflowGraphSync}
+                onProposalPreviewChange={handleProposalPreviewChange}
+                activePreviewProposalId={proposalPreview?.proposal.id ?? null}
                 collapsed={buildChatCollapsed}
                 onCollapseChange={handleBuildChatCollapseChange}
               functionBlocks={availableBlocks}
@@ -588,6 +751,13 @@ export default function Workflows() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <WorkflowTriggerModal
+        open={showTriggerModal}
+        onOpenChange={setShowTriggerModal}
+        workflowId={selectedWorkflowId}
+        workflowName={workflowName}
+        workflowInputs={loadedWorkflow?.spec.inputs}
+      />
     </div>
   );
 }

@@ -13,6 +13,7 @@ interface MessagesListProps {
   proposalActionLoading: number | null;
   onAcceptProposal: (proposalId: number) => void;
   onRejectProposal: (proposalId: number) => void;
+  activePreviewProposalId?: number | null;
 }
 
 export function MessagesList({
@@ -23,6 +24,7 @@ export function MessagesList({
   proposalActionLoading,
   onAcceptProposal,
   onRejectProposal,
+  activePreviewProposalId,
 }: MessagesListProps) {
   const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set());
 
@@ -60,6 +62,9 @@ export function MessagesList({
               onAcceptProposal={onAcceptProposal}
               onRejectProposal={onRejectProposal}
               proposalActionLoading={proposalActionLoading}
+              isActivePreview={Boolean(
+                activePreviewProposalId && message.proposal?.id === activePreviewProposalId,
+              )}
             />
           );
         })

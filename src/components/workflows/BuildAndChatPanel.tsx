@@ -7,6 +7,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { toast } from '@/components/ui/sonner';
 
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
+import { workflowSpecToGraph } from '@/lib/workflow-graph';
 
 import { BuildPanel } from './build-and-chat/build/BuildPanel';
 import { ChatPanel } from './build-and-chat/chat/ChatPanel';
@@ -23,7 +24,7 @@ import type {
   WorkflowProposalActionResponse,
   BuiltInBlock,
 } from './build-and-chat/types';
-import { filterSystemPrompt } from './build-and-chat/utils';
+import { filterSystemPrompt, getDisplayableAssistantMessage } from './build-and-chat/utils';
 
 export function BuildAndChatPanel({
   onBlockSelect,
@@ -31,6 +32,8 @@ export function BuildAndChatPanel({
   nodes,
   edges,
   onWorkflowGraphSync,
+  onProposalPreviewChange,
+  activePreviewProposalId,
   collapsed: externalCollapsed,
   onCollapseChange,
   functionBlocks,
@@ -133,7 +136,7 @@ export function BuildAndChatPanel({
         thinking?: string[];
         interrupt_required?: boolean;
         interrupt_data?: Record<string, any>;
-      }>(`/api/workflows/${workflowId}/chat`, {
+      }>(`/api/workflow-agent/${workflowId}/chat`, {
         method: 'POST',
         body: JSON.stringify({
           message: messageContent,
@@ -171,9 +174,30 @@ export function BuildAndChatPanel({
         setCurrentThreadId(response.thread_id);
       }
 
+      if (response.proposal && response.proposal.spec && !response.proposal_error) {
+        try {
+          const previewGraph = workflowSpecToGraph(response.proposal.spec);
+          onProposalPreviewChange?.({
+            proposal: response.proposal,
+            graph: previewGraph,
+          });
+        } catch (graphError) {
+          console.error('Failed to build workflow preview from proposal:', graphError);
+          toast.error('Failed to preview workflow proposal');
+          onProposalPreviewChange?.(null);
+        }
+      } else {
+        onProposalPreviewChange?.(null);
+      }
+
+      const displayContent = getDisplayableAssistantMessage(
+        response.response,
+        response.proposal?.summary,
+      );
+
       const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: response.response,
+        content: displayContent,
         proposal: response.proposal || undefined,
         proposalError: response.proposal_error || undefined,
         thinking: response.thinking,
@@ -202,6 +226,7 @@ export function BuildAndChatPanel({
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+      onProposalPreviewChange?.(null);
     } finally {
       setIsLoading(false);
     }
@@ -211,7 +236,7 @@ export function BuildAndChatPanel({
     if (!workflowId) return;
     try {
       const response = await backendApiClient.request<ChatSession>(
-        `/api/workflows/${workflowId}/chat/sessions`,
+        `/api/workflow-agent/${workflowId}/chat/sessions`,
         {
           method: 'POST',
           body: JSON.stringify({ title: null }),
@@ -220,6 +245,7 @@ export function BuildAndChatPanel({
       setCurrentSessionId(response.id);
       setCurrentThreadId(response.thread_id);
       setMessages([]);
+      onProposalPreviewChange?.(null);
       queryClient.invalidateQueries({ queryKey: ['chat-sessions', workflowId] });
     } catch (error) {
       console.error('Failed to create session:', error);
@@ -232,6 +258,7 @@ export function BuildAndChatPanel({
     if (session) {
       setCurrentThreadId(session.thread_id);
     }
+    onProposalPreviewChange?.(null);
   };
 
   const updateProposalInMessages = (updatedProposal: WorkflowProposal) => {
@@ -247,13 +274,18 @@ export function BuildAndChatPanel({
     setProposalActionLoading(proposalId);
     try {
       const response = await backendApiClient.request<WorkflowProposalActionResponse>(
-        `/api/workflows/${workflowId}/proposals/${proposalId}/accept`,
+        `/api/workflow-agent/${workflowId}/proposals/${proposalId}/accept`,
         { method: 'POST' },
       );
       updateProposalInMessages(response.proposal);
-      if (response.workflow_graph) {
+      const specGraph =
+        response.proposal?.spec ? workflowSpecToGraph(response.proposal.spec) : null;
+      if (specGraph) {
+        onWorkflowGraphSync?.(specGraph);
+      } else if (response.workflow_graph) {
         onWorkflowGraphSync?.(response.workflow_graph);
       }
+      onProposalPreviewChange?.(null);
       toast.success('Proposal accepted');
     } catch (error) {
       console.error('Failed to accept proposal:', error);
@@ -272,6 +304,7 @@ export function BuildAndChatPanel({
         { method: 'POST' },
       );
       updateProposalInMessages(response.proposal);
+      onProposalPreviewChange?.(null);
       toast.success('Proposal rejected');
     } catch (error) {
       console.error('Failed to reject proposal:', error);
@@ -335,6 +368,7 @@ export function BuildAndChatPanel({
             proposalActionLoading={proposalActionLoading}
             onAcceptProposal={handleAcceptProposal}
             onRejectProposal={handleRejectProposal}
+            activePreviewProposalId={activePreviewProposalId}
           />
         </ResizablePanel>
       </ResizablePanelGroup>

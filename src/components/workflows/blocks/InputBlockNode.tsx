@@ -11,8 +11,9 @@ export const InputBlockNode = memo(function InputBlockNode(
   return (
     <BaseBlockNode
       {...props}
-      icon={<ArrowRight className="w-4 h-4 text-green-500" />}
+      icon={null}
       color="green"
+      minWidth="500px"
       handles={{
         inputs: [],
         outputs: ['output'],

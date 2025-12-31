@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Node } from '@xyflow/react';
 
-import { WorkflowEdge, WorkflowNodeData } from '../../types';
+import { WorkflowEdge, WorkflowNodeData } from '../types';
+import type { WorkflowSpec } from '@/types/workflow-spec';
 
 export interface Tool {
   name: string;
@@ -10,6 +11,7 @@ export interface Tool {
   slug?: string;
   provider?: string;
   integration_type?: string;
+  output_schema?: Record<string, any> | null;
 }
 
 export interface BuiltInBlock {
@@ -25,17 +27,6 @@ export interface UserSummary {
   full_name?: string | null;
 }
 
-export interface WorkflowProposalPatchOp {
-  op: string;
-  description?: string;
-  node_id?: string;
-  node?: Record<string, any>;
-  edge_id?: string;
-  edge?: Record<string, any>;
-  source?: string;
-  target?: string;
-}
-
 export interface WorkflowGraphPayload {
   nodes?: Node<WorkflowNodeData & Record<string, unknown>>[];
   edges?: WorkflowEdge[];
@@ -43,12 +34,12 @@ export interface WorkflowGraphPayload {
 
 export interface WorkflowProposal {
   id: number;
-  workflow_id: number;
+  workflow_id: string;
   session_id?: number | null;
   created_by: UserSummary;
   summary: string;
   status: 'pending' | 'accepted' | 'rejected';
-  patch_ops: WorkflowProposalPatchOp[];
+  spec: WorkflowSpec;
   preview_graph?: Record<string, any> | null;
   applied_graph?: Record<string, any> | null;
   metadata?: Record<string, any> | null;
@@ -60,6 +51,11 @@ export interface WorkflowProposal {
 export interface WorkflowProposalActionResponse {
   proposal: WorkflowProposal;
   workflow_graph?: WorkflowGraphPayload | null;
+}
+
+export interface WorkflowProposalPreview {
+  proposal: WorkflowProposal;
+  graph: WorkflowGraphPayload;
 }
 
 export interface ChatMessage {
@@ -76,7 +72,7 @@ export interface ChatMessage {
 
 export interface ChatSession {
   id: number;
-  workflow_id: number;
+  workflow_id: string;
   user_id?: string;
   thread_id: string;
   title?: string;
@@ -93,10 +89,12 @@ export interface ModelInfo {
 
 export interface BuildAndChatPanelProps {
   onBlockSelect?: (block: { type: string; label: string; config?: any }) => void;
-  workflowId: number | null;
+  workflowId: string | null;
   nodes: Node<WorkflowNodeData & Record<string, unknown>>[];
   edges: WorkflowEdge[];
   onWorkflowGraphSync?: (graph?: WorkflowGraphPayload | null) => void;
+  onProposalPreviewChange?: (preview: WorkflowProposalPreview | null) => void;
+  activePreviewProposalId?: number | null;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   functionBlocks?: BuiltInBlock[];

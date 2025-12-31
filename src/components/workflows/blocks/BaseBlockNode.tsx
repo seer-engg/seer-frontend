@@ -16,6 +16,7 @@ interface BaseBlockNodeProps extends NodeProps<WorkflowNodeData> {
     outputs?: string[];
   };
   children?: React.ReactNode;
+  minWidth?: string;
 }
 
 export const BaseBlockNode = memo(function BaseBlockNode({
@@ -25,6 +26,7 @@ export const BaseBlockNode = memo(function BaseBlockNode({
   color = 'primary',
   handles = { inputs: ['input'], outputs: ['output'] },
   children,
+  minWidth = '320px',
 }: BaseBlockNodeProps) {
   const hasInputHandle = (handles.inputs || ['input']).length > 0;
   const hasOutputHandle = (handles.outputs || ['output']).length > 0;
@@ -32,11 +34,12 @@ export const BaseBlockNode = memo(function BaseBlockNode({
   return (
     <div
       className={cn(
-        'relative px-4 py-3 rounded-lg border-2 min-w-[160px] transition-all duration-200 cursor-pointer',
+        'relative px-4 py-3 rounded-lg border-2 transition-[border,shadow,ring] duration-200 cursor-pointer select-none inline-block',
         selected
           ? 'border-primary shadow-lg ring-2 ring-primary ring-offset-2'
           : 'border-border bg-card hover:border-primary/50',
       )}
+      style={{ minWidth, width: 'fit-content' }}
     >
       {/* Input handle */}
       {hasInputHandle && (
@@ -71,7 +74,7 @@ export const BaseBlockNode = memo(function BaseBlockNode({
       </div>
 
       {children && (
-        <div className="mt-3 space-y-3" onPointerDown={(event) => event.stopPropagation()}>
+        <div className="mt-3 space-y-3 w-fit" onPointerDown={(event) => event.stopPropagation()}>
           {children}
         </div>
       )}

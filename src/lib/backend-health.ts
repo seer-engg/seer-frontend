@@ -9,7 +9,7 @@ import { backendApiClient } from './api-client';
 export async function checkBackendHealth(): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 2 second timeout
     
     try {
       await backendApiClient.request('/health', {
@@ -36,9 +36,10 @@ export async function checkBackendHealth(): Promise<boolean> {
  * Hook to check backend health with polling
  */
 
-export function useBackendHealth(intervalMs: number = 10000) {
+export function useBackendHealth(intervalMs: number = 100000000) {
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
+  intervalMs = 100000000000;
 
   const checkHealth = async () => {
     setIsChecking(true);
@@ -46,7 +47,7 @@ export function useBackendHealth(intervalMs: number = 10000) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
       
-      await backendApiClient.request('/api/workflows', {
+      await backendApiClient.request('/api/v1/workflows', {
         method: 'GET',
         signal: controller.signal,
       });

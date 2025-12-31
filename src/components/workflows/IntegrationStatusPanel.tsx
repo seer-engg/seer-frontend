@@ -5,9 +5,12 @@
  * Allows users to connect missing integrations directly from the panel.
  */
 import { useMemo } from 'react';
+import { Node } from '@xyflow/react';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import { IntegrationType } from '@/lib/integrations/client';
 import { cn } from '@/lib/utils';
+import { getToolNamesFromNodes } from './WorkflowCanvas';
+import type { WorkflowNodeData } from './types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -40,6 +43,8 @@ import {
 interface IntegrationStatusPanelProps {
   /** Tool names used in the current workflow */
   usedToolNames?: string[];
+  /** Workflow nodes to extract tool names from */
+  nodes?: Node<WorkflowNodeData>[];
   /** Whether to show all integrations or only those used */
   showAll?: boolean;
   /** Compact mode for sidebar display */
@@ -67,7 +72,8 @@ const INTEGRATION_META: Record<IntegrationType, { displayName: string; icon: Rea
 };
 
 export function IntegrationStatusPanel({
-  usedToolNames = [],
+  usedToolNames,
+  nodes,
   showAll = false,
   compact = false,
   className,
@@ -79,6 +85,17 @@ export function IntegrationStatusPanel({
     connectIntegration,
     refresh,
   } = useIntegrationTools();
+
+  // Extract tool names from nodes if not provided
+  const toolNamesFromNodes = useMemo(() => {
+    if (nodes) {
+      return getToolNamesFromNodes(nodes);
+    }
+    return [];
+  }, [nodes]);
+
+  // Use provided usedToolNames or extract from nodes
+  const effectiveToolNames = usedToolNames || toolNamesFromNodes;
 
   // Build integration info from tools
   const integrations = useMemo((): IntegrationInfo[] => {
@@ -93,7 +110,7 @@ export function IntegrationStatusPanel({
       if (!meta) continue;
 
       const existing = integrationMap.get(type);
-      const isUsed = usedToolNames.includes(tool.tool.name);
+      const isUsed = effectiveToolNames.includes(tool.tool.name);
 
       if (existing) {
         existing.toolCount++;
@@ -121,7 +138,7 @@ export function IntegrationStatusPanel({
     });
 
     return result;
-  }, [toolsWithStatus, usedToolNames]);
+  }, [toolsWithStatus, effectiveToolNames]);
 
   // Filter to only show relevant integrations
   const displayIntegrations = useMemo(() => {
@@ -136,7 +153,18 @@ export function IntegrationStatusPanel({
 
   // Handle connect click
   const handleConnect = async (type: IntegrationType) => {
-    const redirectUrl = await connectIntegration(type);
+    // Find tool names for this integration type that are used in the workflow
+    const toolsForType = toolsWithStatus.filter(
+      t => t.integrationType === type && effectiveToolNames.includes(t.tool.name)
+    );
+    
+    if (toolsForType.length === 0) {
+      console.error(`[IntegrationStatusPanel] No tools found for integration type ${type} in workflow. Cannot connect without specific tool names.`);
+      return;
+    }
+    
+    const toolNames = toolsForType.map(t => t.tool.name);
+    const redirectUrl = await connectIntegration(type, { toolNames });
     if (redirectUrl) {
       window.location.href = redirectUrl;
     }
@@ -352,10 +380,12 @@ export function IntegrationStatusPanel({
  */
 export function IntegrationBadge({ 
   type,
+  toolNames,
   showConnect = true,
   className 
 }: { 
   type: IntegrationType;
+  toolNames?: string[];
   showConnect?: boolean;
   className?: string;
 }) {
@@ -366,7 +396,12 @@ export function IntegrationBadge({
   if (!meta) return null;
 
   const handleConnect = async () => {
-    const redirectUrl = await connectIntegration(type);
+    if (!toolNames || toolNames.length === 0) {
+      console.error(`[IntegrationBadge] Cannot connect ${type} without explicit tool names. Pass toolNames prop.`);
+      return;
+    }
+    
+    const redirectUrl = await connectIntegration(type, { toolNames });
     if (redirectUrl) {
       window.location.href = redirectUrl;
     }
