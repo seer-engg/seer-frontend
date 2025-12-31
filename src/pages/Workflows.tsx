@@ -24,6 +24,7 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { toast } from '@/components/ui/sonner';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
+import { WorkflowTriggerModal } from '@/components/workflows/triggers/TriggerModal';
 
 const isBranchValue = (value: unknown): value is 'true' | 'false' =>
   value === 'true' || value === 'false';
@@ -174,6 +175,7 @@ export default function Workflows() {
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
+  const [showTriggerModal, setShowTriggerModal] = useState(false);
   
   const {
     workflows,
@@ -596,6 +598,14 @@ export default function Workflows() {
             View Runs
           </Button>
           <Button
+            onClick={() => setShowTriggerModal(true)}
+            disabled={!selectedWorkflowId}
+            size="sm"
+            variant="outline"
+          >
+            Manage Triggers
+          </Button>
+          <Button
             onClick={handleExecute}
             disabled={!selectedWorkflowId || isExecuting}
             size="sm"
@@ -702,6 +712,13 @@ export default function Workflows() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <WorkflowTriggerModal
+        open={showTriggerModal}
+        onOpenChange={setShowTriggerModal}
+        workflowId={selectedWorkflowId}
+        workflowName={workflowName}
+        workflowInputs={loadedWorkflow?.spec.inputs}
+      />
     </div>
   );
 }
