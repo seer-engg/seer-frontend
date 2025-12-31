@@ -65,7 +65,7 @@ const App = () => (
               }
             />
             <Route
-              path="/workflows"
+              path="/workflows/:workflowId"
               element={
                 <ProtectedRoute>
                   <SeerLayout>
@@ -90,6 +90,16 @@ const App = () => (
                 <ProtectedRoute>
                   <SeerLayout>
                     <WorkflowExecution />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <Workflows />
                   </SeerLayout>
                 </ProtectedRoute>
               }

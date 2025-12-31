@@ -48,6 +48,8 @@ export function SeerLayout({ children }: SeerLayoutProps) {
     }
   };
 
+  const isSidebarVisible = !sidebarCollapsed;
+
   return (
     <div className="min-h-screen flex w-full bg-background">
       <SeerSidebar 
@@ -55,7 +57,7 @@ export function SeerLayout({ children }: SeerLayoutProps) {
         onCollapsedChange={handleSidebarCollapseChange}
         forceCollapsed={isWorkflowsPage && sidebarCollapsed}
       />
-      <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
+      <main className={`flex-1 flex flex-col overflow-hidden ${isSidebarVisible ? 'ml-[220px]' : ''}`}>{children}</main>
       <OnboardingTour />
     </div>
   );

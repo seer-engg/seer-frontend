@@ -37,8 +37,9 @@ export const getIntegrationTypeIcon = (integrationType: string) => {
     case 'googlesheets':
     case 'google_sheets':
       return <GoogleSheetsIcon className="w-3.5 h-3.5 text-muted-foreground" />;
+    case 'github':
     case 'pull_request':
-      return <GitPullRequest className="w-3.5 h-3.5 text-muted-foreground" />;
+      return <GitHubIcon className="w-3.5 h-3.5 text-muted-foreground" />;
     default:
       return <Wrench className="w-3.5 h-3.5 text-muted-foreground" />;
   }
@@ -55,8 +56,9 @@ export const getIntegrationTypeLabel = (integrationType: string) => {
     case 'googlesheets':
     case 'google_sheets':
       return 'Google Sheets';
+    case 'github':
     case 'pull_request':
-      return 'Pull Requests';
+      return 'GitHub';
     default:
       return formatGroupLabel(integrationType);
   }

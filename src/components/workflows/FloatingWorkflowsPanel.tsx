@@ -6,14 +6,13 @@
  */
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { MoreHorizontal, Plus, FileEdit, Trash2, Copy, CopyCheck } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Plus, FileEdit, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface WorkflowListRow {
@@ -50,6 +49,7 @@ export function FloatingWorkflowsPanel({
   const [editingName, setEditingName] = useState<string>('');
   const [isRenaming, setIsRenaming] = useState(false);
   const [copiedWorkflowId, setCopiedWorkflowId] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   const handleStartRename = (e: React.MouseEvent, workflow: WorkflowListRow) => {
     e.stopPropagation();
@@ -114,32 +114,51 @@ export function FloatingWorkflowsPanel({
     }
   };
 
-  const handleDelete = (workflowId: string) => {
-    if (onDeleteWorkflow && confirm('Are you sure you want to delete this workflow?')) {
+  const handleDelete = (e: React.MouseEvent, workflowId: string) => {
+    e.stopPropagation();
+    if (onDeleteWorkflow) {
       onDeleteWorkflow(workflowId);
     }
   };
 
   return (
     <div className="absolute top-4 left-4 z-50 w-[280px] bg-card border border-border rounded-lg shadow-lg backdrop-blur-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h3 className="text-sm font-semibold">Workflows</h3>
-        {onNewWorkflow && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onNewWorkflow}
-            className="h-6 w-6"
-            title="New workflow"
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
-        )}
-      </div>
+      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div className="flex items-center gap-2">
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                title={isExpanded ? 'Collapse workflows' : 'Expand workflows'}
+              >
+                {isExpanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <h3 className="text-sm font-semibold">Workflows</h3>
+          </div>
+          {onNewWorkflow && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onNewWorkflow}
+              className="h-6 w-6"
+              title="New workflow"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
 
-      {/* Workflows List */}
-      <div className="max-h-[400px] overflow-y-auto">
+        {/* Workflows List */}
+        <CollapsibleContent>
+          <div className="max-h-[400px] overflow-y-auto">
         {isLoadingWorkflows ? (
           <div className="text-sm text-muted-foreground text-left py-4 px-4">
             Loading workflows...
@@ -185,62 +204,38 @@ export function FloatingWorkflowsPanel({
                   )}
                 </div>
                 {editingWorkflowId !== workflow.workflow_id && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {onRenameWorkflow && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => e.stopPropagation()}
+                        className="h-6 w-6"
+                        onClick={(e) => handleStartRename(e, workflow)}
+                        title="Rename workflow"
                       >
-                        <MoreHorizontal className="w-4 h-4" />
+                        <FileEdit className="w-4 h-4" />
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {onCopyLink && (
-                        <DropdownMenuItem onClick={() => handleCopyLink(workflow.workflow_id)}>
-                          {copiedWorkflowId === workflow.workflow_id ? (
-                            <>
-                              <CopyCheck className="w-4 h-4 mr-2" />
-                              Link copied
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-4 h-4 mr-2" />
-                              Copy link to page
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                      )}
-                      {onRenameWorkflow && (
-                        <DropdownMenuItem onClick={(e) => handleStartRename(e, workflow)}>
-                          <FileEdit className="w-4 h-4 mr-2" />
-                          Rename page
-                        </DropdownMenuItem>
-                      )}
-                      {onDuplicateWorkflow && (
-                        <DropdownMenuItem onClick={() => handleDuplicate(workflow.workflow_id)}>
-                          <Copy className="w-4 h-4 mr-2" />
-                          Duplicate page
-                        </DropdownMenuItem>
-                      )}
-                      {onDeleteWorkflow && (
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(workflow.workflow_id)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete page
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    )}
+                    {onDeleteWorkflow && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive hover:text-destructive"
+                        onClick={(e) => handleDelete(e, workflow.workflow_id)}
+                        title="Delete workflow"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
           </div>
         )}
-      </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
