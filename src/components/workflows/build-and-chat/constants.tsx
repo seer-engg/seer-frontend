@@ -10,7 +10,6 @@ const BLOCK_ICON_COMPONENTS: Record<string, LucideIcon> = {
   if_else: GitBranch,
   for_loop: Repeat,
   input: ArrowRight,
-  variable: FunctionSquare,
 };
 
 export function getBlockIconForType(blockType: string): React.ReactNode {

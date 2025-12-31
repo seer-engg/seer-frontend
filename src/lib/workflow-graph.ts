@@ -64,32 +64,61 @@ export function graphToWorkflowSpec(
  */
 export function workflowSpecToGraph(spec: WorkflowSpec): WorkflowGraphData {
   const serialized = spec.meta?.[GRAPH_META_KEY];
+  
   if (serialized && typeof serialized === 'object') {
-    return deserializeGraph(serialized as JsonObject);
+    const graph = deserializeGraph(serialized as JsonObject);
+    return graph;
   }
   return buildGraphFromSpec(spec);
 }
 
 function buildInputsFromGraph(nodes: FlowNode[]): Record<string, InputDef> {
-  const entries = nodes
+  const entries: Array<[string, InputDef]> = [];
+  
+  nodes
     .filter((node) => node.data?.type === 'input')
-    .map<[string, InputDef] | null>((node) => {
-      const variableName = String(node.data?.config?.variable_name ?? '').trim();
-      if (!variableName) {
-        return null;
+    .forEach((node) => {
+      const config = node.data?.config || {};
+      
+      // New format: fields array
+      if (Array.isArray(config.fields)) {
+        config.fields.forEach((field: any) => {
+          const fieldName = String(field.name || '').trim();
+          if (!fieldName) {
+            return;
+          }
+          const type = mapInputType(field.type);
+          const required = field.required !== false;
+          // Use displayLabel as description (user-friendly label), fallback to field description, then node label
+          const description = field.displayLabel || field.description || node.data?.label || undefined;
+          entries.push([
+            fieldName,
+            {
+              type,
+              required,
+              description,
+            },
+          ]);
+        });
       }
-      const type = mapInputType(node.data?.config?.type);
-      const required = node.data?.config?.required !== false;
-      return [
-        variableName,
-        {
-          type,
-          required,
-          description: node.data?.label || undefined,
-        },
-      ];
-    })
-    .filter((entry): entry is [string, InputDef] => Array.isArray(entry));
+      // Legacy format: single variable_name
+      else {
+        const variableName = String(config.variable_name ?? '').trim();
+        if (!variableName) {
+          return;
+        }
+        const type = mapInputType(config.type);
+        const required = config.required !== false;
+        entries.push([
+          variableName,
+          {
+            type,
+            required,
+            description: node.data?.label || undefined,
+          },
+        ]);
+      }
+    });
 
   return Object.fromEntries(entries);
 }
@@ -457,17 +486,36 @@ function sanitizeNodeData(data: WorkflowNodeData | undefined): JsonObject {
     return {};
   }
   const { onSelect, ...rest } = data;
-  return JSON.parse(JSON.stringify(rest));
+  
+  // Deep clone to ensure all nested structures (including fields arrays) are preserved
+  const sanitized = JSON.parse(JSON.stringify(rest));
+  
+  // Ensure fields array is preserved for input nodes (even if empty)
+  if (sanitized.type === 'input' && sanitized.config && Array.isArray(rest.config?.fields)) {
+    sanitized.config.fields = rest.config.fields;
+  }
+  
+  return sanitized;
 }
 
 function deserializeGraph(serialized: JsonObject): WorkflowGraphData {
   const nodes = Array.isArray(serialized.nodes)
-    ? serialized.nodes.map((node: any) => ({
-        id: String(node.id),
-        type: node.type,
-        position: node.position ?? { x: 0, y: 0 },
-        data: node.data ?? {},
-      }))
+    ? serialized.nodes.map((node: any) => {
+        const rawNodeData = node.data;
+        const nodeData = rawNodeData ?? {};
+        
+        // Ensure fields array is preserved for input nodes during deserialization
+        if (nodeData.type === 'input' && nodeData.config && Array.isArray(rawNodeData?.config?.fields)) {
+          nodeData.config.fields = rawNodeData.config.fields;
+        }
+        
+        return {
+          id: String(node.id),
+          type: node.type,
+          position: node.position ?? { x: 0, y: 0 },
+          data: nodeData,
+        };
+      })
     : [];
 
   const edges = Array.isArray(serialized.edges)
@@ -489,22 +537,28 @@ function buildGraphFromSpec(spec: WorkflowSpec): WorkflowGraphData {
   const edges: WorkflowEdge[] = [];
 
   const inputEntries = Object.entries(spec.inputs ?? {});
-  inputEntries.forEach(([key, def], index) => {
+  
+  // Group inputs by creating a single input block with all fields
+  if (inputEntries.length > 0) {
+    const fields = inputEntries.map(([key, def]) => ({
+      name: key,
+      type: def.type === 'number' ? 'number' : def.type === 'integer' ? 'number' : 'text',
+      required: def.required !== false,
+    }));
+
     nodes.push({
-      id: `input-${key}`,
+      id: 'input-block',
       type: 'input',
-      position: { x: 0, y: index * 180 },
+      position: { x: 0, y: 0 },
       data: {
         type: 'input',
-        label: key,
+        label: 'Input',
         config: {
-          variable_name: key,
-          type: def.type === 'number' ? 'number' : 'text',
-          required: def.required !== false,
+          fields,
         },
       },
     });
-  });
+  }
 
   const baseX = inputEntries.length > 0 ? 320 : 0;
 

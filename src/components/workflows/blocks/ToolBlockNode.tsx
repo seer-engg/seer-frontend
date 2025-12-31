@@ -178,7 +178,7 @@ export const ToolBlockNode = memo(function ToolBlockNode(
   return (
     <div
       className={cn(
-        'relative px-4 py-3 rounded-lg border-2 min-w-[180px] transition-all duration-200 cursor-pointer',
+        'relative px-4 py-3 rounded-lg border-2 min-w-[180px] transition-[border,shadow,ring] duration-200 cursor-pointer select-none inline-block',
         selected
           ? 'border-primary shadow-lg ring-2 ring-primary ring-offset-2'
           : 'border-border bg-card hover:border-primary/50',

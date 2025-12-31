@@ -4,14 +4,13 @@
  * Supports drag-and-drop blocks, custom node types, and connection validation.
  * Based on ReactFlow (@xyflow/react).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
   Node,
-  Edge,
   Connection,
   addEdge,
   useNodesState,
@@ -26,7 +25,6 @@ import { WorkflowCanvasContext } from './workflow-canvas-context';
 import {
   WorkflowNodeData,
   WorkflowEdge,
-  WorkflowEdgeData,
   ToolBlockConfig,
   getNextBranchForSource,
 } from './types';
@@ -37,7 +35,6 @@ import { LLMBlockNode } from './blocks/LLMBlockNode';
 import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
 import { InputBlockNode } from './blocks/InputBlockNode';
-import { VariableBlockNode } from './blocks/VariableBlockNode';
 
 /**
  * Extract tool names from workflow nodes
@@ -58,7 +55,6 @@ const nodeTypes = {
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
   input: InputBlockNode,
-  variable: VariableBlockNode,
 };
 
 interface WorkflowCanvasProps {
@@ -86,9 +82,25 @@ export function WorkflowCanvas({
   const updateNodeData = useCallback(
     (nodeId: string, updates: Partial<WorkflowNodeData>) => {
       setNodes((prevNodes) => {
-        const updatedNodes = prevNodes.map((node) =>
-          node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node,
-        );
+        const updatedNodes = prevNodes.map((node) => {
+          if (node.id === nodeId) {
+            const mergedData = { ...node.data, ...updates };
+            if (updates.config) {
+              // Always preserve fields array if it exists in updates, even if empty
+              const mergedConfig = {
+                ...node.data.config,
+                ...updates.config,
+              };
+              // Explicitly preserve fields array if present in updates
+              if ('fields' in updates.config) {
+                mergedConfig.fields = updates.config.fields;
+              }
+              mergedData.config = mergedConfig;
+            }
+            return { ...node, data: mergedData };
+          }
+          return node;
+        });
         if (onNodesChange) {
           onNodesChange(updatedNodes);
         }

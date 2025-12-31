@@ -117,20 +117,40 @@ function withDefaultBlockConfig(
           item_var: 'item',
         };
       case 'input':
-        return {
-          variable_name: '',
-          type: 'text',
-          required: true,
-        };
-      case 'variable':
-        return {
-          input_type: 'string',
-          input: '',
-        };
+        // Only provide defaults if config doesn't have fields OR all fields are empty (no user data)
+        // Check if fields have any actual data (non-empty name values)
+        const hasValidFields = Array.isArray(config.fields) && config.fields.length > 0 &&
+          config.fields.some((f: any) => f.name && f.name.trim() !== '');
+        
+        if (!hasValidFields) {
+          // No valid fields, provide defaults
+          return {
+            fields: [
+              { name: '', displayLabel: '', description: '', type: 'text', required: true, placeholder: '' }
+            ]
+          };
+        }
+        // Has valid fields, don't add defaults
+        return {};
       default:
         return {};
     }
   })();
+
+  // For input blocks, ALWAYS preserve existing fields array if it has valid data
+  if (blockType === 'input') {
+    const hasValidFields = Array.isArray(config.fields) && config.fields.length > 0 &&
+      config.fields.some((f: any) => f.name && f.name.trim() !== '');
+    
+    if (hasValidFields) {
+      // Explicitly preserve fields array - never overwrite user data
+      return {
+        ...defaults,
+        ...config,
+        fields: config.fields, // Explicitly preserve fields array
+      };
+    }
+  }
 
   return {
     ...defaults,
@@ -173,15 +193,27 @@ export default function Workflows() {
   } = useFunctionBlocks();
 
   const availableBlocks = useMemo(() => {
+    // Always include built-in blocks (LLM, If/Else, For Loop, Input)
+    const builtInBlocksMap = new Map(BUILT_IN_BLOCKS.map(block => [block.type, block]));
+    
+    // Merge with function blocks from backend, but don't override built-in blocks
+    const mergedBlocks = [...BUILT_IN_BLOCKS];
+    
     if (functionBlockSchemas.length > 0) {
-      return functionBlockSchemas.map((schema) => ({
-        type: schema.type,
-        label: schema.label,
-        description: schema.description,
-        icon: getBlockIconForType(schema.type),
-      }));
+      functionBlockSchemas.forEach((schema) => {
+        // Only add if it's not already a built-in block
+        if (!builtInBlocksMap.has(schema.type)) {
+          mergedBlocks.push({
+            type: schema.type,
+            label: schema.label,
+            description: schema.description,
+            icon: getBlockIconForType(schema.type),
+          });
+        }
+      });
     }
-    return BUILT_IN_BLOCKS;
+    
+    return mergedBlocks;
   }, [functionBlockSchemas]);
 
   const handleBlockSelect = useCallback(
@@ -288,13 +320,45 @@ export default function Workflows() {
 
   // Generate input fields from input blocks
   const inputFields = useMemo(() => {
-    return inputBlocks.map((block) => ({
-      id: block.id,
-      label: block.data?.label || block.id,
-      type: block.data?.config?.type || 'text',
-      required: block.data?.config?.required !== false,
-      variableName: block.data?.config?.variable_name, // Get variable name if set
-    }));
+    const fields: Array<{
+      id: string;
+      label: string;
+      type: string;
+      required: boolean;
+      variableName: string;
+    }> = [];
+
+    inputBlocks.forEach((block) => {
+      const config = block.data?.config || {};
+      
+      // New format: fields array
+      if (Array.isArray(config.fields)) {
+        config.fields.forEach((field: any) => {
+          const fieldName = field.name || '';
+          if (fieldName) {
+            fields.push({
+              id: `${block.id}-${fieldName}`,
+              label: fieldName,
+              type: field.type || 'text',
+              required: field.required !== false,
+              variableName: fieldName,
+            });
+          }
+        });
+      }
+      // Legacy format: single variable_name
+      else if (config.variable_name) {
+        fields.push({
+          id: block.id,
+          label: block.data?.label || config.variable_name || block.id,
+          type: config.type || 'text',
+          required: config.required !== false,
+          variableName: config.variable_name,
+        });
+      }
+    });
+
+    return fields;
   }, [inputBlocks]);
 
   const handleExecute = useCallback(async () => {
@@ -323,13 +387,12 @@ export default function Workflows() {
   const handleExecuteWithInput = useCallback(async () => {
     if (!selectedWorkflowId) return;
 
-    // Transform input data to use variable names if provided
+    // Transform input data to use variable names
     const transformedInputData: Record<string, any> = {};
     inputFields.forEach((field) => {
       const value = inputData[field.id];
-      // Use variable name if set, otherwise use block id
-      const key = field.variableName || field.id;
-      transformedInputData[key] = value;
+      // Use variable name (field name) as the key
+      transformedInputData[field.variableName] = value;
     });
 
     try {
