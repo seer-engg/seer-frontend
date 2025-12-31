@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Copy, KeyRound, Link as LinkIcon, Loader2, PlusCircle, Trash2 } from 'lucide-react';
+import { Copy, KeyRound, Link as LinkIcon, Loader2, Mail, PlusCircle, Trash2 } from 'lucide-react';
 
 import {
   Dialog,
@@ -18,6 +18,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
 import { getBackendBaseUrl } from '@/lib/api-client';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
+import { useIntegrationTools } from '@/hooks/useIntegrationTools';
+import { cn } from '@/lib/utils';
 import type { InputDef } from '@/types/workflow-spec';
 import type { TriggerSubscriptionResponse } from '@/types/triggers';
 
@@ -37,6 +39,44 @@ interface WorkflowTriggerModalProps {
 }
 
 const EVENT_PREFIX = 'event.';
+const WEBHOOK_TRIGGER_KEY = 'webhook.generic';
+const GMAIL_TRIGGER_KEY = 'poll.gmail.email_received';
+
+interface GmailConfigState {
+  labelIds: string;
+  query: string;
+  maxResults: string;
+  overlapMs: string;
+}
+
+interface TriggerOption {
+  key: string;
+  title: string;
+  description?: string | null;
+}
+
+const makeDefaultGmailConfig = (): GmailConfigState => ({
+  labelIds: 'INBOX',
+  query: '',
+  maxResults: '25',
+  overlapMs: '300000',
+});
+
+const parseProviderConnectionId = (raw?: string | null): number | null => {
+  if (!raw) {
+    return null;
+  }
+  const segments = raw.split(':');
+  const numeric = Number(segments[segments.length - 1]);
+  return Number.isNaN(numeric) ? null : numeric;
+};
+
+const clampNumber = (value: number, min: number, max: number): number => {
+  if (Number.isNaN(value)) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+};
 
 export function WorkflowTriggerModal({
   open,
@@ -56,13 +96,51 @@ export function WorkflowTriggerModal({
     deleteSubscription,
   } = useWorkflowTriggers(effectiveWorkflowId);
 
+  const {
+    tools,
+    isLoading: isIntegrationsLoading,
+    isIntegrationConnected,
+    connectIntegration,
+    getConnectionId,
+  } = useIntegrationTools();
+
   const [activeTab, setActiveTab] = useState<'subscriptions' | 'create'>('subscriptions');
   const [bindingState, setBindingState] = useState<Record<string, BindingConfig>>({});
-  const [isCreating, setIsCreating] = useState(false);
+  const [selectedTriggerKey, setSelectedTriggerKey] = useState<string>(WEBHOOK_TRIGGER_KEY);
+  const [gmailConfig, setGmailConfig] = useState<GmailConfigState>(() => makeDefaultGmailConfig());
+  const [isConnectingGmail, setIsConnectingGmail] = useState(false);
+  const [creatingTriggerKey, setCreatingTriggerKey] = useState<string | null>(null);
   const [pendingToggleId, setPendingToggleId] = useState<number | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
-  const genericTrigger = useMemo(() => triggers.find((trigger) => trigger.key === 'webhook.generic'), [triggers]);
+  const genericTrigger = useMemo(
+    () => triggers.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY),
+    [triggers],
+  );
+  const gmailTrigger = useMemo(
+    () => triggers.find((trigger) => trigger.key === GMAIL_TRIGGER_KEY),
+    [triggers],
+  );
+  const triggerOptions = useMemo(() => {
+    const options: TriggerOption[] = [];
+    if (genericTrigger) {
+      options.push({
+        key: WEBHOOK_TRIGGER_KEY,
+        title: genericTrigger.title ?? 'Generic Webhook',
+        description:
+          genericTrigger.description ?? 'Accept HTTP POST requests from any service.',
+      });
+    }
+    if (gmailTrigger) {
+      options.push({
+        key: GMAIL_TRIGGER_KEY,
+        title: gmailTrigger.title ?? 'Gmail – New Email',
+        description:
+          gmailTrigger.description ?? 'Poll a Gmail inbox for newly received emails.',
+      });
+    }
+    return options;
+  }, [genericTrigger, gmailTrigger]);
 
   useEffect(() => {
     if (!open) return;
@@ -79,9 +157,46 @@ export function WorkflowTriggerModal({
     });
   }, [workflowInputs, open]);
 
-  const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    if (!triggerOptions.length) {
+      setSelectedTriggerKey(WEBHOOK_TRIGGER_KEY);
+      return;
+    }
+    setSelectedTriggerKey((current) => {
+      if (triggerOptions.some((option) => option.key === current)) {
+        return current;
+      }
+      return triggerOptions[0].key;
+    });
+  }, [open, triggerOptions]);
 
-  const canCreate = Boolean(workflowId && genericTrigger);
+  useEffect(() => {
+    if (!open) return;
+    setGmailConfig(makeDefaultGmailConfig());
+  }, [open]);
+
+  const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
+  const gmailConnected = isIntegrationConnected('gmail');
+  const gmailConnectionId = parseProviderConnectionId(getConnectionId('gmail'));
+  const gmailIntegrationReady = gmailConnected && typeof gmailConnectionId === 'number';
+  const gmailToolNames = useMemo(() => {
+    const normalizedTools = Array.isArray(tools) ? tools : [];
+    const names = normalizedTools
+      .filter((tool) => {
+        const integration = tool.integration_type?.toLowerCase();
+        if (integration) {
+          return integration === 'gmail';
+        }
+        return tool.name.toLowerCase().includes('gmail');
+      })
+      .map((tool) => tool.name);
+    return names.length > 0 ? names : ['gmail_read_emails'];
+  }, [tools]);
+  const canCreateWebhook = Boolean(workflowId && genericTrigger && workflowInputEntries.length);
+  const canCreateGmail = Boolean(workflowId && gmailTrigger && gmailIntegrationReady);
 
   const handleCopy = async (value: string, label: string) => {
     if (!value) {
@@ -127,12 +242,51 @@ export function WorkflowTriggerModal({
     return bindings;
   };
 
-  const handleCreateSubscription = async () => {
+  const buildGmailProviderConfig = (): Record<string, unknown> => {
+    const providerConfig: Record<string, unknown> = {};
+    const labelIds = gmailConfig.labelIds
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (labelIds.length) {
+      providerConfig.label_ids = labelIds;
+    }
+    const query = gmailConfig.query.trim();
+    if (query) {
+      providerConfig.query = query;
+    }
+    const maxResultsValue = clampNumber(parseInt(gmailConfig.maxResults, 10) || 25, 1, 25);
+    const overlapMsValue = clampNumber(parseInt(gmailConfig.overlapMs, 10) || 300000, 0, 900000);
+    providerConfig.max_results = maxResultsValue;
+    providerConfig.overlap_ms = overlapMsValue;
+    return providerConfig;
+  };
+
+  const handleConnectGmail = async () => {
+    setIsConnectingGmail(true);
+    try {
+      const redirectUrl = await connectIntegration('gmail', { toolNames: gmailToolNames });
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+        return;
+      }
+      toast.error('Unable to start Gmail connection');
+    } catch (error) {
+      console.error('Failed to connect Gmail', error);
+      toast.error('Unable to start Gmail connection', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsConnectingGmail(false);
+    }
+  };
+
+  const handleCreateWebhookSubscription = async () => {
     if (!workflowId || !genericTrigger) {
       toast.error('Save the workflow before adding triggers');
       return;
     }
-    setIsCreating(true);
+    setCreatingTriggerKey(WEBHOOK_TRIGGER_KEY);
     try {
       const bindings = buildBindingsPayload();
       await createSubscription({
@@ -149,7 +303,38 @@ export function WorkflowTriggerModal({
         description: error instanceof Error ? error.message : 'Please try again.',
       });
     } finally {
-      setIsCreating(false);
+      setCreatingTriggerKey(null);
+    }
+  };
+
+  const handleCreateGmailSubscription = async () => {
+    if (!workflowId || !gmailTrigger) {
+      toast.error('Save the workflow before adding triggers');
+      return;
+    }
+    if (!gmailIntegrationReady || !gmailConnectionId) {
+      toast.error('Connect Gmail before creating this trigger');
+      return;
+    }
+    setCreatingTriggerKey(GMAIL_TRIGGER_KEY);
+    try {
+      const providerConfig = buildGmailProviderConfig();
+      await createSubscription({
+        workflow_id: workflowId,
+        trigger_key: gmailTrigger.key,
+        provider_connection_id: gmailConnectionId,
+        provider_config: providerConfig,
+        enabled: true,
+      });
+      toast.success('Gmail trigger created');
+      setActiveTab('subscriptions');
+    } catch (error) {
+      console.error('Failed to create Gmail trigger', error);
+      toast.error('Unable to create Gmail trigger', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setCreatingTriggerKey(null);
     }
   };
 
@@ -185,9 +370,53 @@ export function WorkflowTriggerModal({
   const renderSubscriptionCard = (subscription: TriggerSubscriptionResponse) => {
     const triggerMeta = triggers.find((trigger) => trigger.key === subscription.trigger_key);
     const title = triggerMeta?.title ?? subscription.trigger_key;
-    const absoluteWebhookUrl = subscription.webhook_url
-      ? buildAbsoluteWebhookUrl(subscription.webhook_url)
-      : null;
+    const isWebhookTrigger = subscription.trigger_key === WEBHOOK_TRIGGER_KEY;
+    const isGmailTrigger = subscription.trigger_key === GMAIL_TRIGGER_KEY;
+    const absoluteWebhookUrl =
+      isWebhookTrigger && subscription.webhook_url
+        ? buildAbsoluteWebhookUrl(subscription.webhook_url)
+        : null;
+    const renderGmailSummary = () => {
+      const providerConfig = (subscription.provider_config ?? {}) as Record<string, unknown>;
+      const labelIdsValue = providerConfig['label_ids'];
+      const labelIdsRaw = Array.isArray(labelIdsValue) ? labelIdsValue : undefined;
+      const labelSummary =
+        Array.isArray(labelIdsRaw) && labelIdsRaw.length > 0 ? labelIdsRaw.join(', ') : 'INBOX (default)';
+      const queryValue = providerConfig['query'];
+      const query =
+        typeof queryValue === 'string' && queryValue.trim().length ? queryValue.trim() : null;
+      const maxResultsRaw =
+        typeof providerConfig['max_results'] === 'number'
+          ? (providerConfig['max_results'] as number)
+          : Number(providerConfig['max_results']);
+      const maxResults = clampNumber(maxResultsRaw ?? 25, 1, 25);
+      const overlapRaw =
+        typeof providerConfig['overlap_ms'] === 'number'
+          ? (providerConfig['overlap_ms'] as number)
+          : Number(providerConfig['overlap_ms']);
+      const overlapMs = clampNumber(overlapRaw ?? 300000, 0, 900000);
+      const overlapMinutes = Math.max(0, Math.round(overlapMs / 60000));
+      return (
+        <div className="flex flex-col gap-2 rounded-md border border-dashed border-muted p-3 bg-muted/30 text-sm">
+          <div className="flex items-center gap-2 font-medium">
+            <Mail className="h-4 w-4" />
+            Gmail polling configuration
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Badge variant="outline">Labels: {labelSummary}</Badge>
+            <Badge variant="outline">Max {maxResults}/poll</Badge>
+            <Badge variant="outline">Overlap {overlapMinutes}m</Badge>
+          </div>
+          {query && <p className="text-xs text-muted-foreground">Query: {query}</p>}
+          <p className="text-xs text-muted-foreground">
+            Connection {subscription.provider_connection_id ? `#${subscription.provider_connection_id}` : 'not linked'}
+            {!gmailConnected && (
+              <span className="ml-1 text-destructive"> · Reconnect Gmail to keep polling</span>
+            )}
+          </p>
+        </div>
+      );
+    };
     return (
       <div
         key={subscription.subscription_id}
@@ -211,28 +440,29 @@ export function WorkflowTriggerModal({
           </div>
         </div>
 
-        {absoluteWebhookUrl ? (
-          <div className="flex flex-col gap-2 rounded-md border border-dashed border-muted p-3 bg-muted/30">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <LinkIcon className="h-4 w-4" />
-              Webhook URL
+        {isWebhookTrigger &&
+          (absoluteWebhookUrl ? (
+            <div className="flex flex-col gap-2 rounded-md border border-dashed border-muted p-3 bg-muted/30">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <LinkIcon className="h-4 w-4" />
+                Webhook URL
+              </div>
+              <code className="text-xs break-all">{absoluteWebhookUrl}</code>
+              <Button
+                variant="outline"
+                size="sm"
+                className="self-start"
+                onClick={() => handleCopy(absoluteWebhookUrl, 'Webhook URL')}
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Copy URL
+              </Button>
             </div>
-            <code className="text-xs break-all">{absoluteWebhookUrl}</code>
-            <Button
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={() => handleCopy(absoluteWebhookUrl, 'Webhook URL')}
-            >
-              <Copy className="mr-2 h-4 w-4" />
-              Copy URL
-            </Button>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Webhook URL will appear once generated.</p>
-        )}
+          ) : (
+            <p className="text-sm text-muted-foreground">Webhook URL will appear once generated.</p>
+          ))}
 
-        {subscription.secret_token && (
+        {isWebhookTrigger && subscription.secret_token && (
           <div className="flex flex-col gap-2 rounded-md border border-dashed border-muted p-3 bg-muted/30">
             <div className="flex items-center gap-2 text-sm font-medium">
               <KeyRound className="h-4 w-4" />
@@ -250,6 +480,8 @@ export function WorkflowTriggerModal({
             </Button>
           </div>
         )}
+
+        {isGmailTrigger && renderGmailSummary()}
 
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>Updated {new Date(subscription.updated_at).toLocaleString()}</span>
@@ -274,15 +506,14 @@ export function WorkflowTriggerModal({
     );
   };
 
-  const renderCreateForm = () => {
-    if (!workflowId) {
+  const renderWebhookForm = () => {
+    if (!genericTrigger) {
       return (
-        <div className="flex h-32 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-          Save the workflow to attach triggers.
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          Generic webhook trigger metadata is unavailable.
         </div>
       );
     }
-
     if (!workflowInputEntries.length) {
       return (
         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground space-y-2">
@@ -291,9 +522,9 @@ export function WorkflowTriggerModal({
         </div>
       );
     }
-
+    const isCreatingWebhook = creatingTriggerKey === WEBHOOK_TRIGGER_KEY;
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div className="space-y-2">
           <h4 className="text-sm font-medium">Input bindings</h4>
           <p className="text-sm text-muted-foreground">
@@ -371,10 +602,11 @@ export function WorkflowTriggerModal({
           })}
         </div>
         <Button
-          onClick={handleCreateSubscription}
-          disabled={!canCreate || isCreating}
+          type="button"
+          onClick={handleCreateWebhookSubscription}
+          disabled={!canCreateWebhook || isCreatingWebhook}
         >
-          {isCreating ? (
+          {isCreatingWebhook ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Creating...
@@ -390,20 +622,219 @@ export function WorkflowTriggerModal({
     );
   };
 
+  const renderGmailForm = () => {
+    if (!gmailTrigger) {
+      return (
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          Gmail trigger metadata is unavailable.
+        </div>
+      );
+    }
+    const isCreatingGmail = creatingTriggerKey === GMAIL_TRIGGER_KEY;
+    return (
+      <div className="space-y-5">
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-medium">Gmail connection</p>
+              <p className="text-xs text-muted-foreground">
+                {gmailIntegrationReady ? 'We will reuse your existing Gmail OAuth connection.' : 'Connect Gmail with read access so Seer can poll for messages.'}
+              </p>
+            </div>
+            <Badge
+              variant="secondary"
+              className={cn(
+                'text-[11px] px-2',
+                gmailIntegrationReady
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+              )}
+            >
+              {gmailIntegrationReady ? 'Connected' : 'Action required'}
+            </Badge>
+          </div>
+          {isIntegrationsLoading ? (
+            <div className="flex items-center text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Checking Gmail connection...
+            </div>
+          ) : gmailIntegrationReady ? (
+            <p className="text-xs text-muted-foreground">
+              Linked connection #{gmailConnectionId}. You can update this under Integrations.
+            </p>
+          ) : (
+            <Button
+              type="button"
+              onClick={handleConnectGmail}
+              disabled={isConnectingGmail}
+              className="w-fit"
+            >
+              {isConnectingGmail ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Redirecting...
+                </>
+              ) : (
+                <>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Connect Gmail
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Label filters</Label>
+            <Input
+              value={gmailConfig.labelIds}
+              placeholder="INBOX, UNREAD"
+              onChange={(event) =>
+                setGmailConfig((prev) => ({
+                  ...prev,
+                  labelIds: event.target.value,
+                }))
+              }
+            />
+            <p className="text-xs text-muted-foreground">Comma-separated Gmail label IDs (defaults to INBOX).</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Search query</Label>
+            <Input
+              value={gmailConfig.query}
+              placeholder="from:vip@example.com is:unread"
+              onChange={(event) =>
+                setGmailConfig((prev) => ({
+                  ...prev,
+                  query: event.target.value,
+                }))
+              }
+            />
+            <p className="text-xs text-muted-foreground">Optional Gmail query appended to the poll watermark.</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Max results per poll</Label>
+            <Input
+              type="number"
+              min={1}
+              max={25}
+              value={gmailConfig.maxResults}
+              onChange={(event) =>
+                setGmailConfig((prev) => ({
+                  ...prev,
+                  maxResults: event.target.value,
+                }))
+              }
+            />
+            <p className="text-xs text-muted-foreground">Between 1 and 25 messages per cycle.</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Overlap window (ms)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={900000}
+              step={1000}
+              value={gmailConfig.overlapMs}
+              onChange={(event) =>
+                setGmailConfig((prev) => ({
+                  ...prev,
+                  overlapMs: event.target.value,
+                }))
+              }
+            />
+            <p className="text-xs text-muted-foreground">Re-read recent emails for dedupe protection.</p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          onClick={handleCreateGmailSubscription}
+          disabled={!canCreateGmail || isCreatingGmail}
+        >
+          {isCreatingGmail ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Create Gmail Trigger
+            </>
+          )}
+        </Button>
+      </div>
+    );
+  };
+
+  const renderCreateForm = () => {
+    if (!workflowId) {
+      return (
+        <div className="flex h-32 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+          Save the workflow to attach triggers.
+        </div>
+      );
+    }
+
+    if (!triggerOptions.length) {
+      return (
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          No trigger types are available yet. Check back soon.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Trigger type</h4>
+          <p className="text-sm text-muted-foreground">
+            Choose how {workflowName ? <span className="font-semibold">{workflowName}</span> : 'this workflow'} should start automatically.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {triggerOptions.map((option) => {
+            const isActive = option.key === selectedTriggerKey;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                className={cn(
+                  'rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  isActive ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/40',
+                )}
+                onClick={() => setSelectedTriggerKey(option.key)}
+              >
+                <p className="font-medium">{option.title}</p>
+                {option.description && (
+                  <p className="mt-1 text-sm text-muted-foreground">{option.description}</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedTriggerKey === WEBHOOK_TRIGGER_KEY && renderWebhookForm()}
+        {selectedTriggerKey === GMAIL_TRIGGER_KEY && renderGmailForm()}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Workflow Triggers</DialogTitle>
           <DialogDescription>
-            Attach webhook triggers to <span className="font-semibold">{workflowName || 'this workflow'}</span> so runs start automatically from external events.
+            Attach webhook or Gmail triggers to{' '}
+            <span className="font-semibold">{workflowName || 'this workflow'}</span> so runs start automatically from external events.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'subscriptions' | 'create')}>
           <TabsList className="grid grid-cols-2">
             <TabsTrigger value="subscriptions">Existing triggers</TabsTrigger>
-            <TabsTrigger value="create">Add webhook trigger</TabsTrigger>
+            <TabsTrigger value="create">Add trigger</TabsTrigger>
           </TabsList>
           <TabsContent value="subscriptions">
             <ScrollArea className="mt-4 h-[420px] pr-4">
@@ -415,7 +846,7 @@ export function WorkflowTriggerModal({
                   </div>
                 ) : subscriptions.length === 0 ? (
                   <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                    No triggers yet. Create one to generate a webhook URL and signing secret.
+                    No triggers yet. Create a webhook or Gmail trigger to run this workflow automatically.
                   </div>
                 ) : (
                   subscriptions.map((subscription) => renderSubscriptionCard(subscription))

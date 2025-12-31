@@ -8,6 +8,9 @@ export interface TriggerDescriptor {
   description?: string | null;
   event_schema: JsonObject;
   filter_schema?: JsonObject | null;
+  config_schema?: JsonObject | null;
+  sample_event?: JsonObject | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface TriggerCatalogResponse {
