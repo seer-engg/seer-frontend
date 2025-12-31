@@ -51,6 +51,10 @@ export default function BlockConfiguration() {
     return workflow?.graph?.nodes || [];
   }, [workflow]);
 
+  const allEdges = useMemo(() => {
+    return workflow?.graph?.edges || [];
+  }, [workflow]);
+
   // Update workflow mutation
   const updateMutation = useMutation({
     mutationFn: async (updates: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[] }) => {
@@ -177,6 +181,7 @@ export default function BlockConfiguration() {
             node={node}
             onUpdate={handleNodeUpdate}
             allNodes={allNodes}
+            allEdges={allEdges}
             autoSave={false}
           />
         </div>

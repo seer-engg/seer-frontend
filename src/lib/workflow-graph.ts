@@ -1,6 +1,6 @@
 import type { Node } from '@xyflow/react';
 
-import { getNodeAlias } from '@/components/workflows/block-config/helpers/nodeAlias';
+import { getNodeAlias, sanitizeAlias } from '@/components/workflows/block-config/helpers/nodeAlias';
 import type { WorkflowEdge, WorkflowNodeData } from '@/components/workflows/types';
 import type {
   InputDef,
@@ -394,6 +394,13 @@ function findNextNodeId(
 }
 
 function deriveOutName(node: FlowNode): string | undefined {
+  const config = node.data?.config ?? {};
+  if (typeof config.out === 'string') {
+    const sanitized = sanitizeAlias(config.out);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
   const alias = getNodeAlias(node);
   return alias || undefined;
 }
@@ -612,6 +619,7 @@ function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
         config: {
           tool_name: specNode.tool,
           params: convertTemplateStrings(specNode.in ?? {}, 'toBuilder'),
+          ...(specNode.out ? { out: specNode.out } : {}),
           ...(specNode.expect_output?.mode === 'json' &&
           specNode.expect_output.schema &&
           'schema' in specNode.expect_output.schema
@@ -627,6 +635,7 @@ function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
           model: specNode.model,
           user_prompt: convertTemplateString(specNode.prompt, 'toBuilder'),
           input_refs: convertTemplateStrings(specNode.in ?? {}, 'toBuilder'),
+          ...(specNode.out ? { out: specNode.out } : {}),
           output_schema:
             specNode.output?.mode === 'json' && specNode.output.schema && 'schema' in specNode.output.schema
               ? specNode.output.schema.schema
@@ -641,6 +650,7 @@ function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
         label: specNode.id,
         config: {
           condition: convertTemplateString(specNode.condition, 'toBuilder'),
+          ...(specNode.out ? { out: specNode.out } : {}),
         },
       };
     case 'for_each':
@@ -652,6 +662,7 @@ function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
           array_variable: convertTemplateString(specNode.items, 'toBuilder'),
           item_var: specNode.item_var,
           index_var: specNode.index_var,
+          ...(specNode.out ? { out: specNode.out } : {}),
         },
       };
     default:
