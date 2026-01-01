@@ -612,13 +612,14 @@ function mapSpecNodeType(specType: WorkflowNode['type']): WorkflowNodeData['type
 
 function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
   switch (specNode.type) {
-    case 'tool':
+    case 'tool': {
+      const toolInputs = getSpecNodeInputs(specNode);
       return {
         type: 'tool',
         label: specNode.id,
         config: {
           tool_name: specNode.tool,
-          params: convertTemplateStrings(specNode.in ?? {}, 'toBuilder'),
+          params: convertTemplateStrings(toolInputs ?? {}, 'toBuilder'),
           ...(specNode.out ? { out: specNode.out } : {}),
           ...(specNode.expect_output?.mode === 'json' &&
           specNode.expect_output.schema &&
@@ -627,14 +628,16 @@ function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
             : {}),
         },
       };
-    case 'llm':
+    }
+    case 'llm': {
+      const llmInputs = getSpecNodeInputs(specNode);
       return {
         type: 'llm',
         label: specNode.id,
         config: {
           model: specNode.model,
           user_prompt: convertTemplateString(specNode.prompt, 'toBuilder'),
-          input_refs: convertTemplateStrings(specNode.in ?? {}, 'toBuilder'),
+          input_refs: convertTemplateStrings(llmInputs ?? {}, 'toBuilder'),
           ...(specNode.out ? { out: specNode.out } : {}),
           output_schema:
             specNode.output?.mode === 'json' && specNode.output.schema && 'schema' in specNode.output.schema
@@ -644,6 +647,7 @@ function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
           max_tokens: specNode.max_tokens,
         },
       };
+    }
     case 'if':
       return {
         type: 'if_else',
@@ -704,6 +708,14 @@ function convertTemplateString(value: string, direction: TemplateDirection = 'to
     return value.replace(MUSTACHE_RE, (_, expr: string) => `\${${expr.trim()}}`);
   }
   return value.replace(DOLLAR_RE, (_, expr: string) => `{{${expr.trim()}}}`);
+}
+
+function getSpecNodeInputs(specNode: WorkflowNode): Record<string, JsonValue> | undefined {
+  const rawInputs = (specNode as any).in ?? (specNode as any).in_;
+  if (isRecord(rawInputs)) {
+    return rawInputs as Record<string, JsonValue>;
+  }
+  return undefined;
 }
 
 
