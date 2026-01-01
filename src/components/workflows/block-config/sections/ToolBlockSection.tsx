@@ -1,4 +1,4 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -48,6 +48,21 @@ export function ToolBlockSection({
     showAutocomplete,
   } = templateAutocomplete;
 
+  useEffect(() => {
+    if (!toolSchema?.output_schema) {
+      return;
+    }
+    setConfig(prev => {
+      if (prev.output_schema) {
+        return prev;
+      }
+      return {
+        ...prev,
+        output_schema: toolSchema.output_schema,
+      };
+    });
+  }, [toolSchema?.output_schema, setConfig]);
+
   const updateParams = (updater: (prev: Record<string, any>) => Record<string, any>) => {
     setConfig(prev => ({
       ...prev,
@@ -60,6 +75,20 @@ export function ToolBlockSection({
       ...prev,
       [paramName]: nextValue,
     }));
+  };
+
+  const parseNumericInput = (rawValue: string, type: 'integer' | 'number') => {
+    const trimmed = rawValue.trim();
+    if (trimmed === '') {
+      return '';
+    }
+    const integerPattern = /^-?\d+$/;
+    const numberPattern = /^-?\d+(\.\d+)?$/;
+    const isNumeric = type === 'integer' ? integerPattern.test(trimmed) : numberPattern.test(trimmed);
+    if (isNumeric) {
+      return type === 'integer' ? parseInt(trimmed, 10) : parseFloat(trimmed);
+    }
+    return rawValue;
   };
 
   const getAutocompleteContext = (
@@ -182,21 +211,48 @@ export function ToolBlockSection({
               </Label>
             </div>
           ) : paramType === 'integer' || paramType === 'number' ? (
-            <Input
-              id={inputId}
-              type="number"
-              value={paramValue ?? paramDef.default ?? ''}
-              onChange={e => {
-                const value =
-                  paramType === 'integer' ? parseInt(e.target.value) || 0 : parseFloat(e.target.value) || 0;
-                handlePrimitiveChange(paramName, value);
-              }}
-              min={paramDef.minimum}
-              max={paramDef.maximum}
-              step={paramType === 'integer' ? 1 : 0.1}
-              placeholder={hasDefault ? String(paramDef.default) : ''}
-              className="text-xs"
-            />
+            <>
+              <Input
+                id={inputId}
+                type="text"
+                inputMode={paramType === 'integer' ? 'numeric' : 'decimal'}
+                value={
+                  typeof paramValue === 'number' || typeof paramValue === 'boolean'
+                    ? String(paramValue)
+                    : paramValue ?? (paramDef.default !== undefined ? String(paramDef.default) : '')
+                }
+                onChange={e => {
+                  const { value } = e.target;
+                  const parsedValue = parseNumericInput(value, paramType);
+                  handlePrimitiveChange(paramName, parsedValue as string | number);
+                  const context = getAutocompleteContext(
+                    inputId,
+                    e.target,
+                    value,
+                    newValue =>
+                      handlePrimitiveChange(paramName, parseNumericInput(newValue, paramType) as string | number)
+                  );
+                  checkForAutocomplete(value, e.target.selectionStart || 0, context);
+                }}
+                onKeyDown={handleKeyDown}
+                onBlur={() => {
+                  setTimeout(() => closeAutocomplete(), 200);
+                }}
+                placeholder={hasDefault ? String(paramDef.default) : ''}
+                className="text-xs"
+                title={
+                  paramDef.minimum !== undefined || paramDef.maximum !== undefined
+                    ? `Range: ${paramDef.minimum ?? '-∞'} to ${paramDef.maximum ?? '∞'}`
+                    : undefined
+                }
+              />
+              <VariableAutocompleteDropdown
+                visible={showDropdown}
+                variables={filteredVariables}
+                selectedIndex={selectedIndex}
+                onSelect={insertVariable}
+              />
+            </>
           ) : paramType === 'array' ? (
             <>
               <Textarea

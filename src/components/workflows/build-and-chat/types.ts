@@ -11,6 +11,7 @@ export interface Tool {
   slug?: string;
   provider?: string;
   integration_type?: string;
+  output_schema?: Record<string, any> | null;
 }
 
 export interface BuiltInBlock {
@@ -97,5 +98,8 @@ export interface BuildAndChatPanelProps {
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   functionBlocks?: BuiltInBlock[];
+  onTriggerClick?: () => void;
+  onRunClick?: () => void;
+  isExecuting?: boolean;
 }
 

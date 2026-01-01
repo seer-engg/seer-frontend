@@ -6,6 +6,7 @@ import { Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { JsonViewer } from '@textea/json-viewer';
 import type { ToolCall } from './message-utils';
+import { extractRelevantContent } from '@/utils/json-viewer-utils';
 
 interface ToolCallViewProps {
   toolCalls: ToolCall[];
@@ -76,10 +77,9 @@ export function ToolCallView({
               <div className="mb-1.5 text-xs font-medium text-muted-foreground">
                 Arguments
               </div>
-              <div className="rounded border bg-background/50 p-2 overflow-auto">
+              <div className="rounded border bg-background/50 p-2 overflow-auto text-left [&>*]:text-left">
                 <JsonViewer
-                  value={parsedArguments}
-                  rootName="arguments"
+                  value={extractRelevantContent(parsedArguments)}
                   theme="auto"
                   displayDataTypes={false}
                   displayObjectSize={false}

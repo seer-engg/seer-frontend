@@ -316,7 +316,7 @@ export async function listConnectedAccounts(params: {
   authConfigIds?: string[];
 }): Promise<ListConnectedAccountsResponse> {
   // Backend uses authenticated user from JWT token, so user_id query parameter is not needed
-  const endpoint = `/api/integrations`;
+  const endpoint = `/api/integrations/`;
   const response = await backendApiClient.request<{ items: ConnectedAccount[] }>(endpoint);
 
   // Filter by toolkitSlugs if provided

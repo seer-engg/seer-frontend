@@ -4,6 +4,12 @@
 
 **URL**: https://lovable.dev/projects/bf0920a9-8c3d-4d3e-984c-d2700c32fb05
 
+## Core Architecture Principle
+
+**If workflows and agents are fundamentally different at the UI layer, they should be different at the API layer.**
+
+This principle guides our component design: workflows (deterministic, node-based execution with DAG visualization) and agents (dynamic, message-based conversations with reasoning) have distinct mental models, data structures, and user needs. Rather than forcing unification through shared components or transformation layers, we maintain separate UI components and routes that align with their fundamental differences. This reduces complexity, improves maintainability, and ensures each system can evolve independently.
+
 ## How can I edit this code?
 
 There are several ways of editing your application.

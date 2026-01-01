@@ -10,12 +10,13 @@ export const ForLoopBlockNode = memo(function ForLoopBlockNode(
   props: NodeProps<WorkflowNodeData>
 ) {
   const config = props.data.config || {};
-  const arrayMode: 'variable' | 'literal' =
-    (config.array_mode as 'variable' | 'literal') ||
-    (Array.isArray(config.array_literal) && config.array_literal.length > 0 ? 'literal' : 'variable');
   const arrayVariable = config.array_variable || config.array_var || 'items';
   const literalItems = Array.isArray(config.array_literal) ? config.array_literal : [];
   const literalPreview = literalItems.slice(0, 3).join(', ');
+  const hasLegacyLiteral = literalItems.length > 0;
+  const sourceLabel = hasLegacyLiteral
+    ? `${literalItems.length} item${literalItems.length === 1 ? '' : 's'}`
+    : arrayVariable;
   const itemVar = config.item_var || 'item';
 
   return (
@@ -30,13 +31,13 @@ export const ForLoopBlockNode = memo(function ForLoopBlockNode(
     >
       <div className="space-y-1 text-xs text-muted-foreground">
         <p>
-          Source:{' '}
-          {arrayMode === 'variable'
-            ? arrayVariable
-            : `${literalItems.length} item${literalItems.length === 1 ? '' : 's'}`}
+          Source: {sourceLabel}
         </p>
-        {arrayMode === 'literal' && literalItems.length > 0 && (
-          <p className="truncate text-[11px]">{literalPreview}{literalItems.length > 3 ? '…' : ''}</p>
+        {hasLegacyLiteral && (
+          <p className="truncate text-[11px]">
+            Legacy list: {literalPreview}
+            {literalItems.length > 3 ? '…' : ''}
+          </p>
         )}
         <p>Item variable: <span className="font-medium text-foreground">{itemVar}</span></p>
       </div>

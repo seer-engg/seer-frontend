@@ -13,6 +13,7 @@ export interface ResourcePickerConfig {
 export interface ToolMetadata {
   name: string;
   description: string;
+  output_schema?: Record<string, any> | null;
   parameters?: {
     properties?: Record<string, any>;
     required?: string[];

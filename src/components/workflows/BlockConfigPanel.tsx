@@ -22,13 +22,14 @@ import {
   InputBlockSection,
   ToolMetadata,
 } from './block-config';
-import { WorkflowNodeData } from './types';
+import { WorkflowEdge, WorkflowNodeData } from './types';
 import { backendApiClient } from '@/lib/api-client';
 
 interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;
   onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
   allNodes?: Node<WorkflowNodeData>[]; // All nodes in workflow for reference dropdown
+  allEdges?: WorkflowEdge[];
   autoSave?: boolean; // Enable auto-save on unmount (default: true for backward compatibility)
   variant?: 'panel' | 'inline';
   liveUpdate?: boolean;
@@ -39,6 +40,7 @@ export function BlockConfigPanel({
   node,
   onUpdate,
   allNodes = [],
+  allEdges = [],
   autoSave = true,
   variant = 'panel',
   liveUpdate = false,
@@ -89,8 +91,8 @@ export function BlockConfigPanel({
   });
 
   const availableVariables = useMemo(
-    () => collectAvailableVariables(allNodes, node),
-    [allNodes, node]
+    () => collectAvailableVariables(allNodes, allEdges, node),
+    [allNodes, allEdges, node]
   );
   const templateAutocomplete = useTemplateAutocomplete(availableVariables);
 
@@ -341,9 +343,21 @@ export function BlockConfigPanel({
           />
         );
       case 'if_else':
-        return <IfElseBlockSection config={config} setConfig={setConfig} />;
+        return (
+          <IfElseBlockSection
+            config={config}
+            setConfig={setConfig}
+            templateAutocomplete={templateAutocomplete}
+          />
+        );
       case 'for_loop':
-        return <ForLoopBlockSection config={config} setConfig={setConfig} />;
+        return (
+          <ForLoopBlockSection
+            config={config}
+            setConfig={setConfig}
+            templateAutocomplete={templateAutocomplete}
+          />
+        );
       case 'input':
         return <InputBlockSection config={config} setConfig={setConfig} />;
     }

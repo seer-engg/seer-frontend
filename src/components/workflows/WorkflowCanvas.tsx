@@ -251,9 +251,10 @@ export function WorkflowCanvas({
   const contextValue = useMemo(
     () => ({
       nodes,
+      edges,
       updateNodeData,
     }),
-    [nodes, updateNodeData],
+    [nodes, edges, updateNodeData],
   );
 
   return (

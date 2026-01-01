@@ -1,9 +1,10 @@
 import { Node } from '@xyflow/react';
 import { createContext, useContext } from 'react';
-import { WorkflowNodeData } from './types';
+import { WorkflowEdge, WorkflowNodeData } from './types';
 
 export interface WorkflowCanvasContextValue {
   nodes: Node<WorkflowNodeData>[];
+  edges: WorkflowEdge[];
   updateNodeData: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
 }
 
