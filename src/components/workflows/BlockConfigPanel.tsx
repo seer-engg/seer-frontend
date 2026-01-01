@@ -345,7 +345,13 @@ export function BlockConfigPanel({
       case 'if_else':
         return <IfElseBlockSection config={config} setConfig={setConfig} />;
       case 'for_loop':
-        return <ForLoopBlockSection config={config} setConfig={setConfig} />;
+        return (
+          <ForLoopBlockSection
+            config={config}
+            setConfig={setConfig}
+            templateAutocomplete={templateAutocomplete}
+          />
+        );
       case 'input':
         return <InputBlockSection config={config} setConfig={setConfig} />;
     }

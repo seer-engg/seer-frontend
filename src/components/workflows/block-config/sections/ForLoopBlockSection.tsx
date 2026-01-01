@@ -1,82 +1,108 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useRef, type Dispatch, type SetStateAction } from 'react';
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+
+import { AutocompleteContext } from '../hooks/useTemplateAutocomplete';
+import { TemplateAutocompleteControls } from '../types';
+import { VariableAutocompleteDropdown } from '../widgets/VariableAutocompleteDropdown';
 
 interface ForLoopBlockSectionProps {
   config: Record<string, any>;
   setConfig: Dispatch<SetStateAction<Record<string, any>>>;
+  templateAutocomplete: TemplateAutocompleteControls;
 }
 
-export function ForLoopBlockSection({ config, setConfig }: ForLoopBlockSectionProps) {
-  const arrayMode: 'variable' | 'literal' =
-    (config.array_mode as 'variable' | 'literal') ||
-    (Array.isArray(config.array_literal) && config.array_literal.length > 0 ? 'literal' : 'variable');
+export function ForLoopBlockSection({
+  config,
+  setConfig,
+  templateAutocomplete,
+}: ForLoopBlockSectionProps) {
   const arrayVariable = config.array_variable || config.array_var || 'items';
-  const literalValue = Array.isArray(config.array_literal) ? config.array_literal.join('\n') : '';
+  const legacyLiteralItems = Array.isArray(config.array_literal) ? config.array_literal : [];
+
+  const arrayVariableRef = useRef<HTMLInputElement>(null);
+
+  const {
+    autocompleteContext,
+    checkForAutocomplete,
+    closeAutocomplete,
+    filteredVariables,
+    handleKeyDown,
+    insertVariable,
+    selectedIndex,
+    setAutocompleteContext,
+    showAutocomplete,
+  } = templateAutocomplete;
+
+  const inputId = 'for-loop-array-variable';
+  const dropdownVisible = showAutocomplete && autocompleteContext?.inputId === inputId;
+
+  const persistArrayVariable = (value: string) => {
+    setConfig(prev => {
+      const next: Record<string, any> = { ...prev, array_variable: value, array_var: undefined };
+      delete next.array_literal;
+      delete next.array_mode;
+      return next;
+    });
+  };
+
+  const handleArrayVariableChange = (value: string, cursorPosition: number) => {
+    persistArrayVariable(value);
+    const context: AutocompleteContext = {
+      inputId,
+      ref: arrayVariableRef,
+      value,
+      onChange: persistArrayVariable,
+    };
+    checkForAutocomplete(value, cursorPosition, context);
+  };
 
   return (
     <div className="space-y-4">
-      <div>
-        <Label>Array Source</Label>
-        <Select
-          value={arrayMode}
-          onValueChange={(value: 'variable' | 'literal') =>
-            setConfig(prev => ({ ...prev, array_mode: value }))
+      <div className="relative">
+        <Label htmlFor={inputId}>Array source variable</Label>
+        <Input
+          ref={arrayVariableRef}
+          id={inputId}
+          value={arrayVariable}
+          onChange={e =>
+            handleArrayVariableChange(
+              e.target.value,
+              e.target.selectionStart ?? e.target.value.length
+            )
           }
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Choose array source" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="variable">Variable reference</SelectItem>
-            <SelectItem value="literal">Manual list</SelectItem>
-          </SelectContent>
-        </Select>
+          onFocus={() =>
+            setAutocompleteContext({
+              inputId,
+              ref: arrayVariableRef,
+              value: arrayVariable,
+              onChange: persistArrayVariable,
+            })
+          }
+          onKeyDown={handleKeyDown}
+          onBlur={() => {
+            setTimeout(() => closeAutocomplete(), 200);
+          }}
+          placeholder="e.g., {{blockAlias.output}}"
+          className="font-mono"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Reference an array-producing output or alias using {'{{variable}}'} syntax.
+        </p>
+        <VariableAutocompleteDropdown
+          visible={dropdownVisible}
+          variables={filteredVariables}
+          selectedIndex={selectedIndex}
+          onSelect={insertVariable}
+        />
       </div>
 
-      {arrayMode === 'variable' ? (
-        <div>
-          <Label htmlFor="array-var">Variable name</Label>
-          <Input
-            id="array-var"
-            value={arrayVariable}
-            onChange={e =>
-              setConfig(prev => ({ ...prev, array_variable: e.target.value, array_var: undefined }))
-            }
-            placeholder="e.g., emails or blockAlias.output"
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Provide the variable or alias (no {'{{ }}'}) that resolves to an array.
-          </p>
-        </div>
-      ) : (
-        <div>
-          <Label htmlFor="array-literal">Manual items</Label>
-          <Textarea
-            id="array-literal"
-            value={literalValue}
-            onChange={e => {
-              const items = e.target.value
-                .split('\n')
-                .map(item => item.trim())
-                .filter(Boolean);
-              setConfig(prev => ({ ...prev, array_literal: items }));
-            }}
-            placeholder={'One item per line\nItem 2\nItem 3'}
-            rows={4}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Each non-empty line becomes an item in the loop.
-          </p>
+      {legacyLiteralItems.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          Legacy manual lists ({legacyLiteralItems.length} item
+          {legacyLiteralItems.length === 1 ? '' : 's'}) are read-only. Point this loop to a variable
+          above to migrate.
         </div>
       )}
 
