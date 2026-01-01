@@ -1,11 +1,14 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Search,
-  Activity,
   Settings,
   LogOut,
   Workflow,
+  Menu,
+  FileText,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -15,11 +18,17 @@ import {
   Tooltip,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useClerk, useUser } from "@clerk/clerk-react";
+import { useState } from "react";
 
 const primaryNav = [
-  { name: "Workflows", href: "/workflows", icon: Workflow },
-  { name: "Traces", href: "/traces", icon: Activity }
+  { name: "Canvas", href: "/workflows", icon: Workflow },
+] as const;
+
+const tracesNavChildren = [
+  { name: "Workflows", href: "/workflows/traces", pattern: /^\/workflows\/traces/ },
+  { name: "Agents", href: "/agents/traces", pattern: /^\/agents\/traces/ },
 ] as const;
 
 const secondaryNav = [
@@ -32,20 +41,38 @@ type NavItemType = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
+type TracesNavChildType = {
+  name: string;
+  href: string;
+  pattern: RegExp;
+};
+
 interface SeerSidebarProps {
   collapsed?: boolean;
   forceCollapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: SeerSidebarProps) {
+export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed, onCollapsedChange }: SeerSidebarProps) {
   const collapsed = forceCollapsed ? true : (externalCollapsed ?? false);
   const { user } = useUser();
   const { signOut } = useClerk();
   const location = useLocation();
+  const navigate = useNavigate();
   const userEmail =
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
     "";
+
+  // Check if any traces submenu item is active
+  const isTracesActive = tracesNavChildren.some(child => child.pattern.test(location.pathname));
+  const [tracesOpen, setTracesOpen] = useState(isTracesActive);
+
+  const handleToggle = () => {
+    if (onCollapsedChange) {
+      onCollapsedChange(!collapsed);
+    }
+  };
 
   const NavItem = ({ item, isActive }: { item: NavItemType; isActive: boolean }) => {
     return (
@@ -75,9 +102,93 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: Se
     );
   };
 
-  // When collapsed, render nothing (0 width) - controlled by hamburger menu in top bar
+  const TracesNavItem = () => {
+    const handleWorkflowTracesClick = () => {
+      navigate('/workflows/traces');
+    };
+
+    return (
+      <Collapsible open={tracesOpen} onOpenChange={setTracesOpen}>
+        <CollapsibleTrigger
+          className={cn(
+            "w-full flex items-center justify-between gap-3 min-w-0 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left",
+            isTracesActive
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+          )}
+        >
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <FileText className="h-4 w-4 shrink-0" />
+            <motion.span
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              className="whitespace-nowrap truncate min-w-0 flex-1"
+            >
+              Traces
+            </motion.span>
+          </div>
+          {tracesOpen ? (
+            <ChevronDown className="h-4 w-4 shrink-0" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0" />
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="ml-7 mt-1 space-y-1">
+            {tracesNavChildren.map((child) => {
+              const isChildActive = child.pattern.test(location.pathname);
+              const isWorkflowTraces = child.name === "Workflows";
+              
+              return (
+                <button
+                  key={child.name}
+                  onClick={() => {
+                    if (isWorkflowTraces) {
+                      handleWorkflowTracesClick();
+                    } else {
+                      navigate(child.href);
+                    }
+                  }}
+                  className={cn(
+                    "w-full flex items-center justify-start gap-2 min-w-0 py-2 px-3 rounded-md text-sm transition-all duration-200 text-left",
+                    isChildActive
+                      ? "bg-accent text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  )}
+                >
+                  <span className="whitespace-nowrap truncate">{child.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
+
+  // When collapsed, render minimal sidebar with just hamburger button
   if (collapsed) {
-    return null;
+    return (
+      <motion.aside
+        initial={false}
+        animate={{ width: 56 }}
+        transition={{ duration: 0.2, ease: "easeInOut" }}
+        className="fixed inset-y-0 left-0 z-10 h-screen bg-sidebar border-r border-sidebar-border flex flex-col"
+      >
+        <div className="h-14 flex items-center justify-center border-b border-sidebar-border">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleToggle}
+            title="Expand sidebar"
+            className="h-10 w-10"
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
+        </div>
+      </motion.aside>
+    );
   }
 
   return (
@@ -88,7 +199,7 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: Se
       className="fixed inset-y-0 left-0 z-10 h-screen bg-sidebar border-r border-sidebar-border flex flex-col"
     >
       {/* Logo */}
-      <div className="h-14 flex items-center px-3 border-b border-sidebar-border">
+      <div className="h-14 flex items-center justify-between px-3 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-seer to-indigo-500 flex items-center justify-center">
             <Search className="h-4 w-4 text-white" />
@@ -101,6 +212,15 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: Se
             Seer
           </motion.span>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleToggle}
+          title="Collapse sidebar"
+          className="h-10 w-10"
+        >
+          <Menu className="w-4 h-4" />
+        </Button>
       </div>
 
       {/* Primary Navigation */}
@@ -112,6 +232,7 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: Se
             isActive={location.pathname === item.href || location.pathname.startsWith(item.href + '/')}
           />
         ))}
+        <TracesNavItem />
       </nav>
 
       {/* Secondary Navigation */}

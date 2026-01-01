@@ -5,7 +5,7 @@
  * - Simple mode: Table-based form for non-technical users
  * - Advanced mode: JSON editor for technical users
  */
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,6 +63,17 @@ function jsonSchemaTypeToPydanticType(jsonType: string): string {
   return typeMap[jsonType] || 'any';
 }
 
+const DEFAULT_SCHEMA = {
+  type: 'object',
+  properties: {},
+};
+
+const createEmptyField = (): FieldDefinition => ({
+  name: '',
+  type: 'any',
+  description: '',
+});
+
 // Convert JSON schema to field definitions
 function schemaToFields(schema: any): FieldDefinition[] {
   if (!schema || !schema.properties) {
@@ -77,7 +88,10 @@ function schemaToFields(schema: any): FieldDefinition[] {
 }
 
 // Convert field definitions to JSON schema
-function fieldsToSchema(fields: FieldDefinition[]): any {
+function fieldsToSchema(
+  fields: FieldDefinition[],
+  options?: { title?: string; description?: string },
+): any {
   const properties: Record<string, any> = {};
   
   fields.forEach((field) => {
@@ -93,43 +107,73 @@ function fieldsToSchema(fields: FieldDefinition[]): any {
     }
   });
   
-  return {
+  const schema: Record<string, any> = {
     type: 'object',
     properties,
   };
+  
+  if (options?.title && options.title.trim()) {
+    schema.title = options.title.trim();
+  }
+  
+  if (options?.description && options.description.trim()) {
+    schema.description = options.description.trim();
+  }
+  
+  return schema;
 }
 
 export function StructuredOutputEditor({ value, onChange }: StructuredOutputEditorProps) {
   const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
-  const [fields, setFields] = useState<FieldDefinition[]>([]);
-  const [jsonValue, setJsonValue] = useState('');
+  const [fields, setFields] = useState<FieldDefinition[]>([createEmptyField()]);
+  const [jsonValue, setJsonValue] = useState(JSON.stringify(DEFAULT_SCHEMA, null, 2));
+  const [schemaTitle, setSchemaTitle] = useState('');
+  const [schemaDescription, setSchemaDescription] = useState('');
+  const lastEmittedSchemaRef = useRef<string>('');
 
-  // Initialize fields from value
-  useEffect(() => {
-    if (value && Object.keys(value).length > 0) {
-      const parsedFields = schemaToFields(value);
-      if (parsedFields.length > 0) {
-        setFields(parsedFields);
-      } else {
-        setFields([{ name: '', type: 'any', description: '' }]);
-      }
-      setJsonValue(JSON.stringify(value, null, 2));
-    } else {
-      setFields([{ name: '', type: 'any', description: '' }]);
-      const defaultSchema = { type: 'object', properties: {} };
-      setJsonValue(JSON.stringify(defaultSchema, null, 2));
-      onChange(defaultSchema);
-    }
-  }, []);
-
-  // Update JSON when fields change (simple mode)
-  useEffect(() => {
-    if (mode === 'simple' && fields.length > 0) {
-      const schema = fieldsToSchema(fields);
+  const syncSimpleSchema = useCallback(
+    (nextFields: FieldDefinition[], nextTitle: string, nextDescription: string) => {
+      const schema = fieldsToSchema(nextFields, {
+        title: nextTitle,
+        description: nextDescription,
+      });
+      const serialized = JSON.stringify(schema);
       setJsonValue(JSON.stringify(schema, null, 2));
       onChange(schema);
+      lastEmittedSchemaRef.current = serialized;
+    },
+    [onChange],
+  );
+
+  useEffect(() => {
+    const hasValue = value && Object.keys(value).length > 0;
+    const serializedValue = hasValue ? JSON.stringify(value) : '';
+
+    if (hasValue) {
+      if (serializedValue === lastEmittedSchemaRef.current) {
+        return;
+      }
+      const parsedFields = schemaToFields(value);
+      setFields(parsedFields.length > 0 ? parsedFields : [createEmptyField()]);
+      setJsonValue(JSON.stringify(value, null, 2));
+      setSchemaTitle(typeof value.title === 'string' ? value.title : '');
+      setSchemaDescription(typeof value.description === 'string' ? value.description : '');
+      lastEmittedSchemaRef.current = serializedValue;
+      return;
     }
-  }, [fields, mode, onChange]);
+
+    const defaultSerialized = JSON.stringify(DEFAULT_SCHEMA);
+    if (lastEmittedSchemaRef.current === defaultSerialized) {
+      return;
+    }
+
+    setFields([createEmptyField()]);
+    setSchemaTitle('');
+    setSchemaDescription('');
+    setJsonValue(JSON.stringify(DEFAULT_SCHEMA, null, 2));
+    onChange(DEFAULT_SCHEMA);
+    lastEmittedSchemaRef.current = defaultSerialized;
+  }, [value, onChange]);
 
   // Update fields when JSON changes (advanced mode)
   const handleJsonChange = (json: string) => {
@@ -141,25 +185,57 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
         if (parsedFields.length > 0) {
           setFields(parsedFields);
         }
+        setSchemaTitle(typeof parsed.title === 'string' ? parsed.title : '');
+        setSchemaDescription(typeof parsed.description === 'string' ? parsed.description : '');
         onChange(parsed);
+        lastEmittedSchemaRef.current = JSON.stringify(parsed);
       }
     } catch {
       // Invalid JSON, don't update
     }
   };
 
+  const handleFieldChange = useCallback(
+    (updater: (prev: FieldDefinition[]) => FieldDefinition[]) => {
+      setFields(prevFields => {
+        const nextFields = updater(prevFields);
+        if (mode === 'simple') {
+          syncSimpleSchema(nextFields, schemaTitle, schemaDescription);
+        }
+        return nextFields.length > 0 ? nextFields : [createEmptyField()];
+      });
+    },
+    [mode, schemaTitle, schemaDescription, syncSimpleSchema],
+  );
+
+  const handleTitleChange = (value: string) => {
+    setSchemaTitle(value);
+    if (mode === 'simple') {
+      syncSimpleSchema(fields, value, schemaDescription);
+    }
+  };
+
+  const handleDescriptionChange = (value: string) => {
+    setSchemaDescription(value);
+    if (mode === 'simple') {
+      syncSimpleSchema(fields, schemaTitle, value);
+    }
+  };
+
   const addField = () => {
-    setFields([...fields, { name: '', type: 'any', description: '' }]);
+    handleFieldChange(prev => [...prev, createEmptyField()]);
   };
 
   const removeField = (index: number) => {
-    setFields(fields.filter((_, i) => i !== index));
+    handleFieldChange(prev => prev.filter((_, i) => i !== index));
   };
 
   const updateField = (index: number, updates: Partial<FieldDefinition>) => {
-    const newFields = [...fields];
-    newFields[index] = { ...newFields[index], ...updates };
-    setFields(newFields);
+    handleFieldChange(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], ...updates };
+      return next;
+    });
   };
 
   return (
@@ -172,6 +248,29 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
 
         <TabsContent value="simple" className="space-y-4">
           <div className="space-y-2">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="schema-title">Schema Title</Label>
+                <Input
+                  id="schema-title"
+                  placeholder="TwoPeople"
+                  value={schemaTitle}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="schema-description">Schema Description</Label>
+                <Textarea
+                  id="schema-description"
+                  placeholder="Describe what this structured output should contain..."
+                  value={schemaDescription}
+                  onChange={(e) => handleDescriptionChange(e.target.value)}
+                  rows={2}
+                  className="min-h-[72px]"
+                />
+              </div>
+            </div>
             <div className="flex items-center justify-between">
               <Label>Output Fields</Label>
               <Button

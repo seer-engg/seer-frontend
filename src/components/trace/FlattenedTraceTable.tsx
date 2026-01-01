@@ -29,6 +29,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { FlattenedTraceItem, FlattenedTraceItemType } from '@/types/trace';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { extractRelevantContent } from '@/utils/json-viewer-utils';
 
 interface FlattenedTraceTableProps {
   items: FlattenedTraceItem[];
@@ -286,56 +287,145 @@ export function FlattenedTraceTable({ items, className }: FlattenedTraceTablePro
                   {row.getIsExpanded() && (
                     <TableRow>
                       <TableCell colSpan={columns.length} className="bg-muted/30 p-0">
-                        <Tabs defaultValue="content" className="w-full">
+                        <Tabs defaultValue="run" className="w-full">
                           <TabsList className="w-full justify-start rounded-none border-b bg-muted/50">
-                            <TabsTrigger value="content">Content</TabsTrigger>
+                            <TabsTrigger value="run">Run</TabsTrigger>
                             {row.original.metadata && Object.keys(row.original.metadata).length > 0 && (
                               <TabsTrigger value="metadata">Metadata</TabsTrigger>
                             )}
                           </TabsList>
-                          <TabsContent value="content" className="p-4 m-0 text-left">
-                            {/* Content */}
-                            {row.original.content && (
-                              <div>
-                                {typeof row.original.content === 'string' ? (
-                                  <pre className="text-xs whitespace-pre-wrap">{row.original.content}</pre>
-                                ) : (
-                                  <JsonViewer
-                                    value={row.original.content}
-                                    rootName="content"
-                                    theme="auto"
-                                    displayDataTypes={false}
-                                    displayObjectSize={false}
-                                    collapsed={1}
-                                  />
-                                )}
+                          <TabsContent value="run" className="p-4 m-0 text-left space-y-4">
+                            {/* Input Section */}
+                            {(row.original.inputs || (row.original.type === 'tool' && row.original.content)) && (
+                              <div className="space-y-2">
+                                <div className="text-sm font-medium text-muted-foreground">
+                                  {row.original.type === 'human' || row.original.type === 'input' ? 'USER' : 'Input'}
+                                </div>
+                                <div className="text-left [&>*]:text-left">
+                                  {row.original.inputs ? (
+                                    <JsonViewer
+                                      value={extractRelevantContent(row.original.inputs)}
+                                      theme="auto"
+                                      displayDataTypes={false}
+                                      displayObjectSize={false}
+                                      collapsed={2}
+                                    />
+                                  ) : row.original.type === 'tool' && typeof row.original.content === 'object' ? (
+                                    <JsonViewer
+                                      value={extractRelevantContent(row.original.content)}
+                                      theme="auto"
+                                      displayDataTypes={false}
+                                      displayObjectSize={false}
+                                      collapsed={2}
+                                    />
+                                  ) : typeof row.original.content === 'string' ? (
+                                    <pre className="text-xs whitespace-pre-wrap text-left">{row.original.content}</pre>
+                                  ) : row.original.content ? (
+                                    <JsonViewer
+                                      value={extractRelevantContent(row.original.content)}
+                                      theme="auto"
+                                      displayDataTypes={false}
+                                      displayObjectSize={false}
+                                      collapsed={2}
+                                    />
+                                  ) : null}
+                                </div>
                               </div>
                             )}
 
-                            {/* Outputs */}
-                            {row.original.outputs && (
-                              <div className="mt-4">
-                                <JsonViewer
-                                  value={row.original.outputs}
-                                  rootName="outputs"
-                                  theme="auto"
-                                  displayDataTypes={false}
-                                  displayObjectSize={false}
-                                  collapsed={1}
-                                />
+                            {/* Output Section */}
+                            {(row.original.outputs || (row.original.type === 'tool' && row.original.metadata?.result)) && (
+                              <div className="space-y-2">
+                                <div className="text-sm font-medium text-muted-foreground">Output</div>
+                                <div className="text-left [&>*]:text-left">
+                                  {row.original.outputs ? (
+                                    <JsonViewer
+                                      value={extractRelevantContent(row.original.outputs)}
+                                      theme="auto"
+                                      displayDataTypes={false}
+                                      displayObjectSize={false}
+                                      collapsed={2}
+                                    />
+                                  ) : row.original.metadata?.result ? (
+                                    <JsonViewer
+                                      value={extractRelevantContent(row.original.metadata.result)}
+                                      theme="auto"
+                                      displayDataTypes={false}
+                                      displayObjectSize={false}
+                                      collapsed={2}
+                                    />
+                                  ) : null}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Fallback: Show content if no inputs/outputs */}
+                            {!row.original.inputs && !row.original.outputs && row.original.content && (
+                              <div className="space-y-2">
+                                <div className="text-sm font-medium text-muted-foreground">Content</div>
+                                <div className="text-left [&>*]:text-left">
+                                  {typeof row.original.content === 'string' ? (
+                                    <pre className="text-xs whitespace-pre-wrap text-left">{row.original.content}</pre>
+                                  ) : (
+                                    <JsonViewer
+                                      value={extractRelevantContent(row.original.content)}
+                                      theme="auto"
+                                      displayDataTypes={false}
+                                      displayObjectSize={false}
+                                      collapsed={2}
+                                    />
+                                  )}
+                                </div>
                               </div>
                             )}
                           </TabsContent>
                           {row.original.metadata && Object.keys(row.original.metadata).length > 0 && (
                             <TabsContent value="metadata" className="p-4 m-0 text-left">
-                              <JsonViewer
-                                value={row.original.metadata}
-                                rootName="metadata"
-                                theme="auto"
-                                displayDataTypes={false}
-                                displayObjectSize={false}
-                                collapsed={2}
-                              />
+                              <div className="space-y-4">
+                                {/* Technical Metadata */}
+                                <div className="space-y-2">
+                                  {row.original.id && (
+                                    <div className="text-sm">
+                                      <span className="font-medium text-muted-foreground">Trace ID:</span>{' '}
+                                      <span className="font-mono text-xs">{row.original.id}</span>
+                                    </div>
+                                  )}
+                                  {row.original.checkpoint_id && (
+                                    <div className="text-sm">
+                                      <span className="font-medium text-muted-foreground">Checkpoint ID:</span>{' '}
+                                      <span className="font-mono text-xs">{row.original.checkpoint_id}</span>
+                                    </div>
+                                  )}
+                                  {row.original.timestamp && (
+                                    <div className="text-sm">
+                                      <span className="font-medium text-muted-foreground">Timestamp:</span>{' '}
+                                      <span className="font-mono text-xs">
+                                        {format(new Date(row.original.timestamp), 'yyyy-MM-dd HH:mm:ss.SSS')}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {row.original.checkpoint_index !== undefined && (
+                                    <div className="text-sm">
+                                      <span className="font-medium text-muted-foreground">Checkpoint Index:</span>{' '}
+                                      <span className="font-mono text-xs">{row.original.checkpoint_index}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Full Metadata JSON */}
+                                <div className="space-y-2">
+                                  <div className="text-sm font-medium text-muted-foreground">Full Metadata</div>
+                                  <div className="text-left [&>*]:text-left">
+                                    <JsonViewer
+                                      value={extractRelevantContent(row.original.metadata)}
+                                      theme="auto"
+                                      displayDataTypes={false}
+                                      displayObjectSize={false}
+                                      collapsed={2}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
                             </TabsContent>
                           )}
                         </Tabs>

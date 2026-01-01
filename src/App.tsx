@@ -10,9 +10,10 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
 import BlockConfiguration from "./pages/BlockConfiguration";
-import Traces from "./pages/Traces";
-import TraceDetail from "./pages/TraceDetail";
-import WorkflowExecution from "./pages/WorkflowExecution";
+import WorkflowTraces from "./pages/WorkflowTraces";
+import WorkflowTraceDetail from "./pages/WorkflowTraceDetail";
+import AgentTraces from "./pages/AgentTraces";
+import AgentTraceDetail from "./pages/AgentTraceDetail";
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 
@@ -85,11 +86,21 @@ const App = () => (
               }
             />
             <Route
-              path="/workflows/:workflowId/executions"
+              path="/workflows/traces"
               element={
                 <ProtectedRoute>
                   <SeerLayout>
-                    <WorkflowExecution />
+                    <WorkflowTraces />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workflows/:workflowId/traces/:runId"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <WorkflowTraceDetail />
                   </SeerLayout>
                 </ProtectedRoute>
               }
@@ -105,21 +116,21 @@ const App = () => (
               }
             />
             <Route
-              path="/traces"
+              path="/agents/traces"
               element={
                 <ProtectedRoute>
                   <SeerLayout>
-                    <Traces />
+                    <AgentTraces />
                   </SeerLayout>
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/traces/:threadId"
+              path="/agents/traces/:threadId"
               element={
                 <ProtectedRoute>
                   <SeerLayout>
-                    <TraceDetail />
+                    <AgentTraceDetail />
                   </SeerLayout>
                 </ProtectedRoute>
               }

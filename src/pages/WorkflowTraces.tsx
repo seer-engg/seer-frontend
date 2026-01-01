@@ -1,15 +1,13 @@
 /**
- * Workflow Execution Page
+ * Workflow Traces Page
  * 
- * Dedicated full-page view for workflow execution details, logs, and history.
+ * List page for all workflow execution traces with expandable accordion rows
  */
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState, Fragment } from 'react';
+import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Table,
   TableBody,
@@ -24,12 +22,13 @@ import {
   getCoreRowModel,
   getExpandedRowModel,
   useReactTable,
-  ExpandedState,
 } from '@tanstack/react-table';
-import { ArrowLeft, CheckCircle, XCircle, Loader2, Clock, Play, FileInput, FileOutput, AlertCircle, ChevronRight, ChevronDown } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Loader2, Clock, Play, AlertCircle, ChevronRight } from 'lucide-react';
 import { backendApiClient } from '@/lib/api-client';
 import { format } from 'date-fns';
-import { JsonViewer } from '@textea/json-viewer';
+import { WorkflowTraceViewer } from '@/components/workflow/WorkflowTraceViewer';
+import { useQuery as useRunHistoryQuery } from '@tanstack/react-query';
+import type { WorkflowSummary } from '@/types/workflow-spec';
 
 type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -49,14 +48,9 @@ interface WorkflowRunListResponse {
   runs: WorkflowRunSummary[];
 }
 
-interface RunHistoryResponse {
-  run_id: string;
-  history: Record<string, any>[];
-}
-
-interface Workflow {
-  id: number;
-  name: string;
+interface WorkflowRunWithInfo extends WorkflowRunSummary {
+  workflow_id: string;
+  workflow_name: string;
 }
 
 function getStatusIcon(status: RunStatus) {
@@ -99,41 +93,123 @@ function calculateDuration(startedAt?: string | null, completedAt?: string | nul
   );
 }
 
-export default function WorkflowExecution() {
-  const { workflowId } = useParams<{ workflowId: string }>();
-  const navigate = useNavigate();
-  const [expanded, setExpanded] = useState<ExpandedState>({});
-  
-  // Fetch workflow details
-  const { data: workflow } = useQuery<Workflow>({
-    queryKey: ['workflow', workflowId],
+interface ExpandedRowContentProps {
+  run: WorkflowRunWithInfo;
+}
+
+function ExpandedRowContent({ run }: ExpandedRowContentProps) {
+  const { data: historyResponse, isLoading } = useRunHistoryQuery({
+    queryKey: ['run-history', run.run_id],
     queryFn: async () => {
-      const response = await backendApiClient.request<Workflow>(
-        `/api/v1/workflows/${workflowId}`,
-        { method: 'GET' }
-      );
-      return response;
+      return backendApiClient.request<{
+        run_id: string;
+        history: Array<{
+          run_id: string;
+          workflow_id: string | null;
+          status: string;
+          created_at: string;
+          started_at: string | null;
+          finished_at: string | null;
+          nodes: any[];
+        }>;
+      }>(`/api/v1/runs/${run.run_id}/history`, { method: 'GET' });
     },
-    enabled: !!workflowId,
+    enabled: true,
   });
+
+  const historyEntry = historyResponse?.history?.[0];
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!historyEntry) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground text-center">
+        No execution history available
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 border-t">
+      <WorkflowTraceViewer
+        runId={run.run_id}
+        workflowId={run.workflow_id}
+        nodes={historyEntry.nodes || []}
+        status={historyEntry.status as RunStatus}
+        createdAt={historyEntry.created_at}
+        startedAt={historyEntry.started_at}
+        finishedAt={historyEntry.finished_at}
+        inputs={run.inputs}
+        output={run.output}
+        compact={true}
+      />
+    </div>
+  );
+}
+
+export default function WorkflowTraces() {
+  const navigate = useNavigate();
   
-  // Fetch all runs for this workflow
-  const { data: runListResponse, isLoading } = useQuery<WorkflowRunListResponse>({
-    queryKey: ['workflow-runs', workflowId],
+  // Fetch all workflows
+  const { data: workflows, isLoading: isLoadingWorkflows } = useQuery<WorkflowSummary[]>({
+    queryKey: ['workflows'],
     queryFn: async () => {
-      const response = await backendApiClient.request<WorkflowRunListResponse>(
-        `/api/v1/workflows/${workflowId}/runs`,
+      const response = await backendApiClient.request<{ items: WorkflowSummary[] }>(
+        '/api/v1/workflows',
         { method: 'GET' }
       );
-      return response;
+      return response.items;
     },
-    enabled: !!workflowId,
+  });
+
+  // Fetch runs for all workflows
+  const { data: allRuns, isLoading: isLoadingRuns } = useQuery<WorkflowRunWithInfo[]>({
+    queryKey: ['all-workflow-runs', workflows?.map(w => w.workflow_id)],
+    queryFn: async () => {
+      if (!workflows || workflows.length === 0) return [];
+      
+      // Fetch runs for each workflow in parallel
+      const runPromises = workflows.map(async (workflow) => {
+        try {
+          const response = await backendApiClient.request<WorkflowRunListResponse>(
+            `/api/v1/workflows/${workflow.workflow_id}/runs`,
+            { method: 'GET' }
+          );
+          return response.runs.map(run => ({
+            ...run,
+            workflow_id: workflow.workflow_id,
+            workflow_name: workflow.name,
+          }));
+        } catch (error) {
+          console.error(`Failed to fetch runs for workflow ${workflow.workflow_id}:`, error);
+          return [];
+        }
+      });
+      
+      const allRunsArrays = await Promise.all(runPromises);
+      const flattened = allRunsArrays.flat();
+      
+      // Sort by created_at (newest first)
+      return flattened.sort((a, b) => {
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return dateB - dateA;
+      });
+    },
+    enabled: !!workflows && workflows.length > 0,
     refetchInterval: 5000, // Poll frequently to keep statuses fresh
   });
 
-  const runs = runListResponse?.runs ?? [];
+  const runs = allRuns ?? [];
+  const isLoading = isLoadingWorkflows || isLoadingRuns;
   
-  // Calculate stats
+  // Calculate aggregate stats
   const stats = useMemo(() => {
     if (!runs.length) return null;
     const total = runs.length;
@@ -142,24 +218,34 @@ export default function WorkflowExecution() {
   }, [runs]);
 
   // Define table columns
-  const columns = useMemo<ColumnDef<WorkflowRunSummary>[]>(() => [
+  const columns = useMemo<ColumnDef<WorkflowRunWithInfo>[]>(() => [
     {
       id: 'expander',
       header: () => null,
       cell: ({ row }) => {
         return (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => row.toggleExpanded()}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              row.toggleExpanded();
+            }}
+            className="p-1 hover:bg-muted rounded"
           >
-            {row.getIsExpanded() ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </Button>
+            <ChevronRight
+              className={row.getIsExpanded() ? 'rotate-90 transition-transform' : 'transition-transform'}
+            />
+          </button>
+        );
+      },
+    },
+    {
+      accessorKey: 'workflow_name',
+      header: 'Workflow',
+      cell: ({ row }) => {
+        return (
+          <span className="font-medium text-sm">
+            {row.getValue('workflow_name')}
+          </span>
         );
       },
     },
@@ -167,7 +253,18 @@ export default function WorkflowExecution() {
       accessorKey: 'run_id',
       header: 'Run ID',
       cell: ({ row }) => {
-        return <span className="font-medium">{row.getValue('run_id')}</span>;
+        const run = row.original;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/workflows/${run.workflow_id}/traces/${run.run_id}`);
+            }}
+            className="font-medium text-primary hover:underline text-left text-sm"
+          >
+            {row.getValue('run_id')}
+          </button>
+        );
       },
     },
     {
@@ -232,16 +329,11 @@ export default function WorkflowExecution() {
         );
       },
     },
-  ], []);
+  ], [navigate]);
 
   const table = useReactTable({
     data: runs,
     columns,
-    state: {
-      expanded,
-    },
-    onExpandedChange: setExpanded,
-    getRowCanExpand: () => true,
     getCoreRowModel: getCoreRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
   });
@@ -260,7 +352,7 @@ export default function WorkflowExecution() {
         </Button>
         <div className="flex-1">
           <h1 className="text-lg font-semibold">
-            {workflow?.name || 'Workflow Execution'}
+            All Workflow Traces
           </h1>
         </div>
         {stats && stats.total > 0 && (
@@ -283,7 +375,7 @@ export default function WorkflowExecution() {
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
               <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
-              <p className="text-sm">Loading executions...</p>
+              <p className="text-sm">Loading traces...</p>
             </div>
           </div>
         ) : runs.length === 0 ? (
@@ -293,19 +385,17 @@ export default function WorkflowExecution() {
                 <Play className="w-8 h-8 text-muted-foreground" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold mb-2">No runs yet</h3>
+                <h3 className="text-lg font-semibold mb-2">No traces yet</h3>
                 <p className="text-sm text-muted-foreground">
-                  Execute this workflow to see execution history and results here.
+                  Execute workflows to see execution traces and results here.
                 </p>
               </div>
-              {workflowId && (
-                <Button
-                  onClick={() => navigate(`/workflows`)}
-                  variant="outline"
-                >
-                  Go to Workflow Editor
-                </Button>
-              )}
+              <Button
+                onClick={() => navigate(`/workflows`)}
+                variant="outline"
+              >
+                Go to Workflow Editor
+              </Button>
             </div>
           </div>
         ) : (
@@ -333,8 +423,11 @@ export default function WorkflowExecution() {
                 <TableBody>
                   {table.getRowModel().rows?.length ? (
                     table.getRowModel().rows.map((row) => (
-                      <Fragment key={row.id}>
-                        <TableRow className="bg-white">
+                      <>
+                        <TableRow
+                          key={row.id}
+                          className="bg-white hover:bg-muted/50"
+                        >
                           {row.getVisibleCells().map((cell) => (
                             <TableCell key={cell.id} className="bg-white">
                               {flexRender(
@@ -345,182 +438,24 @@ export default function WorkflowExecution() {
                           ))}
                         </TableRow>
                         {row.getIsExpanded() && (
-                          <TableRow className="bg-white">
-                            <TableCell colSpan={row.getVisibleCells().length} className="p-0 bg-white">
-                              <RunExpandedRow run={row.original} />
+                          <TableRow key={`${row.id}-expanded`} className="bg-white">
+                            <TableCell colSpan={columns.length} className="bg-white p-0">
+                              <ExpandedRowContent run={row.original} />
                             </TableCell>
                           </TableRow>
                         )}
-                      </Fragment>
+                      </>
                     ))
                   ) : (
                     <TableRow className="bg-white">
                       <TableCell colSpan={columns.length} className="h-24 text-center bg-white">
-                        No runs found.
+                        No traces found.
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-
-function RunExpandedRow({ run }: { run: WorkflowRunSummary }) {
-  const {
-    data: historyResponse,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery<RunHistoryResponse>({
-    queryKey: ['run-history', run.run_id],
-    queryFn: async () => {
-      return backendApiClient.request<RunHistoryResponse>(
-        `/api/v1/runs/${run.run_id}/history`,
-        { method: 'GET' }
-      );
-    },
-    enabled: !!run.run_id,
-    refetchInterval: run.status === 'running' ? 5000 : false,
-  });
-
-  const historyEntries = historyResponse?.history ?? [];
-  const historyError =
-    isError && error
-      ? error instanceof Error
-        ? error.message
-        : 'Unable to load history'
-      : null;
-
-  const hasInputs = !!run.inputs && Object.keys(run.inputs).length > 0;
-  const hasOutput = !!run.output && Object.keys(run.output).length > 0;
-
-  return (
-    <div className="p-4 bg-white">
-      {run.error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Execution Failed</AlertTitle>
-          <AlertDescription className="mt-2">
-            <pre className="text-sm whitespace-pre-wrap font-mono break-words">
-              {run.error}
-            </pre>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Tabs defaultValue="output" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="input" className="flex items-center gap-2">
-            <FileInput className="w-4 h-4" />
-            Input
-          </TabsTrigger>
-          <TabsTrigger value="output" className="flex items-center gap-2">
-            <FileOutput className="w-4 h-4" />
-            Output
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="input" className="mt-4">
-          {hasInputs ? (
-            <div className="w-full max-w-full text-left border rounded-md p-4 bg-white">
-              <div className="h-[400px] overflow-auto bg-white">
-                <JsonViewer
-                  value={run.inputs}
-                  theme="auto"
-                  defaultInspectDepth={0}
-                  style={{ padding: '0.5rem' }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground py-8 text-center">
-              No input data provided
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="output" className="mt-4">
-          {hasOutput ? (
-            <div className="w-full max-w-full text-left border rounded-md p-4 bg-white">
-              <div className="h-[400px] overflow-auto bg-white">
-                <JsonViewer
-                  value={run.output}
-                  theme="auto"
-                  defaultInspectDepth={0}
-                  style={{ padding: '0.5rem' }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground py-8 text-center">
-              {run.status === 'running' || run.status === 'queued'
-                ? 'Execution in progress...'
-                : 'No output data available'}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
-
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold">History snapshots</h4>
-          {run.status === 'running' && (
-            <span className="text-xs text-muted-foreground">Auto-refreshing</span>
-          )}
-        </div>
-        {isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Loading history...
-          </div>
-        ) : historyError ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Unable to load history</AlertTitle>
-            <AlertDescription className="mt-2 space-y-2">
-              <p className="text-sm">{historyError}</p>
-              <Button size="sm" variant="outline" onClick={() => refetch()}>
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : historyEntries.length === 0 ? (
-          <div className="text-sm text-muted-foreground py-4 text-center">
-            {run.status === 'running'
-              ? 'History will appear once checkpoints are emitted.'
-              : 'No history available for this run.'}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {historyEntries.map((entry, index) => {
-              const checkpointId = entry.checkpoint_id ?? `snapshot-${index}`;
-              const createdAt = entry.created_at;
-              return (
-                <div key={checkpointId} className="border rounded-md overflow-hidden">
-                  <div className="px-4 py-2 border-b flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Checkpoint {checkpointId}</span>
-                    {createdAt && (
-                      <span>{format(new Date(createdAt), 'MMM d, yyyy h:mm:ss a')}</span>
-                    )}
-                  </div>
-                  <div className="max-h-[240px] overflow-auto bg-white">
-                    <JsonViewer
-                      value={entry}
-                      theme="auto"
-                      defaultInspectDepth={1}
-                      style={{ padding: '0.5rem' }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </div>

@@ -17,10 +17,14 @@ export interface SchemaRef {
 }
 
 export interface InlineSchema {
+  json_schema: JsonObject;
+}
+
+export interface InlineSchemaAlias {
   schema: JsonObject;
 }
 
-export type SchemaSpec = SchemaRef | InlineSchema;
+export type SchemaSpec = SchemaRef | InlineSchema | InlineSchemaAlias | JsonObject;
 
 export interface OutputContract {
   mode: 'text' | 'json';
@@ -49,13 +53,15 @@ export interface TaskNode extends NodeBase {
   kind: 'set';
   value: JsonValue;
   in?: JsonObject;
+  in_?: JsonObject;
   output?: OutputContract | null;
 }
 
 export interface ToolNode extends NodeBase {
   type: 'tool';
   tool: string;
-  in: JsonObject;
+  in?: JsonObject;
+  in_?: JsonObject;
   expect_output?: OutputContract | null;
 }
 
@@ -64,6 +70,7 @@ export interface LlmNode extends NodeBase {
   model: string;
   prompt: string;
   in?: JsonObject;
+  in_?: JsonObject;
   output: OutputContract;
   temperature?: number | null;
   max_tokens?: number | null;

@@ -242,13 +242,13 @@ function createToolNode(node: FlowNode): WorkflowNode {
     ? (convertTemplateStrings(config.params, 'toCompiler') as Record<string, JsonValue>)
     : {};
 
-  const expectOutput =
-    isRecord(config.output_schema) && Object.keys(config.output_schema).length > 0
-      ? {
-          mode: 'json' as const,
-          schema: { schema: config.output_schema },
-        }
-      : undefined;
+  const inlineSchema = buildInlineSchemaSpec(config.output_schema);
+  const expectOutput = inlineSchema
+    ? {
+        mode: 'json' as const,
+        schema: inlineSchema,
+      }
+    : undefined;
 
   return {
     id: node.id,
@@ -281,10 +281,10 @@ function createLlmNode(node: FlowNode): WorkflowNode {
     ? (convertTemplateStrings(config.input_refs, 'toCompiler') as Record<string, JsonValue>)
     : {};
 
-  const outputSchema =
-    isRecord(config.output_schema) && Object.keys(config.output_schema).length > 0
-      ? { mode: 'json' as const, schema: { schema: config.output_schema } }
-      : { mode: 'text' as const };
+  const inlineSchema = buildInlineSchemaSpec(config.output_schema);
+  const outputSchema = inlineSchema
+    ? { mode: 'json' as const, schema: inlineSchema }
+    : { mode: 'text' as const };
 
   const temperature =
     typeof config.temperature === 'number'
@@ -612,38 +612,43 @@ function mapSpecNodeType(specType: WorkflowNode['type']): WorkflowNodeData['type
 
 function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
   switch (specNode.type) {
-    case 'tool':
+    case 'tool': {
+      const toolInputs = getSpecNodeInputs(specNode);
+      const toolOutputSchema =
+        specNode.expect_output?.mode === 'json'
+          ? unwrapInlineSchema(specNode.expect_output.schema)
+          : undefined;
       return {
         type: 'tool',
         label: specNode.id,
         config: {
           tool_name: specNode.tool,
-          params: convertTemplateStrings(specNode.in ?? {}, 'toBuilder'),
+          params: convertTemplateStrings(toolInputs ?? {}, 'toBuilder'),
           ...(specNode.out ? { out: specNode.out } : {}),
-          ...(specNode.expect_output?.mode === 'json' &&
-          specNode.expect_output.schema &&
-          'schema' in specNode.expect_output.schema
-            ? { output_schema: specNode.expect_output.schema.schema }
-            : {}),
+          ...(toolOutputSchema ? { output_schema: toolOutputSchema } : {}),
         },
       };
-    case 'llm':
+    }
+    case 'llm': {
+      const llmInputs = getSpecNodeInputs(specNode);
+      const llmOutputSchema =
+        specNode.output?.mode === 'json'
+          ? unwrapInlineSchema(specNode.output?.schema)
+          : undefined;
       return {
         type: 'llm',
         label: specNode.id,
         config: {
           model: specNode.model,
           user_prompt: convertTemplateString(specNode.prompt, 'toBuilder'),
-          input_refs: convertTemplateStrings(specNode.in ?? {}, 'toBuilder'),
+          input_refs: convertTemplateStrings(llmInputs ?? {}, 'toBuilder'),
           ...(specNode.out ? { out: specNode.out } : {}),
-          output_schema:
-            specNode.output?.mode === 'json' && specNode.output.schema && 'schema' in specNode.output.schema
-              ? specNode.output.schema.schema
-              : undefined,
+          ...(llmOutputSchema ? { output_schema: llmOutputSchema } : {}),
           temperature: specNode.temperature,
           max_tokens: specNode.max_tokens,
         },
       };
+    }
     case 'if':
       return {
         type: 'if_else',
@@ -678,6 +683,54 @@ function isRecord(value: unknown): value is Record<string, JsonValue> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function normalizeJsonSchema(schema: unknown): JsonObject | undefined {
+  if (!isRecord(schema)) {
+    return undefined;
+  }
+  if (Object.keys(schema).length === 0) {
+    return undefined;
+  }
+  return schema as JsonObject;
+}
+
+function buildInlineSchemaSpec(schema: unknown): JsonObject | undefined {
+  const jsonSchema = normalizeJsonSchema(schema);
+  if (!jsonSchema) {
+    return undefined;
+  }
+  return { json_schema: jsonSchema };
+}
+
+function unwrapInlineSchema(schemaSpec: unknown): JsonObject | undefined {
+  if (!isRecord(schemaSpec)) {
+    return undefined;
+  }
+
+  if (
+    'json_schema' in schemaSpec &&
+    isRecord((schemaSpec as Record<string, JsonValue>).json_schema)
+  ) {
+    return (schemaSpec as { json_schema: JsonObject }).json_schema;
+  }
+
+  if (
+    'schema' in schemaSpec &&
+    isRecord((schemaSpec as Record<string, JsonValue>).schema)
+  ) {
+    return (schemaSpec as { schema: JsonObject }).schema;
+  }
+
+  if (
+    'id' in schemaSpec &&
+    typeof (schemaSpec as Record<string, JsonValue>).id === 'string' &&
+    Object.keys(schemaSpec).length === 1
+  ) {
+    return undefined;
+  }
+
+  return schemaSpec as JsonObject;
+}
+
 type TemplateDirection = 'toCompiler' | 'toBuilder';
 
 function convertTemplateStrings<T>(value: T, direction: TemplateDirection): T {
@@ -704,6 +757,14 @@ function convertTemplateString(value: string, direction: TemplateDirection = 'to
     return value.replace(MUSTACHE_RE, (_, expr: string) => `\${${expr.trim()}}`);
   }
   return value.replace(DOLLAR_RE, (_, expr: string) => `{{${expr.trim()}}}`);
+}
+
+function getSpecNodeInputs(specNode: WorkflowNode): Record<string, JsonValue> | undefined {
+  const rawInputs = (specNode as any).in ?? (specNode as any).in_;
+  if (isRecord(rawInputs)) {
+    return rawInputs as Record<string, JsonValue>;
+  }
+  return undefined;
 }
 
 
