@@ -12,24 +12,11 @@ export function SeerLayout({ children }: SeerLayoutProps) {
   const isWorkflowsPage = location.pathname === '/workflows' || location.pathname.startsWith('/workflows/');
   
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (isWorkflowsPage) {
-      const saved = localStorage.getItem('seerSidebarCollapsed');
-      return saved ? JSON.parse(saved) : true; // Default to collapsed on workflows page
-    }
-    return false;
+    const saved = localStorage.getItem('seerSidebarCollapsed');
+    return saved ? JSON.parse(saved) : false; // Default to expanded for all pages
   });
 
-  // Update collapsed state when navigating to/from workflows page
-  useEffect(() => {
-    if (isWorkflowsPage) {
-      const saved = localStorage.getItem('seerSidebarCollapsed');
-      setSidebarCollapsed(saved ? JSON.parse(saved) : true);
-    } else {
-      setSidebarCollapsed(false);
-    }
-  }, [isWorkflowsPage]);
-
-  // Listen for sidebar toggle events from Workflows page hamburger menu
+  // Listen for sidebar toggle events (for backward compatibility during transition)
   useEffect(() => {
     const handleSidebarToggle = (event: CustomEvent<boolean>) => {
       setSidebarCollapsed(event.detail);
@@ -43,12 +30,8 @@ export function SeerLayout({ children }: SeerLayoutProps) {
 
   const handleSidebarCollapseChange = (collapsed: boolean) => {
     setSidebarCollapsed(collapsed);
-    if (isWorkflowsPage) {
-      localStorage.setItem('seerSidebarCollapsed', JSON.stringify(collapsed));
-    }
+    localStorage.setItem('seerSidebarCollapsed', JSON.stringify(collapsed));
   };
-
-  const isSidebarVisible = !sidebarCollapsed;
 
   return (
     <div className="min-h-screen flex w-full bg-background">
@@ -57,7 +40,7 @@ export function SeerLayout({ children }: SeerLayoutProps) {
         onCollapsedChange={handleSidebarCollapseChange}
         forceCollapsed={isWorkflowsPage && sidebarCollapsed}
       />
-      <main className={`flex-1 flex flex-col overflow-hidden ${isSidebarVisible ? 'ml-[220px]' : ''}`}>{children}</main>
+      <main className={`flex-1 flex flex-col overflow-hidden ${sidebarCollapsed ? 'ml-[56px]' : 'ml-[220px]'}`}>{children}</main>
       <OnboardingTour />
     </div>
   );

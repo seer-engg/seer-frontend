@@ -2,10 +2,11 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Search,
-  Activity,
   Settings,
   LogOut,
   Workflow,
+  MessageSquare,
+  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -19,7 +20,7 @@ import { useClerk, useUser } from "@clerk/clerk-react";
 
 const primaryNav = [
   { name: "Workflows", href: "/workflows", icon: Workflow },
-  { name: "Traces", href: "/traces", icon: Activity }
+  { name: "Agents", href: "/agents/traces", icon: MessageSquare },
 ] as const;
 
 const secondaryNav = [
@@ -35,9 +36,10 @@ type NavItemType = {
 interface SeerSidebarProps {
   collapsed?: boolean;
   forceCollapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: SeerSidebarProps) {
+export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed, onCollapsedChange }: SeerSidebarProps) {
   const collapsed = forceCollapsed ? true : (externalCollapsed ?? false);
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -46,6 +48,12 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: Se
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
     "";
+
+  const handleToggle = () => {
+    if (onCollapsedChange) {
+      onCollapsedChange(!collapsed);
+    }
+  };
 
   const NavItem = ({ item, isActive }: { item: NavItemType; isActive: boolean }) => {
     return (
@@ -75,9 +83,28 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: Se
     );
   };
 
-  // When collapsed, render nothing (0 width) - controlled by hamburger menu in top bar
+  // When collapsed, render minimal sidebar with just hamburger button
   if (collapsed) {
-    return null;
+    return (
+      <motion.aside
+        initial={false}
+        animate={{ width: 56 }}
+        transition={{ duration: 0.2, ease: "easeInOut" }}
+        className="fixed inset-y-0 left-0 z-10 h-screen bg-sidebar border-r border-sidebar-border flex flex-col"
+      >
+        <div className="h-14 flex items-center justify-center border-b border-sidebar-border">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleToggle}
+            title="Expand sidebar"
+            className="h-10 w-10"
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
+        </div>
+      </motion.aside>
+    );
   }
 
   return (
@@ -88,7 +115,7 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: Se
       className="fixed inset-y-0 left-0 z-10 h-screen bg-sidebar border-r border-sidebar-border flex flex-col"
     >
       {/* Logo */}
-      <div className="h-14 flex items-center px-3 border-b border-sidebar-border">
+      <div className="h-14 flex items-center justify-between px-3 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-seer to-indigo-500 flex items-center justify-center">
             <Search className="h-4 w-4 text-white" />
@@ -101,6 +128,15 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed }: Se
             Seer
           </motion.span>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleToggle}
+          title="Collapse sidebar"
+          className="h-10 w-10"
+        >
+          <Menu className="w-4 h-4" />
+        </Button>
       </div>
 
       {/* Primary Navigation */}

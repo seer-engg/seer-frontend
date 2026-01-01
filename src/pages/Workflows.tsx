@@ -482,19 +482,6 @@ export default function Workflows() {
     localStorage.setItem('buildChatPanelCollapsed', JSON.stringify(collapsed));
   }, []);
 
-  // Control SeerSidebar collapse state (synced with SeerLayout via localStorage)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    const saved = localStorage.getItem('seerSidebarCollapsed');
-    return saved ? JSON.parse(saved) : true; // Default to collapsed on workflows page
-  });
-
-  const handleSidebarToggle = useCallback(() => {
-    const newValue = !sidebarCollapsed;
-    setSidebarCollapsed(newValue);
-    localStorage.setItem('seerSidebarCollapsed', JSON.stringify(newValue));
-    // Dispatch custom event to notify SeerLayout
-    window.dispatchEvent(new CustomEvent('seerSidebarToggle', { detail: newValue }));
-  }, [sidebarCollapsed]);
 
   // Check backend health
   const { isHealthy } = useBackendHealth(10000); // Check every 10 seconds
@@ -575,27 +562,19 @@ export default function Workflows() {
     <div className="flex flex-col h-screen bg-background">
       {/* Unified Top Bar */}
       <header className="h-14 border-b border-border flex items-center px-4 gap-4 bg-card shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleSidebarToggle}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          <Menu className="w-4 h-4" />
-        </Button>
         <div className="flex-1 flex items-center justify-end gap-2">
           <Button
             onClick={() => {
               const workflowId = urlWorkflowId || selectedWorkflowId;
               if (workflowId) {
-                navigate(`/workflows/${workflowId}/executions`);
+                navigate(`/workflows/${workflowId}/traces`);
               }
             }}
             disabled={!urlWorkflowId && !selectedWorkflowId}
             size="sm"
             variant="outline"
           >
-            View Runs
+            View Traces
           </Button>
           <Button
             onClick={() => setShowTriggerModal(true)}
