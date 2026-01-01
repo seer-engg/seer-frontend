@@ -17,10 +17,14 @@ export interface SchemaRef {
 }
 
 export interface InlineSchema {
+  json_schema: JsonObject;
+}
+
+export interface InlineSchemaAlias {
   schema: JsonObject;
 }
 
-export type SchemaSpec = SchemaRef | InlineSchema;
+export type SchemaSpec = SchemaRef | InlineSchema | InlineSchemaAlias | JsonObject;
 
 export interface OutputContract {
   mode: 'text' | 'json';
