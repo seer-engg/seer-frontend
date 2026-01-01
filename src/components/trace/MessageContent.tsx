@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Copy, Code, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/sonner';
+import { extractRelevantContent } from '@/utils/json-viewer-utils';
 
 interface MessageContentProps {
   content: string | unknown;
@@ -113,10 +114,9 @@ export function MessageContent({
         )}
 
         {shouldShowJson && (
-          <div className="p-2">
+          <div className="p-2 text-left [&>*]:text-left">
             <JsonViewer
-              value={parsedContent}
-              rootName="content"
+              value={extractRelevantContent(parsedContent)}
               theme="auto"
               displayDataTypes={false}
               displayObjectSize={false}

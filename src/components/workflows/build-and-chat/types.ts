@@ -90,5 +90,8 @@ export interface BuildAndChatPanelProps {
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   functionBlocks?: BuiltInBlock[];
+  onTriggerClick?: () => void;
+  onRunClick?: () => void;
+  isExecuting?: boolean;
 }
 

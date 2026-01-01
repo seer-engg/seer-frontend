@@ -1,12 +1,14 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Search,
   Settings,
   LogOut,
   Workflow,
-  MessageSquare,
   Menu,
+  FileText,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -16,11 +18,17 @@ import {
   Tooltip,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useClerk, useUser } from "@clerk/clerk-react";
+import { useState } from "react";
 
 const primaryNav = [
-  { name: "Workflows", href: "/workflows", icon: Workflow },
-  { name: "Agents", href: "/agents/traces", icon: MessageSquare },
+  { name: "Canvas", href: "/workflows", icon: Workflow },
+] as const;
+
+const tracesNavChildren = [
+  { name: "Workflows", href: "/workflows/traces", pattern: /^\/workflows\/traces/ },
+  { name: "Agents", href: "/agents/traces", pattern: /^\/agents\/traces/ },
 ] as const;
 
 const secondaryNav = [
@@ -31,6 +39,12 @@ type NavItemType = {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+};
+
+type TracesNavChildType = {
+  name: string;
+  href: string;
+  pattern: RegExp;
 };
 
 interface SeerSidebarProps {
@@ -44,10 +58,15 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed, onCo
   const { user } = useUser();
   const { signOut } = useClerk();
   const location = useLocation();
+  const navigate = useNavigate();
   const userEmail =
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
     "";
+
+  // Check if any traces submenu item is active
+  const isTracesActive = tracesNavChildren.some(child => child.pattern.test(location.pathname));
+  const [tracesOpen, setTracesOpen] = useState(isTracesActive);
 
   const handleToggle = () => {
     if (onCollapsedChange) {
@@ -80,6 +99,71 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed, onCo
           </NavLink>
         </TooltipTrigger>
       </Tooltip>
+    );
+  };
+
+  const TracesNavItem = () => {
+    const handleWorkflowTracesClick = () => {
+      navigate('/workflows/traces');
+    };
+
+    return (
+      <Collapsible open={tracesOpen} onOpenChange={setTracesOpen}>
+        <CollapsibleTrigger
+          className={cn(
+            "w-full flex items-center justify-between gap-3 min-w-0 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left",
+            isTracesActive
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+          )}
+        >
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <FileText className="h-4 w-4 shrink-0" />
+            <motion.span
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              className="whitespace-nowrap truncate min-w-0 flex-1"
+            >
+              Traces
+            </motion.span>
+          </div>
+          {tracesOpen ? (
+            <ChevronDown className="h-4 w-4 shrink-0" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0" />
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="ml-7 mt-1 space-y-1">
+            {tracesNavChildren.map((child) => {
+              const isChildActive = child.pattern.test(location.pathname);
+              const isWorkflowTraces = child.name === "Workflows";
+              
+              return (
+                <button
+                  key={child.name}
+                  onClick={() => {
+                    if (isWorkflowTraces) {
+                      handleWorkflowTracesClick();
+                    } else {
+                      navigate(child.href);
+                    }
+                  }}
+                  className={cn(
+                    "w-full flex items-center justify-start gap-2 min-w-0 py-2 px-3 rounded-md text-sm transition-all duration-200 text-left",
+                    isChildActive
+                      ? "bg-accent text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  )}
+                >
+                  <span className="whitespace-nowrap truncate">{child.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     );
   };
 
@@ -148,6 +232,7 @@ export function SeerSidebar({ collapsed: externalCollapsed, forceCollapsed, onCo
             isActive={location.pathname === item.href || location.pathname.startsWith(item.href + '/')}
           />
         ))}
+        <TracesNavItem />
       </nav>
 
       {/* Secondary Navigation */}

@@ -35,6 +35,9 @@ export function BuildAndChatPanel({
   collapsed: externalCollapsed,
   onCollapseChange,
   functionBlocks,
+  onTriggerClick,
+  onRunClick,
+  isExecuting,
 }: BuildAndChatPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(() => {
     const saved = localStorage.getItem('buildChatPanelCollapsed');
@@ -49,6 +52,10 @@ export function BuildAndChatPanel({
       localStorage.setItem('buildChatPanelCollapsed', JSON.stringify(value));
     }
     onCollapseChange?.(value);
+  };
+
+  const handleToggleCollapse = () => {
+    setCollapsed(!collapsed);
   };
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -295,25 +302,34 @@ export function BuildAndChatPanel({
     isFetchingNextPage: sessionsQuery.isFetchingNextPage,
   };
 
-  if (collapsed) {
-    return (
-      <div className="w-12 h-full flex flex-col items-start py-2 px-2 border-l">
-        <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} title="Expand Build & Chat">
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col h-full bg-card border-l w-full">
-      <ResizablePanelGroup direction="vertical" className="flex-1">
+    <div className="flex flex-col h-full bg-card border-l w-full relative">
+      {collapsed && (
+        <div className="absolute inset-y-0 left-0 z-50 w-12 flex flex-col items-center justify-center bg-card border-r border-border pointer-events-auto">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleToggleCollapse} 
+            title="Expand Build & Chat"
+            className="h-10 w-10"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+      <ResizablePanelGroup direction="vertical" className="flex-1 h-full">
         <ResizablePanel defaultSize={50} minSize={0} collapsible>
           <BuildPanel
             tools={tools}
             isLoadingTools={isLoadingTools}
             onBlockSelect={onBlockSelect}
             blocks={functionBlocks}
+            onTriggerClick={onTriggerClick}
+            onRunClick={onRunClick}
+            onToggleCollapse={handleToggleCollapse}
+            isCollapsed={collapsed}
+            selectedWorkflowId={workflowId}
+            isExecuting={isExecuting}
           />
         </ResizablePanel>
 

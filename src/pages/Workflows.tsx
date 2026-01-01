@@ -560,52 +560,6 @@ export default function Workflows() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Unified Top Bar */}
-      <header className="h-14 border-b border-border flex items-center px-4 gap-4 bg-card shrink-0">
-        <div className="flex-1 flex items-center justify-end gap-2">
-          <Button
-            onClick={() => {
-              const workflowId = urlWorkflowId || selectedWorkflowId;
-              if (workflowId) {
-                navigate(`/workflows/${workflowId}/traces`);
-              }
-            }}
-            disabled={!urlWorkflowId && !selectedWorkflowId}
-            size="sm"
-            variant="outline"
-          >
-            View Traces
-          </Button>
-          <Button
-            onClick={() => setShowTriggerModal(true)}
-            disabled={!selectedWorkflowId}
-            size="sm"
-            variant="outline"
-          >
-            Manage Triggers
-          </Button>
-          <Button
-            onClick={handleExecute}
-            disabled={!selectedWorkflowId || isExecuting}
-            size="sm"
-            variant="default"
-          >
-            <Rocket className="w-4 h-4 mr-2" />
-            Run
-          </Button>
-        </div>
-        {buildChatSupported && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleBuildChatCollapseChange(!buildChatCollapsed)}
-            title={buildChatCollapsed ? "Show Build & Chat panel" : "Hide Build & Chat panel"}
-          >
-            <Menu className="w-4 h-4" />
-          </Button>
-        )}
-      </header>
-
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
         {/* Main Canvas Area */}
         <ResizablePanel defaultSize={75} minSize={50} className="flex flex-col">
@@ -634,14 +588,16 @@ export default function Workflows() {
           </div>
         </ResizablePanel>
         
-        {/* Build & Chat Panel - Conditionally render to avoid residue width */}
-        {buildChatSupported && !buildChatCollapsed && (
+        {/* Build & Chat Panel - Always render with collapsible behavior */}
+        {buildChatSupported && (
           <>
             <ResizableHandle withHandle />
             <ResizablePanel 
-              defaultSize={25} 
-              minSize={20} 
-              maxSize={50} 
+              key={buildChatCollapsed ? 'collapsed' : 'expanded'}
+              defaultSize={buildChatCollapsed ? 3 : 25} 
+              minSize={3}
+              maxSize={50}
+              collapsible
               className="border-l"
             >
               <BuildAndChatPanel
@@ -652,7 +608,10 @@ export default function Workflows() {
                 onWorkflowGraphSync={handleWorkflowGraphSync}
                 collapsed={buildChatCollapsed}
                 onCollapseChange={handleBuildChatCollapseChange}
-              functionBlocks={availableBlocks}
+                functionBlocks={availableBlocks}
+                onTriggerClick={() => setShowTriggerModal(true)}
+                onRunClick={handleExecute}
+                isExecuting={isExecuting}
               />
             </ResizablePanel>
           </>
