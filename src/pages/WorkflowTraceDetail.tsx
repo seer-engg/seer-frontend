@@ -89,7 +89,7 @@ export default function WorkflowTraceDetail() {
 
   const handleBack = () => {
     if (workflowId) {
-      navigate(`/workflows/${workflowId}/traces`);
+      navigate(`/workflows/${workflowId}`);
     } else {
       navigate('/workflows');
     }
@@ -106,7 +106,7 @@ export default function WorkflowTraceDetail() {
           variant="ghost"
           size="icon"
           onClick={handleBack}
-          title="Back to traces"
+          title="Back to canvas"
         >
           <ArrowLeft className="w-4 h-4" />
         </Button>
@@ -161,7 +161,7 @@ export default function WorkflowTraceDetail() {
                 </p>
               </div>
               <Button onClick={handleBack} variant="outline">
-                Back to Traces
+                Back to Canvas
               </Button>
             </div>
           </div>
