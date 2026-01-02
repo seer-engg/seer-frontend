@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Menu } from 'lucide-react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
 
 import { BUILT_IN_BLOCKS } from '../constants';
 import type { BuiltInBlock, Tool } from '../types';
@@ -14,10 +12,6 @@ interface BuildPanelProps {
   isLoadingTools: boolean;
   onBlockSelect?: (block: { type: string; label: string; config?: any }) => void;
   blocks?: BuiltInBlock[];
-  onTriggerClick?: () => void;
-  onRunClick?: () => void;
-  onToggleCollapse?: () => void;
-  isCollapsed?: boolean;
   selectedWorkflowId?: string | null;
   isExecuting?: boolean;
 }
@@ -27,12 +21,6 @@ export function BuildPanel({
   isLoadingTools,
   onBlockSelect,
   blocks = BUILT_IN_BLOCKS,
-  onTriggerClick,
-  onRunClick,
-  onToggleCollapse,
-  isCollapsed,
-  selectedWorkflowId,
-  isExecuting,
 }: BuildPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -67,39 +55,6 @@ export function BuildPanel({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header with action buttons */}
-      <div className="h-14 border-b border-border flex items-center px-4 gap-2 bg-card shrink-0">
-        {onToggleCollapse && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggleCollapse}
-            title={isCollapsed ? "Show Build & Chat panel" : "Hide Build & Chat panel"}
-          >
-            <Menu className="w-4 h-4" />
-          </Button>
-        )}
-        <div className="flex-1 flex items-center justify-end gap-2">
-          <Button
-            onClick={onRunClick}
-            disabled={!selectedWorkflowId || isExecuting}
-            size="sm"
-            variant="default"
-          >
-            Run
-          </Button>
-          <Button
-            onClick={onTriggerClick}
-            disabled={!selectedWorkflowId}
-            size="sm"
-            variant="outline"
-          >
-            Triggers
-          </Button>
-        </div>
-      </div>
-      
-      {/* Scrollable content */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
           <BlocksSection blocks={filteredBlocks} onSelectBlock={handleBuiltInSelect} />

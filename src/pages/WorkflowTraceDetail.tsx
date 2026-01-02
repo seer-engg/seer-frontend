@@ -1,7 +1,7 @@
 /**
  * Workflow Trace Detail Page
- * 
- * Full-page view for single workflow execution trace with detailed trace viewer
+ *
+ * Full-page view for single workflow execution trace with visual graph view
  */
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -10,13 +10,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { backendApiClient } from '@/lib/api-client';
 import { WorkflowTraceViewer, WorkflowNodeTrace } from '@/components/workflow/WorkflowTraceViewer';
+import { ExecutionActions } from '@/components/workflow/ExecutionActions';
+import type { WorkflowResponse } from '@/types/workflow-spec';
 
 type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
-
-interface Workflow {
-  id: number;
-  name: string;
-}
 
 interface RunHistoryEntry {
   run_id: string;
@@ -25,6 +22,8 @@ interface RunHistoryEntry {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  inputs?: Record<string, any> | null;
+  output?: Record<string, any> | null;
   nodes: WorkflowNodeTrace[];
   execution_graph?: {
     nodes: Array<{ id: string; type: string; label: string }>;
@@ -41,11 +40,11 @@ export default function WorkflowTraceDetail() {
   const { workflowId, runId } = useParams<{ workflowId: string; runId: string }>();
   const navigate = useNavigate();
 
-  // Fetch workflow details
-  const { data: workflow } = useQuery<Workflow>({
+  // Fetch workflow details to get reactflow_graph positions
+  const { data: workflow } = useQuery<WorkflowResponse>({
     queryKey: ['workflow', workflowId],
     queryFn: async () => {
-      const response = await backendApiClient.request<Workflow>(
+      const response = await backendApiClient.request<WorkflowResponse>(
         `/api/v1/workflows/${workflowId}`,
         { method: 'GET' }
       );
@@ -96,6 +95,9 @@ export default function WorkflowTraceDetail() {
     }
   };
 
+  // Extract reactflow graph from workflow spec
+  const reactflowGraph = workflow?.spec?.meta?.reactflow_graph as any;
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
@@ -114,6 +116,16 @@ export default function WorkflowTraceDetail() {
           </h1>
           <p className="text-sm text-muted-foreground">Run: {runId}</p>
         </div>
+        {/* Action Buttons */}
+        {historyEntry && workflowId && (
+          <ExecutionActions
+            workflowId={workflowId}
+            runId={runId!}
+            workflowName={workflow?.name}
+            inputs={historyEntry.inputs}
+            historyData={historyResponse}
+          />
+        )}
       </header>
 
       {/* Main Content */}
@@ -154,7 +166,7 @@ export default function WorkflowTraceDetail() {
             </div>
           </div>
         ) : (
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             <WorkflowTraceViewer
               runId={runId!}
               workflowId={historyEntry.workflow_id || workflowId || ''}
@@ -163,6 +175,11 @@ export default function WorkflowTraceDetail() {
               createdAt={historyEntry.created_at}
               startedAt={historyEntry.started_at}
               finishedAt={historyEntry.finished_at}
+              inputs={historyEntry.inputs}
+              output={historyEntry.output}
+              viewMode="graph"
+              executionGraph={historyEntry.execution_graph}
+              reactflowGraph={reactflowGraph}
             />
           </div>
         )}
