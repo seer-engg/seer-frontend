@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/sonner';
 
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
@@ -11,6 +11,7 @@ import { workflowSpecToGraph } from '@/lib/workflow-graph';
 
 import { BuildPanel } from './build-and-chat/build/BuildPanel';
 import { ChatPanel } from './build-and-chat/chat/ChatPanel';
+import { ExecutionsPanel } from './build-and-chat/executions/ExecutionsPanel';
 import type { SessionsStatus } from './build-and-chat/chat/types';
 import { useChatMessages } from './build-and-chat/hooks/useChatMessages';
 import { useChatSessions } from './build-and-chat/hooks/useChatSessions';
@@ -334,10 +335,10 @@ export function BuildAndChatPanel({
     <div className="flex flex-col h-full bg-card border-l w-full relative">
       {collapsed && (
         <div className="absolute inset-y-0 left-0 z-50 w-12 flex flex-col items-center justify-center bg-card border-r border-border pointer-events-auto">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={handleToggleCollapse} 
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleToggleCollapse}
             title="Expand Build & Chat"
             className="h-10 w-10"
           >
@@ -345,25 +346,55 @@ export function BuildAndChatPanel({
           </Button>
         </div>
       )}
-      <ResizablePanelGroup direction="vertical" className="flex-1 h-full">
-        <ResizablePanel defaultSize={50} minSize={0} collapsible>
+      <Tabs defaultValue="build" className="flex flex-col h-full">
+        <div className="h-14 border-b border-border flex items-center px-4 gap-2 bg-card shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleToggleCollapse}
+            title={collapsed ? "Show Build & Chat panel" : "Hide Build & Chat panel"}
+          >
+            <ChevronLeft className={`w-4 h-4 transition-transform ${collapsed ? 'rotate-180' : ''}`} />
+          </Button>
+          <TabsList className="h-9">
+            <TabsTrigger value="build" className="text-xs px-3">Build</TabsTrigger>
+            <TabsTrigger value="chat" className="text-xs px-3">Chat</TabsTrigger>
+            <TabsTrigger value="executions" className="text-xs px-3" disabled={!workflowId}>
+              Executions
+            </TabsTrigger>
+          </TabsList>
+          <div className="flex-1 flex items-center justify-end gap-2">
+            <Button
+              onClick={onRunClick}
+              disabled={!workflowId || isExecuting}
+              size="sm"
+              variant="default"
+            >
+              Run
+            </Button>
+            <Button
+              onClick={onTriggerClick}
+              disabled={!workflowId}
+              size="sm"
+              variant="outline"
+            >
+              Triggers
+            </Button>
+          </div>
+        </div>
+
+        <TabsContent value="build" className="flex-1 mt-0 overflow-hidden">
           <BuildPanel
             tools={tools}
             isLoadingTools={isLoadingTools}
             onBlockSelect={onBlockSelect}
             blocks={functionBlocks}
-            onTriggerClick={onTriggerClick}
-            onRunClick={onRunClick}
-            onToggleCollapse={handleToggleCollapse}
-            isCollapsed={collapsed}
             selectedWorkflowId={workflowId}
             isExecuting={isExecuting}
           />
-        </ResizablePanel>
+        </TabsContent>
 
-        <ResizableHandle withHandle />
-
-        <ResizablePanel defaultSize={50} minSize={0} collapsible>
+        <TabsContent value="chat" className="flex-1 mt-0 overflow-hidden">
           <ChatPanel
             workflowId={workflowId}
             messages={messages}
@@ -386,8 +417,12 @@ export function BuildAndChatPanel({
             onRejectProposal={handleRejectProposal}
             activePreviewProposalId={activePreviewProposalId}
           />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        </TabsContent>
+
+        <TabsContent value="executions" className="flex-1 mt-0 overflow-hidden">
+          <ExecutionsPanel workflowId={workflowId} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

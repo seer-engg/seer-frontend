@@ -1,13 +1,17 @@
 /**
- * WorkflowTraceViewer - Vertical timeline view of workflow execution traces
- * 
- * Focuses on data inspection: node inputs/outputs, execution timing, error details
+ * WorkflowTraceViewer - Flexible viewer for workflow execution traces
+ *
+ * Supports two modes:
+ * - timeline: Vertical timeline view with expandable cards (original)
+ * - graph: Visual React Flow graph with node inspection panel (new)
  */
 import { useState, useMemo } from 'react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { WorkflowNodeExecutionCard, WorkflowNodeTrace } from './WorkflowNodeExecutionCard';
 import { WorkflowInputOutput } from './WorkflowInputOutput';
+import { WorkflowExecutionGraph } from './WorkflowExecutionGraph';
+import { NodeInspectionPanel } from './NodeInspectionPanel';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +28,15 @@ export interface WorkflowTraceViewerProps {
   inputs?: Record<string, any> | null;
   output?: Record<string, any> | null;
   compact?: boolean;
+  viewMode?: 'timeline' | 'graph';
+  executionGraph?: {
+    nodes: Array<{ id: string; type: string; label: string }>;
+    edges: Array<{ source: string; target: string }>;
+  };
+  reactflowGraph?: {
+    nodes: Array<{ id: string; position: { x: number; y: number }; [key: string]: any }>;
+    edges: Array<{ source: string; target: string; [key: string]: any }>;
+  };
 }
 
 function calculateDuration(startedAt?: string | null, finishedAt?: string | null): number | null {
@@ -53,8 +66,12 @@ export function WorkflowTraceViewer({
   inputs,
   output,
   compact = false,
+  viewMode = 'timeline',
+  executionGraph,
+  reactflowGraph,
 }: WorkflowTraceViewerProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   // Sort nodes by timestamp (chronological order)
   const sortedNodes = useMemo(() => {
@@ -83,6 +100,126 @@ export function WorkflowTraceViewer({
   const failedCount = sortedNodes.filter((n) => !!n.error).length;
   const totalNodes = sortedNodes.length;
 
+  // Find selected node data for inspection panel
+  const selectedNode = useMemo(() => {
+    if (!selectedNodeId) return null;
+    return sortedNodes.find((n) => n.node_id === selectedNodeId) || null;
+  }, [selectedNodeId, sortedNodes]);
+
+  // Graph mode rendering
+  if (viewMode === 'graph') {
+    if (!executionGraph) {
+      return (
+        <div className="text-center py-8 text-sm text-muted-foreground">
+          Execution graph data not available
+        </div>
+      );
+    }
+
+    return (
+      <div className={cn('space-y-6', compact && 'space-y-4')}>
+        {/* Header: Run Metadata */}
+        <div className={cn('space-y-4', compact && 'space-y-2')}>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h2 className={cn('font-semibold', compact ? 'text-base' : 'text-lg')}>
+                {compact ? `Run: ${runId.slice(0, 8)}...` : `Run: ${runId}`}
+              </h2>
+              {!compact && (
+                <p className="text-sm text-muted-foreground">
+                  Created: {format(new Date(createdAt), 'MMM d, yyyy h:mm:ss a')}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={
+                    status === 'succeeded'
+                      ? 'default'
+                      : status === 'failed'
+                        ? 'destructive'
+                        : 'secondary'
+                  }
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </Badge>
+              </div>
+              {totalDuration !== null && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Duration: </span>
+                  <span className="font-semibold">{formatDuration(totalDuration)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {!compact && <Separator />}
+
+        {/* Workflow Execution Graph */}
+        <div className={cn('rounded-lg border bg-card', compact ? 'h-[500px]' : 'h-[600px]')}>
+          <WorkflowExecutionGraph
+            executionGraph={executionGraph}
+            traces={sortedNodes}
+            reactflowGraph={reactflowGraph}
+            currentNodeId={status === 'running' ? sortedNodes[sortedNodes.length - 1]?.node_id : null}
+            onNodeClick={setSelectedNodeId}
+          />
+        </div>
+
+        {/* Node Inspection Panel */}
+        <NodeInspectionPanel
+          node={selectedNode}
+          open={!!selectedNode}
+          onClose={() => setSelectedNodeId(null)}
+        />
+
+        {/* Summary Footer */}
+        {!compact && (
+          <>
+            <Separator />
+            <div className="flex items-center justify-between text-sm py-2">
+              <div className="flex items-center gap-4">
+                <div>
+                  <span className="text-muted-foreground">Total execution time: </span>
+                  <span className="font-semibold">
+                    {totalDuration !== null ? formatDuration(totalDuration) : '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Nodes executed: </span>
+                  <span className="font-semibold">
+                    {totalNodes > 0 ? `${succeededCount + failedCount}/${totalNodes}` : '0'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {succeededCount > 0 && (
+                  <div>
+                    <span className="text-muted-foreground">Succeeded: </span>
+                    <span className="font-semibold text-green-600 dark:text-green-400">
+                      {succeededCount}
+                    </span>
+                  </div>
+                )}
+                {failedCount > 0 && (
+                  <div>
+                    <span className="text-muted-foreground">Failed: </span>
+                    <span className="font-semibold text-red-600 dark:text-red-400">
+                      {failedCount}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // Timeline mode rendering (original)
   return (
     <div className={cn('space-y-6', compact && 'space-y-4')}>
       {/* Header: Run Metadata */}
