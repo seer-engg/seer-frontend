@@ -5,7 +5,7 @@
  */
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -111,6 +111,10 @@ function ExpandedRowContent({ run }: ExpandedRowContentProps) {
           started_at: string | null;
           finished_at: string | null;
           nodes: any[];
+          execution_graph?: {
+            nodes: Array<{ id: string; type: string; label: string }>;
+            edges: Array<{ source: string; target: string }>;
+          };
         }>;
       }>(`/api/v1/runs/${run.run_id}/history`, { method: 'GET' });
     },
@@ -136,7 +140,7 @@ function ExpandedRowContent({ run }: ExpandedRowContentProps) {
   }
 
   return (
-    <div className="p-6 border-t">
+    <div className="p-6 border-t bg-muted/10">
       <WorkflowTraceViewer
         runId={run.run_id}
         workflowId={run.workflow_id}
@@ -148,6 +152,8 @@ function ExpandedRowContent({ run }: ExpandedRowContentProps) {
         inputs={run.inputs}
         output={run.output}
         compact={true}
+        viewMode="graph"
+        executionGraph={historyEntry.execution_graph}
       />
     </div>
   );
@@ -423,9 +429,8 @@ export default function WorkflowTraces() {
                 <TableBody>
                   {table.getRowModel().rows?.length ? (
                     table.getRowModel().rows.map((row) => (
-                      <>
+                      <React.Fragment key={row.id}>
                         <TableRow
-                          key={row.id}
                           className="bg-white hover:bg-muted/50"
                         >
                           {row.getVisibleCells().map((cell) => (
@@ -438,13 +443,13 @@ export default function WorkflowTraces() {
                           ))}
                         </TableRow>
                         {row.getIsExpanded() && (
-                          <TableRow key={`${row.id}-expanded`} className="bg-white">
+                          <TableRow className="bg-white">
                             <TableCell colSpan={columns.length} className="bg-white p-0">
                               <ExpandedRowContent run={row.original} />
                             </TableCell>
                           </TableRow>
                         )}
-                      </>
+                      </React.Fragment>
                     ))
                   ) : (
                     <TableRow className="bg-white">
