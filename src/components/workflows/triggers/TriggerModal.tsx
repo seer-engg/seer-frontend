@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Copy, KeyRound, Link as LinkIcon, Loader2, Mail, PlusCircle, Trash2 } from 'lucide-react';
 
 import {
@@ -20,7 +21,7 @@ import { getBackendBaseUrl } from '@/lib/api-client';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import { cn } from '@/lib/utils';
-import type { InputDef } from '@/types/workflow-spec';
+import type { InputDef, JsonValue } from '@/types/workflow-spec';
 import type { TriggerSubscriptionResponse } from '@/types/triggers';
 
 type BindingMode = 'event' | 'literal';
@@ -48,6 +49,23 @@ interface GmailConfigState {
   maxResults: string;
   overlapMs: string;
 }
+
+interface GmailFieldOption {
+  label: string;
+  path: string;
+  hint?: string;
+}
+
+const GMAIL_FIELD_OPTIONS: GmailFieldOption[] = [
+  { label: 'Subject', path: 'data.subject' },
+  { label: 'Snippet', path: 'data.snippet' },
+  { label: 'Message ID', path: 'data.message_id' },
+  { label: 'Thread ID', path: 'data.thread_id' },
+  { label: 'From email', path: 'data.from.email' },
+  { label: 'From name', path: 'data.from.name' },
+  { label: 'First recipient email', path: 'data.to.0.email' },
+  { label: 'Internal date (ms)', path: 'data.internal_date_ms' },
+];
 
 interface TriggerOption {
   key: string;
@@ -105,7 +123,9 @@ export function WorkflowTriggerModal({
   } = useIntegrationTools();
 
   const [activeTab, setActiveTab] = useState<'subscriptions' | 'create'>('subscriptions');
-  const [bindingState, setBindingState] = useState<Record<string, BindingConfig>>({});
+  const [bindingStateByTrigger, setBindingStateByTrigger] = useState<
+    Record<string, Record<string, BindingConfig>>
+  >({});
   const [selectedTriggerKey, setSelectedTriggerKey] = useState<string>(WEBHOOK_TRIGGER_KEY);
   const [gmailConfig, setGmailConfig] = useState<GmailConfigState>(() => makeDefaultGmailConfig());
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
@@ -142,20 +162,35 @@ export function WorkflowTriggerModal({
     return options;
   }, [genericTrigger, gmailTrigger]);
 
+  const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
+
   useEffect(() => {
     if (!open) return;
     setActiveTab('subscriptions');
-    setBindingState((prev) => {
-      const next: Record<string, BindingConfig> = {};
-      Object.keys(workflowInputs ?? {}).forEach((inputName) => {
-        next[inputName] = prev[inputName] ?? {
-          mode: 'event',
-          value: `data.${inputName}`,
-        };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !workflowInputEntries.length || !triggerOptions.length) {
+      return;
+    }
+    setBindingStateByTrigger((prev) => {
+      const next = { ...prev };
+      triggerOptions.forEach((option) => {
+        const existing = next[option.key] ?? {};
+        const updated: Record<string, BindingConfig> = { ...existing };
+        workflowInputEntries.forEach(([inputName]) => {
+          if (!updated[inputName]) {
+            updated[inputName] = {
+              mode: 'event',
+              value: `data.${inputName}`,
+            };
+          }
+        });
+        next[option.key] = updated;
       });
       return next;
     });
-  }, [workflowInputs, open]);
+  }, [open, workflowInputEntries, triggerOptions]);
 
   useEffect(() => {
     if (!open) {
@@ -178,7 +213,6 @@ export function WorkflowTriggerModal({
     setGmailConfig(makeDefaultGmailConfig());
   }, [open]);
 
-  const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
   const gmailConnected = isIntegrationConnected('gmail');
   const gmailConnectionId = parseProviderConnectionId(getConnectionId('gmail'));
   const gmailIntegrationReady = gmailConnected && typeof gmailConnectionId === 'number';
@@ -196,7 +230,38 @@ export function WorkflowTriggerModal({
     return names.length > 0 ? names : ['gmail_read_emails'];
   }, [tools]);
   const canCreateWebhook = Boolean(workflowId && genericTrigger && workflowInputEntries.length);
-  const canCreateGmail = Boolean(workflowId && gmailTrigger && gmailIntegrationReady);
+  const canCreateGmail = Boolean(
+    workflowId && gmailTrigger && gmailIntegrationReady && workflowInputEntries.length,
+  );
+
+  const getBindingState = useCallback(
+    (triggerKey: string): Record<string, BindingConfig> => bindingStateByTrigger[triggerKey] ?? {},
+    [bindingStateByTrigger],
+  );
+
+  const updateBindingValue = useCallback(
+    (
+      triggerKey: string,
+      inputName: string,
+      updater: (prev: BindingConfig | undefined) => BindingConfig,
+    ) => {
+      setBindingStateByTrigger((prev) => {
+        const triggerState = prev[triggerKey] ?? {};
+        const nextBinding = updater(triggerState[inputName]);
+        if (nextBinding === triggerState[inputName]) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [triggerKey]: {
+            ...triggerState,
+            [inputName]: nextBinding,
+          },
+        };
+      });
+    },
+    [],
+  );
 
   const handleCopy = async (value: string, label: string) => {
     if (!value) {
@@ -224,9 +289,9 @@ export function WorkflowTriggerModal({
     return `\${${normalized}}`;
   };
 
-  const buildBindingsPayload = (): Record<string, unknown> => {
-    const bindings: Record<string, unknown> = {};
-    Object.entries(bindingState).forEach(([inputName, config]) => {
+  const buildBindingsPayload = (triggerKey: string): Record<string, JsonValue> => {
+    const bindings: Record<string, JsonValue> = {};
+    Object.entries(getBindingState(triggerKey)).forEach(([inputName, config]) => {
       if (!config?.value) {
         return;
       }
@@ -242,8 +307,8 @@ export function WorkflowTriggerModal({
     return bindings;
   };
 
-  const buildGmailProviderConfig = (): Record<string, unknown> => {
-    const providerConfig: Record<string, unknown> = {};
+  const buildGmailProviderConfig = (): Record<string, JsonValue> => {
+    const providerConfig: Record<string, JsonValue> = {};
     const labelIds = gmailConfig.labelIds
       .split(',')
       .map((value) => value.trim())
@@ -288,7 +353,7 @@ export function WorkflowTriggerModal({
     }
     setCreatingTriggerKey(WEBHOOK_TRIGGER_KEY);
     try {
-      const bindings = buildBindingsPayload();
+      const bindings = buildBindingsPayload(WEBHOOK_TRIGGER_KEY);
       await createSubscription({
         workflow_id: workflowId,
         trigger_key: genericTrigger.key,
@@ -319,11 +384,13 @@ export function WorkflowTriggerModal({
     setCreatingTriggerKey(GMAIL_TRIGGER_KEY);
     try {
       const providerConfig = buildGmailProviderConfig();
+      const bindings = buildBindingsPayload(GMAIL_TRIGGER_KEY);
       await createSubscription({
         workflow_id: workflowId,
         trigger_key: gmailTrigger.key,
         provider_connection_id: gmailConnectionId,
         provider_config: providerConfig,
+        bindings,
         enabled: true,
       });
       toast.success('Gmail trigger created');
@@ -506,14 +573,13 @@ export function WorkflowTriggerModal({
     );
   };
 
-  const renderWebhookForm = () => {
-    if (!genericTrigger) {
-      return (
-        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          Generic webhook trigger metadata is unavailable.
-        </div>
-      );
-    }
+  const renderBindingGrid = (
+    triggerKey: string,
+    options?: {
+      description?: ReactNode;
+      fieldOptions?: GmailFieldOption[];
+    },
+  ) => {
     if (!workflowInputEntries.length) {
       return (
         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground space-y-2">
@@ -522,19 +588,27 @@ export function WorkflowTriggerModal({
         </div>
       );
     }
-    const isCreatingWebhook = creatingTriggerKey === WEBHOOK_TRIGGER_KEY;
+
+    const bindingState = getBindingState(triggerKey);
+    const fieldOptions = options?.fieldOptions ?? [];
+
     return (
       <div className="space-y-4">
         <div className="space-y-2">
           <h4 className="text-sm font-medium">Input bindings</h4>
-          <p className="text-sm text-muted-foreground">
-            Choose how incoming webhook payloads populate your workflow inputs. Use event mode for{' '}
-            <code className="font-mono text-xs">{'${event.data.foo}'}</code> references or literal values for static defaults.
-          </p>
+          {options?.description ?? (
+            <p className="text-sm text-muted-foreground">
+              Choose how incoming event payloads populate your workflow inputs.
+            </p>
+          )}
         </div>
         <div className="space-y-4">
           {workflowInputEntries.map(([inputName, inputDef]) => {
             const binding = bindingState[inputName];
+            const defaultEventPath = `data.${inputName}`;
+            const bindingMode = binding?.mode ?? 'event';
+            const bindingValue =
+              binding?.value ?? (bindingMode === 'event' ? defaultEventPath : '');
             return (
               <div key={inputName} className="rounded-lg border p-4 space-y-3">
                 <div className="flex items-center justify-between gap-4">
@@ -555,12 +629,13 @@ export function WorkflowTriggerModal({
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
-                        variant={binding?.mode === 'event' ? 'default' : 'outline'}
+                        variant={bindingMode === 'event' ? 'default' : 'outline'}
                         size="sm"
                         onClick={() =>
-                          setBindingState((prev) => ({
-                            ...prev,
-                            [inputName]: { mode: 'event', value: binding?.value ?? `data.${inputName}` },
+                          updateBindingValue(triggerKey, inputName, (prev) => ({
+                            mode: 'event',
+                            value:
+                              prev?.mode === 'event' && prev?.value ? prev.value : defaultEventPath,
                           }))
                         }
                       >
@@ -568,12 +643,12 @@ export function WorkflowTriggerModal({
                       </Button>
                       <Button
                         type="button"
-                        variant={binding?.mode === 'literal' ? 'default' : 'outline'}
+                        variant={bindingMode === 'literal' ? 'default' : 'outline'}
                         size="sm"
                         onClick={() =>
-                          setBindingState((prev) => ({
-                            ...prev,
-                            [inputName]: { mode: 'literal', value: binding?.value ?? '' },
+                          updateBindingValue(triggerKey, inputName, (prev) => ({
+                            mode: 'literal',
+                            value: prev?.mode === 'literal' ? prev.value ?? '' : '',
                           }))
                         }
                       >
@@ -583,24 +658,71 @@ export function WorkflowTriggerModal({
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label className="text-xs uppercase text-muted-foreground">
-                      {binding?.mode === 'event' ? 'Event path (relative to event.*)' : 'Literal value'}
+                      {bindingMode === 'event' ? 'Event path (relative to event.*)' : 'Literal value'}
                     </Label>
                     <Input
-                      value={binding?.value ?? ''}
-                      placeholder={binding?.mode === 'event' ? 'data.owner_id' : '42'}
+                      value={bindingValue}
+                      placeholder={bindingMode === 'event' ? 'data.owner_id' : '42'}
                       onChange={(event) =>
-                        setBindingState((prev) => ({
-                          ...prev,
-                          [inputName]: { mode: binding?.mode ?? 'event', value: event.target.value },
+                        updateBindingValue(triggerKey, inputName, (prev) => ({
+                          mode: prev?.mode ?? 'event',
+                          value: event.target.value,
                         }))
                       }
                     />
+                    {bindingMode === 'event' && fieldOptions.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>Quick insert:</span>
+                        {fieldOptions.map((field) => (
+                          <Button
+                            key={`${inputName}-${field.path}`}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() =>
+                              updateBindingValue(triggerKey, inputName, () => ({
+                                mode: 'event',
+                                value: field.path,
+                              }))
+                            }
+                          >
+                            {field.label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             );
           })}
         </div>
+      </div>
+    );
+  };
+
+  const renderWebhookForm = () => {
+    if (!genericTrigger) {
+      return (
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          Generic webhook trigger metadata is unavailable.
+        </div>
+      );
+    }
+    const isCreatingWebhook = creatingTriggerKey === WEBHOOK_TRIGGER_KEY;
+    const bindingGrid = renderBindingGrid(WEBHOOK_TRIGGER_KEY, {
+      description: (
+        <p className="text-sm text-muted-foreground">
+          Choose how incoming webhook payloads populate your workflow inputs. Use event mode for{' '}
+          <code className="font-mono text-xs">{'${event.data.foo}'}</code> references or literal
+          values for static defaults.
+        </p>
+      ),
+    });
+    return (
+      <div className="space-y-4">
+        {bindingGrid}
         <Button
           type="button"
           onClick={handleCreateWebhookSubscription}
@@ -631,6 +753,16 @@ export function WorkflowTriggerModal({
       );
     }
     const isCreatingGmail = creatingTriggerKey === GMAIL_TRIGGER_KEY;
+    const bindingGrid = renderBindingGrid(GMAIL_TRIGGER_KEY, {
+      description: (
+        <p className="text-sm text-muted-foreground">
+          Map Gmail event outputs (for example{' '}
+          <code className="font-mono text-xs">{'${event.data.subject}'}</code>) to the inputs your
+          workflow expects. Use literal mode for static defaults.
+        </p>
+      ),
+      fieldOptions: GMAIL_FIELD_OPTIONS,
+    });
     return (
       <div className="space-y-5">
         <div className="rounded-lg border p-4 space-y-3">
@@ -746,6 +878,7 @@ export function WorkflowTriggerModal({
             <p className="text-xs text-muted-foreground">Re-read recent emails for dedupe protection.</p>
           </div>
         </div>
+        {bindingGrid}
         <Button
           type="button"
           onClick={handleCreateGmailSubscription}
@@ -865,7 +998,7 @@ export function WorkflowTriggerModal({
   );
 }
 
-function coerceLiteralValue(raw: string): unknown {
+function coerceLiteralValue(raw: string): JsonValue {
   const trimmed = raw.trim();
   if (!trimmed) {
     return '';
@@ -873,7 +1006,7 @@ function coerceLiteralValue(raw: string): unknown {
   const jsonLike = /^(true|false|null|\d+(\.\d+)?|\[|\{)/.test(trimmed);
   if (jsonLike) {
     try {
-      return JSON.parse(trimmed);
+      return JSON.parse(trimmed) as JsonValue;
     } catch (error) {
       console.warn('Failed to parse literal JSON, falling back to string', error);
     }
