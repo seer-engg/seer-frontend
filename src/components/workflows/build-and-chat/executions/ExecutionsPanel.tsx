@@ -2,6 +2,7 @@
  * ExecutionsPanel - List of workflow executions for the sidebar
  */
 import { useQuery } from '@tanstack/react-query';
+import type { Query } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { CheckCircle, XCircle, Loader2, Clock, AlertCircle, Play, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -11,23 +12,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { backendApiClient } from '@/lib/api-client';
 
-type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
-
-interface WorkflowRunSummary {
-  run_id: string;
-  status: RunStatus;
-  created_at: string;
-  started_at?: string | null;
-  finished_at?: string | null;
-  inputs?: Record<string, any> | null;
-  output?: Record<string, any> | null;
-  error?: string | null;
-}
-
-interface WorkflowRunListResponse {
-  workflow_id: string;
-  runs: WorkflowRunSummary[];
-}
+import { useRunStatusPolling } from './useRunStatusPolling';
+import type { RunStatus, WorkflowRunListResponse, WorkflowRunSummary } from './types';
 
 interface ExecutionsPanelProps {
   workflowId: string | null;
@@ -89,16 +75,24 @@ export function ExecutionsPanel({ workflowId }: ExecutionsPanelProps) {
       );
     },
     enabled: !!workflowId,
-    refetchInterval: (data) => {
+    refetchInterval: (
+      query: Query<WorkflowRunListResponse, Error, WorkflowRunListResponse, readonly unknown[]>
+    ) => {
+      const response = query.state.data;
       // Poll if any run is still running
-      const hasRunning = data?.runs?.some(
+      const hasRunning = response?.runs?.some(
         (run) => run.status === 'running' || run.status === 'queued'
       );
       return hasRunning ? 3000 : false;
     },
   });
 
-  const runs = data?.runs ?? [];
+  const runs: WorkflowRunSummary[] = data?.runs ?? [];
+
+  useRunStatusPolling({
+    workflowId,
+    runs,
+  });
 
   if (!workflowId) {
     return (
