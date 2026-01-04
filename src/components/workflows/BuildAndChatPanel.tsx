@@ -42,6 +42,7 @@ export function BuildAndChatPanel({
   isExecuting,
   triggerOptions = [],
   isLoadingTriggers = false,
+  triggerInfoMessage,
 }: BuildAndChatPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(() => {
     const saved = localStorage.getItem('buildChatPanelCollapsed');
@@ -381,6 +382,7 @@ export function BuildAndChatPanel({
             isExecuting={isExecuting}
             triggerOptions={triggerOptions}
             isLoadingTriggers={isLoadingTriggers}
+            triggerInfoMessage={triggerInfoMessage}
           />
         </TabsContent>
 

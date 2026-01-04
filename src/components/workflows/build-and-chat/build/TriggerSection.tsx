@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 import { TRIGGER_ICON_BY_KEY } from '@/components/workflows/triggers/constants';
@@ -11,6 +12,7 @@ export interface TriggerListOption {
   key: string;
   title: string;
   description?: string | null;
+  disabled?: boolean;
   disabledReason?: string;
   badge?: string;
   status?: 'ready' | 'action-required';
@@ -26,9 +28,15 @@ interface TriggerSectionProps {
   options: TriggerListOption[];
   isLoading?: boolean;
   emptyState?: ReactNode;
+  infoMessage?: string;
 }
 
-export function TriggerSection({ options, isLoading = false, emptyState }: TriggerSectionProps) {
+export function TriggerSection({
+  options,
+  isLoading = false,
+  emptyState,
+  infoMessage,
+}: TriggerSectionProps) {
   if (isLoading) {
     return (
       <div>
@@ -62,20 +70,42 @@ export function TriggerSection({ options, isLoading = false, emptyState }: Trigg
           <p className="text-xs text-muted-foreground">Define how this workflow starts.</p>
         </div>
       </div>
+      {infoMessage && (
+        <div className="mb-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground bg-muted/40">
+          {infoMessage}
+        </div>
+      )}
       <div className="space-y-2">
         {options.map((option) => {
           const Icon = TRIGGER_ICON_BY_KEY[option.key];
-          const disabled = Boolean(option.disabledReason);
-
-          return (
+          const disabled = option.disabled ?? Boolean(option.disabledReason);
+          const cardContent = (
             <Card
               key={option.key}
+              role="button"
+              tabIndex={disabled ? -1 : 0}
+              aria-disabled={disabled}
+              onClick={() => {
+                if (disabled || option.isPrimaryActionLoading) {
+                  return;
+                }
+                option.onPrimaryAction?.();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  if (disabled || option.isPrimaryActionLoading) {
+                    return;
+                  }
+                  option.onPrimaryAction?.();
+                }
+              }}
               className={cn(
-                'border border-border/70 bg-background',
-                disabled && 'opacity-80 grayscale-[20%]',
+                'border border-border/70 bg-background transition-colors cursor-pointer',
+                disabled ? 'opacity-80 grayscale-[20%] cursor-not-allowed' : 'hover:border-primary/50',
               )}
             >
-              <CardContent className="flex flex-col gap-3 p-3">
+              <CardContent className="flex flex-col gap-3 p-1">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className="rounded-md bg-primary/10 p-2 text-primary">
@@ -83,9 +113,6 @@ export function TriggerSection({ options, isLoading = false, emptyState }: Trigg
                     </div>
                     <div>
                       <p className="text-sm font-medium">{option.title}</p>
-                      {option.description && (
-                        <p className="text-xs text-muted-foreground">{option.description}</p>
-                      )}
                     </div>
                   </div>
                   {option.badge && (
@@ -105,19 +132,15 @@ export function TriggerSection({ options, isLoading = false, emptyState }: Trigg
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    disabled={disabled || option.isPrimaryActionLoading}
-                    onClick={option.onPrimaryAction}
-                  >
-                    {option.isPrimaryActionLoading ? 'Adding…' : option.actionLabel ?? 'Add trigger'}
-                  </Button>
                   {option.secondaryActionLabel && option.onSecondaryAction && (
                     <Button
                       size="sm"
                       variant="outline"
                       disabled={option.isSecondaryActionLoading}
-                      onClick={option.onSecondaryAction}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        option.onSecondaryAction?.();
+                      }}
                     >
                       {option.secondaryActionLabel}
                     </Button>
@@ -129,6 +152,17 @@ export function TriggerSection({ options, isLoading = false, emptyState }: Trigg
               </CardContent>
             </Card>
           );
+
+          if (option.description) {
+            return (
+              <Tooltip key={option.key}>
+                <TooltipTrigger asChild>{cardContent}</TooltipTrigger>
+                <TooltipContent className="max-w-xs text-sm">{option.description}</TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          return cardContent;
         })}
       </div>
     </div>

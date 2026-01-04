@@ -103,5 +103,6 @@ export interface BuildAndChatPanelProps {
   isExecuting?: boolean;
   triggerOptions?: TriggerListOption[];
   isLoadingTriggers?: boolean;
+  triggerInfoMessage?: string;
 }
 

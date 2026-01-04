@@ -17,6 +17,7 @@ interface BuildPanelProps {
   isExecuting?: boolean;
   triggerOptions?: TriggerListOption[];
   isLoadingTriggers?: boolean;
+  triggerInfoMessage?: string;
 }
 
 export function BuildPanel({
@@ -26,6 +27,7 @@ export function BuildPanel({
   blocks = BUILT_IN_BLOCKS,
   triggerOptions = [],
   isLoadingTriggers = false,
+  triggerInfoMessage,
 }: BuildPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -62,7 +64,11 @@ export function BuildPanel({
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
-          <TriggerSection options={triggerOptions} isLoading={isLoadingTriggers} />
+          <TriggerSection
+            options={triggerOptions}
+            isLoading={isLoadingTriggers}
+            infoMessage={triggerInfoMessage}
+          />
           <BlocksSection blocks={filteredBlocks} onSelectBlock={handleBuiltInSelect} />
           <ToolsSection
             tools={tools}

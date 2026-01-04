@@ -692,9 +692,7 @@ export default function Workflows() {
 
   const triggerOptions = useMemo<TriggerListOption[]>(() => {
     const options: TriggerListOption[] = [];
-    const baseDisabledReason = workflowHasInputs
-      ? undefined
-      : 'Add an Input block before attaching triggers';
+    const blockDueToInputs = !workflowHasInputs;
 
     const webhookTrigger = triggerCatalog.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY);
     if (webhookTrigger) {
@@ -703,7 +701,7 @@ export default function Workflows() {
         title: webhookTrigger.title ?? 'Generic Webhook',
         description:
           webhookTrigger.description ?? 'Accept HTTP POST requests from any service.',
-        disabledReason: baseDisabledReason,
+        disabled: blockDueToInputs,
         onPrimaryAction: () => handleAddTriggerDraft(WEBHOOK_TRIGGER_KEY),
         actionLabel: 'Add to canvas',
         badge: 'Webhook',
@@ -713,11 +711,13 @@ export default function Workflows() {
 
     const gmailTrigger = triggerCatalog.find((trigger) => trigger.key === GMAIL_TRIGGER_KEY);
     if (gmailTrigger) {
-      let disabledReason = baseDisabledReason;
+      let disabledReason: string | undefined;
+      let disabled = blockDueToInputs;
       let secondaryActionLabel: string | undefined;
       let onSecondaryAction: (() => void) | undefined;
-      if (!disabledReason && !gmailIntegrationReady) {
+      if (!disabled && !gmailIntegrationReady) {
         disabledReason = 'Connect Gmail to continue';
+        disabled = true;
         secondaryActionLabel = 'Connect Gmail';
         onSecondaryAction = handleConnectGmail;
       }
@@ -727,6 +727,7 @@ export default function Workflows() {
         title: gmailTrigger.title ?? 'Gmail – New Email',
         description:
           gmailTrigger.description ?? 'Poll a Gmail inbox for newly received emails.',
+        disabled,
         disabledReason,
         onPrimaryAction: () => handleAddTriggerDraft(GMAIL_TRIGGER_KEY),
         actionLabel: 'Add to canvas',
@@ -747,6 +748,9 @@ export default function Workflows() {
     handleConnectGmail,
     isConnectingGmail,
   ]);
+  const triggerInfoMessage = workflowHasInputs
+    ? undefined
+    : 'Add an Input block before attaching triggers.';
 
   const handleExecute = useCallback(async () => {
     if (!selectedWorkflowId) {
@@ -1017,6 +1021,7 @@ export default function Workflows() {
                 isExecuting={isExecuting}
                 triggerOptions={triggerOptions}
                 isLoadingTriggers={isLoadingTriggers || isLoadingSubscriptions}
+                triggerInfoMessage={triggerInfoMessage}
               />
             </ResizablePanel>
           </>
