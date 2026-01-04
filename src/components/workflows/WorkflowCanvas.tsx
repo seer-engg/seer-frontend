@@ -65,6 +65,7 @@ interface WorkflowCanvasProps {
   onNodesChange?: (nodes: Node<WorkflowNodeData>[]) => void;
   onEdgesChange?: (edges: WorkflowEdge[]) => void;
   onNodeSelect?: (nodeId: string) => void;
+  onNodeDoubleClick?: (node: Node<WorkflowNodeData>) => void;
   selectedNodeId?: string | null;
   className?: string;
   readOnly?: boolean;
@@ -76,6 +77,7 @@ export function WorkflowCanvas({
   onNodesChange,
   onEdgesChange,
   onNodeSelect,
+  onNodeDoubleClick,
   selectedNodeId,
   className,
   readOnly = false,
@@ -250,6 +252,15 @@ export function WorkflowCanvas({
     [onNodeSelect]
   );
 
+  const handleNodeDoubleClick: NodeMouseHandler = useCallback(
+    (event, node) => {
+      if (onNodeDoubleClick) {
+        onNodeDoubleClick(node as Node<WorkflowNodeData>);
+      }
+    },
+    [onNodeDoubleClick],
+  );
+
   const contextValue = useMemo(
     () => ({
       nodes,
@@ -270,6 +281,7 @@ export function WorkflowCanvas({
           onEdgesChange={handleEdgesChange}
           onConnect={readOnly ? undefined : onConnect}
           onNodeClick={handleNodeClick}
+          onNodeDoubleClick={readOnly ? undefined : handleNodeDoubleClick}
           connectionMode={ConnectionMode.Loose}
           fitView
           fitViewOptions={{ padding: 0.2 }}

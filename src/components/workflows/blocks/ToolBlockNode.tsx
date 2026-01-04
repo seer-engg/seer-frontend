@@ -25,7 +25,7 @@ import { GmailSVG } from '@/components/icons/gmail';
 import { GoogleDriveSVG } from '@/components/icons/googledrive';
 import { GoogleSheetsSVG } from '@/components/icons/googlesheets';
 import { GitHubSVG } from '@/components/icons/github';
-import { InlineBlockConfig } from '../InlineBlockConfig';
+import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
 
 /**
  * Get icon for integration type
@@ -241,7 +241,10 @@ export const ToolBlockNode = memo(function ToolBlockNode(
         </div>
       </div>
 
-      <InlineBlockConfig nodeId={id} />
+      <WorkflowNodeSummary
+        config={data.config}
+        priorityKeys={['tool_name', 'toolName', 'operation', 'model']}
+      />
 
       {/* Single output handle */}
       <Handle

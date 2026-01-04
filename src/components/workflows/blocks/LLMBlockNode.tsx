@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import { NodeProps } from '@xyflow/react';
 import { WorkflowNodeData } from '../types';
-import { InlineBlockConfig } from '../InlineBlockConfig';
+import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
 import { BaseBlockNode } from './BaseBlockNode';
 
 export const LLMBlockNode = memo(function LLMBlockNode(
@@ -36,7 +36,10 @@ export const LLMBlockNode = memo(function LLMBlockNode(
         outputs: outputHandles,
       }}
     >
-      <InlineBlockConfig nodeId={props.id} />
+      <WorkflowNodeSummary
+        config={props.data?.config}
+        priorityKeys={['user_prompt', 'model', 'temperature', 'system_prompt']}
+      />
     </BaseBlockNode>
   );
 });

@@ -8,6 +8,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowNodeConfigDialog } from '@/components/workflows/WorkflowNodeConfigDialog';
 import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema, TriggerDraftMeta } from '@/components/workflows/types';
 import type { WorkflowProposalPreview } from '@/components/workflows/build-and-chat/types';
 import type { TriggerListOption } from '@/components/workflows/build-and-chat/build/TriggerSection';
@@ -194,6 +195,8 @@ export default function Workflows() {
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
   const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState('My Workflow');
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [showInputDialog, setShowInputDialog] = useState(false);
@@ -204,6 +207,10 @@ export default function Workflows() {
   const [draftTriggers, setDraftTriggers] = useState<TriggerDraftMeta[]>([]);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [proposalPreview, setProposalPreview] = useState<WorkflowProposalPreview | null>(null);
+  const editingNode = useMemo(
+    () => nodes.find((node) => node.id === editingNodeId) ?? null,
+    [nodes, editingNodeId],
+  );
   
   const {
     workflows,
@@ -320,6 +327,42 @@ export default function Workflows() {
       setNodes((nds) => [...nds, newNode]);
     },
     [functionBlocksMap],
+  );
+
+  const handleNodeConfigUpdate = useCallback(
+    (nodeId: string, updates: Partial<WorkflowNodeData>) => {
+      setNodes((prevNodes) =>
+        prevNodes.map((node) => {
+          if (node.id !== nodeId) {
+            return node;
+          }
+
+          const mergedData: WorkflowNodeData = {
+            ...node.data,
+            ...updates,
+          };
+
+          if (updates.config) {
+            const mergedConfig = {
+              ...(node.data?.config || {}),
+              ...updates.config,
+            };
+
+            if ('fields' in updates.config) {
+              mergedConfig.fields = updates.config.fields;
+            }
+
+            mergedData.config = mergedConfig;
+          }
+
+          return {
+            ...node,
+            data: mergedData,
+          };
+        }),
+      );
+    },
+    [setNodes],
   );
 
   const handleAddTriggerDraft = useCallback(
@@ -559,6 +602,25 @@ export default function Workflows() {
     [setNodes],
   );
 
+  const handleCanvasNodeDoubleClick = useCallback(
+    (node: Node<WorkflowNodeData>) => {
+      if (node.type === 'trigger') {
+        return;
+      }
+      setEditingNodeId(node.id);
+      setIsConfigDialogOpen(true);
+      setSelectedNodeId(node.id);
+    },
+    [setSelectedNodeId],
+  );
+
+  const handleConfigDialogOpenChange = useCallback((open: boolean) => {
+    setIsConfigDialogOpen(open);
+    if (!open) {
+      setEditingNodeId(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (isPreviewActive) {
       setSelectedNodeId(null);
@@ -568,6 +630,17 @@ export default function Workflows() {
   useEffect(() => {
     setDraftTriggers([]);
   }, [selectedWorkflowId]);
+
+  useEffect(() => {
+    if (!editingNodeId) {
+      return;
+    }
+    const exists = nodes.some((node) => node.id === editingNodeId);
+    if (!exists) {
+      setEditingNodeId(null);
+      setIsConfigDialogOpen(false);
+    }
+  }, [editingNodeId, nodes]);
 
   // Extract input blocks from current workflow
   const inputBlocks = useMemo(() => {
@@ -890,6 +963,7 @@ export default function Workflows() {
               onNodesChange={isPreviewActive ? undefined : handleCanvasNodesChange}
               onEdgesChange={isPreviewActive ? undefined : setEdges}
               onNodeSelect={isPreviewActive ? undefined : setSelectedNodeId}
+              onNodeDoubleClick={isPreviewActive ? undefined : handleCanvasNodeDoubleClick}
               selectedNodeId={isPreviewActive ? null : selectedNodeId}
               readOnly={isPreviewActive}
             />
@@ -948,6 +1022,15 @@ export default function Workflows() {
           </>
         )}
       </ResizablePanelGroup>
+
+      <WorkflowNodeConfigDialog
+        open={isConfigDialogOpen}
+        node={editingNode}
+        allNodes={nodes}
+        allEdges={edges}
+        onOpenChange={handleConfigDialogOpenChange}
+        onUpdate={handleNodeConfigUpdate}
+      />
 
       {/* Input Dialog */}
       <AlertDialog open={showInputDialog} onOpenChange={setShowInputDialog}>
