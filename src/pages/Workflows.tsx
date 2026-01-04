@@ -530,8 +530,7 @@ export default function Workflows() {
             draft: entry.kind === 'draft' ? entry.draft : undefined,
           },
         },
-        draggable: false,
-        selectable: false,
+        // draggable: false,
       } as Node<WorkflowNodeData>;
     });
   }, [
