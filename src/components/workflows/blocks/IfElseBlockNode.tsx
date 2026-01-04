@@ -3,7 +3,7 @@ import { GitBranch } from 'lucide-react';
 import { Handle, NodeProps, Position } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
-import { InlineBlockConfig } from '../InlineBlockConfig';
+import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
 import { BaseBlockNode } from './BaseBlockNode';
 
 export const IfElseBlockNode = memo(function IfElseBlockNode(
@@ -19,6 +19,10 @@ export const IfElseBlockNode = memo(function IfElseBlockNode(
         outputs: [],
       }}
     >
+      <WorkflowNodeSummary
+        config={props.data?.config}
+        priorityKeys={['condition']}
+      />
       <div className="relative mt-2 h-16">
         <Handle
           id="true"
@@ -49,8 +53,6 @@ export const IfElseBlockNode = memo(function IfElseBlockNode(
           </span>
         </div>
       </div>
-
-      <InlineBlockConfig nodeId={props.id} />
     </BaseBlockNode>
   );
 });

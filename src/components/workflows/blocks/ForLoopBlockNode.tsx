@@ -3,21 +3,16 @@ import { Repeat } from 'lucide-react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
-import { InlineBlockConfig } from '../InlineBlockConfig';
+import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
 import { BaseBlockNode } from './BaseBlockNode';
 
 export const ForLoopBlockNode = memo(function ForLoopBlockNode(
   props: NodeProps<WorkflowNodeData>
 ) {
   const config = props.data.config || {};
-  const arrayVariable = config.array_variable || config.array_var || 'items';
   const literalItems = Array.isArray(config.array_literal) ? config.array_literal : [];
   const literalPreview = literalItems.slice(0, 3).join(', ');
   const hasLegacyLiteral = literalItems.length > 0;
-  const sourceLabel = hasLegacyLiteral
-    ? `${literalItems.length} item${literalItems.length === 1 ? '' : 's'}`
-    : arrayVariable;
-  const itemVar = config.item_var || 'item';
 
   return (
     <BaseBlockNode
@@ -29,18 +24,16 @@ export const ForLoopBlockNode = memo(function ForLoopBlockNode(
         outputs: [],
       }}
     >
-      <div className="space-y-1 text-xs text-muted-foreground">
-        <p>
-          Source: {sourceLabel}
+      <WorkflowNodeSummary
+        config={props.data?.config}
+        priorityKeys={['array_mode', 'array_variable', 'item_var']}
+      />
+      {hasLegacyLiteral && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Legacy list: {literalPreview}
+          {literalItems.length > 3 ? '…' : ''}
         </p>
-        {hasLegacyLiteral && (
-          <p className="truncate text-[11px]">
-            Legacy list: {literalPreview}
-            {literalItems.length > 3 ? '…' : ''}
-          </p>
-        )}
-        <p>Item variable: <span className="font-medium text-foreground">{itemVar}</span></p>
-      </div>
+      )}
 
       <div className="relative mt-4 h-16">
         <Handle
@@ -69,7 +62,6 @@ export const ForLoopBlockNode = memo(function ForLoopBlockNode(
         </div>
       </div>
 
-      <InlineBlockConfig nodeId={props.id} />
     </BaseBlockNode>
   );
 });

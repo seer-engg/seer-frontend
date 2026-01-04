@@ -8,11 +8,15 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
-import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema } from '@/components/workflows/types';
+import { WorkflowNodeConfigDialog } from '@/components/workflows/WorkflowNodeConfigDialog';
+import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema, TriggerDraftMeta } from '@/components/workflows/types';
 import type { WorkflowProposalPreview } from '@/components/workflows/build-and-chat/types';
+import type { TriggerListOption } from '@/components/workflows/build-and-chat/build/TriggerSection';
+import type { TriggerSubscriptionUpdateRequest } from '@/types/triggers';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { useWorkflowBuilder, WorkflowListItem, WorkflowModel } from '@/hooks/useWorkflowBuilder';
+import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { Button } from '@/components/ui/button';
@@ -25,7 +29,14 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { toast } from '@/components/ui/sonner';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import { WorkflowTriggerModal } from '@/components/workflows/triggers/TriggerModal';
+import { WEBHOOK_TRIGGER_KEY, GMAIL_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
+import {
+  buildBindingsPayload,
+  buildDefaultBindingState,
+  makeDefaultGmailConfig,
+  serializeGmailConfig,
+} from '@/components/workflows/triggers/utils';
+import type { BindingState } from '@/components/workflows/triggers/utils';
 
 const isBranchValue = (value: unknown): value is 'true' | 'false' =>
   value === 'true' || value === 'false';
@@ -60,6 +71,15 @@ const normalizeEdges = (rawEdges?: any[]): WorkflowEdge[] => {
 };
 
 const DEFAULT_LLM_USER_PROMPT = 'Enter your prompt here';
+
+const parseProviderConnectionId = (raw?: string | null): number | null => {
+  if (!raw) {
+    return null;
+  }
+  const segments = raw.split(':');
+  const numeric = Number(segments[segments.length - 1]);
+  return Number.isNaN(numeric) ? null : numeric;
+};
 
 const normalizeNodes = (
   rawNodes?: any[],
@@ -165,10 +185,18 @@ export default function Workflows() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { workflowId: urlWorkflowId } = useParams<{ workflowId?: string }>();
   const buildChatSupported = true;
-  const { refresh: refreshIntegrationTools } = useIntegrationTools();
+  const {
+    refresh: refreshIntegrationTools,
+    tools: integrationTools,
+    isIntegrationConnected,
+    getConnectionId,
+    connectIntegration,
+  } = useIntegrationTools();
   const [nodes, setNodes] = useState<Node<WorkflowNodeData>[]>([]);
   const [edges, setEdges] = useState<WorkflowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState('My Workflow');
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [showInputDialog, setShowInputDialog] = useState(false);
@@ -176,8 +204,13 @@ export default function Workflows() {
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
-  const [showTriggerModal, setShowTriggerModal] = useState(false);
+  const [draftTriggers, setDraftTriggers] = useState<TriggerDraftMeta[]>([]);
+  const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [proposalPreview, setProposalPreview] = useState<WorkflowProposalPreview | null>(null);
+  const editingNode = useMemo(
+    () => nodes.find((node) => node.id === editingNodeId) ?? null,
+    [nodes, editingNodeId],
+  );
   
   const {
     workflows,
@@ -195,6 +228,16 @@ export default function Workflows() {
     blocks: functionBlockSchemas,
     blocksByType: functionBlocksMap,
   } = useFunctionBlocks();
+  const {
+    triggers: triggerCatalog,
+    subscriptions: triggerSubscriptions,
+    isLoadingTriggers,
+    isLoadingSubscriptions,
+    createSubscription,
+    updateSubscription,
+    toggleSubscription,
+    deleteSubscription,
+  } = useWorkflowTriggers(selectedWorkflowId);
 
   const availableBlocks = useMemo(() => {
     // Always include built-in blocks (LLM, If/Else, For Loop, Input)
@@ -220,6 +263,49 @@ export default function Workflows() {
     return mergedBlocks;
   }, [functionBlockSchemas]);
 
+  const workflowInputsDef = useMemo(() => loadedWorkflow?.spec?.inputs ?? {}, [loadedWorkflow?.spec?.inputs]);
+  const workflowHasInputs = useMemo(
+    () => Object.keys(workflowInputsDef).length > 0,
+    [workflowInputsDef],
+  );
+  const gmailToolNames = useMemo(() => {
+    const normalized = Array.isArray(integrationTools) ? integrationTools : [];
+    const names = normalized
+      .filter((tool) => {
+        const integration = tool.integration_type?.toLowerCase();
+        if (integration) {
+          return integration === 'gmail';
+        }
+        return tool.name.toLowerCase().includes('gmail');
+      })
+      .map((tool) => tool.name);
+    return names.length > 0 ? names : GMAIL_TOOL_FALLBACK_NAMES;
+  }, [integrationTools]);
+  const gmailConnectionIdRaw = getConnectionId('gmail');
+  const gmailConnectionId = useMemo(
+    () => parseProviderConnectionId(gmailConnectionIdRaw),
+    [gmailConnectionIdRaw],
+  );
+  const gmailIntegrationReady = isIntegrationConnected('gmail') && typeof gmailConnectionId === 'number';
+  const handleConnectGmail = useCallback(async () => {
+    setIsConnectingGmail(true);
+    try {
+      const redirectUrl = await connectIntegration('gmail', { toolNames: gmailToolNames });
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+        return;
+      }
+      toast.error('Unable to start Gmail connection');
+    } catch (error) {
+      console.error('Failed to connect Gmail', error);
+      toast.error('Unable to start Gmail connection', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsConnectingGmail(false);
+    }
+  }, [connectIntegration, gmailToolNames]);
+
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
       // Set default config based on block type
@@ -241,6 +327,111 @@ export default function Workflows() {
       setNodes((nds) => [...nds, newNode]);
     },
     [functionBlocksMap],
+  );
+
+  const handleNodeConfigUpdate = useCallback(
+    (nodeId: string, updates: Partial<WorkflowNodeData>) => {
+      setNodes((prevNodes) =>
+        prevNodes.map((node) => {
+          if (node.id !== nodeId) {
+            return node;
+          }
+
+          const mergedData: WorkflowNodeData = {
+            ...node.data,
+            ...updates,
+          };
+
+          if (updates.config) {
+            const mergedConfig = {
+              ...(node.data?.config || {}),
+              ...updates.config,
+            };
+
+            if ('fields' in updates.config) {
+              mergedConfig.fields = updates.config.fields;
+            }
+
+            mergedData.config = mergedConfig;
+          }
+
+          return {
+            ...node,
+            data: mergedData,
+          };
+        }),
+      );
+    },
+    [setNodes],
+  );
+
+  const handleAddTriggerDraft = useCallback(
+    (triggerKey: string) => {
+      if (!workflowHasInputs) {
+        toast.error('Add an Input block before configuring triggers');
+        return;
+      }
+      const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
+      if (!descriptor) {
+        toast.error('Trigger metadata unavailable');
+        return;
+      }
+      const draft: TriggerDraftMeta = {
+        id: `trigger-draft-${Date.now()}`,
+        triggerKey,
+        initialBindings: buildDefaultBindingState(workflowInputsDef),
+        initialGmailConfig: triggerKey === GMAIL_TRIGGER_KEY ? makeDefaultGmailConfig() : undefined,
+      };
+      setDraftTriggers((prev) => [...prev, draft]);
+    },
+    [triggerCatalog, workflowHasInputs, workflowInputsDef],
+  );
+
+  const handleDiscardTriggerDraft = useCallback((draftId: string) => {
+    setDraftTriggers((prev) => prev.filter((draft) => draft.id !== draftId));
+  }, []);
+
+  const handleSaveTriggerDraft = useCallback(
+    async (
+      draftId: string,
+      payload: { triggerKey: string; bindings: BindingState; providerConfig?: Record<string, any> },
+    ) => {
+      if (!selectedWorkflowId) {
+        throw new Error('Save the workflow before saving triggers');
+      }
+      const descriptor = triggerCatalog.find((trigger) => trigger.key === payload.triggerKey);
+      if (!descriptor) {
+        throw new Error('Trigger metadata unavailable');
+      }
+      if (payload.triggerKey === GMAIL_TRIGGER_KEY) {
+        if (!gmailIntegrationReady || !gmailConnectionId) {
+          throw new Error('Connect Gmail before saving this trigger');
+        }
+      }
+      try {
+        await createSubscription({
+          workflow_id: selectedWorkflowId,
+          trigger_key: payload.triggerKey,
+          bindings: buildBindingsPayload(payload.bindings),
+          ...(payload.providerConfig ? { provider_config: payload.providerConfig } : {}),
+          ...(payload.triggerKey === GMAIL_TRIGGER_KEY
+            ? { provider_connection_id: gmailConnectionId ?? undefined }
+            : {}),
+          enabled: true,
+        });
+        setDraftTriggers((prev) => prev.filter((draft) => draft.id !== draftId));
+      } catch (error) {
+        console.error('Failed to save trigger draft', error);
+        throw error;
+      }
+    },
+    [
+      selectedWorkflowId,
+      triggerCatalog,
+      gmailIntegrationReady,
+      gmailConnectionId,
+      createSubscription,
+    ],
   );
 
 
@@ -327,14 +518,129 @@ export default function Workflows() {
   }, [proposalPreview, functionBlocksMap]);
 
   const isPreviewActive = Boolean(previewGraph);
-  const canvasNodes = previewGraph?.nodes ?? nodes;
+  const triggerHandlers = useMemo(
+    () => ({
+      update: (subscriptionId: number, payload: TriggerSubscriptionUpdateRequest) =>
+        updateSubscription(subscriptionId, payload).then(() => undefined),
+      toggle: (subscriptionId: number, enabled: boolean) =>
+        toggleSubscription({ subscriptionId, enabled }).then(() => undefined),
+      delete: (subscriptionId: number) => deleteSubscription(subscriptionId).then(() => undefined),
+      saveDraft: handleSaveTriggerDraft,
+      discardDraft: handleDiscardTriggerDraft,
+    }),
+    [updateSubscription, toggleSubscription, deleteSubscription, handleSaveTriggerDraft, handleDiscardTriggerDraft],
+  );
+
+  const triggerNodes = useMemo(() => {
+    const entries = [
+      ...triggerSubscriptions.map((subscription) => ({ kind: 'subscription' as const, subscription })),
+      ...draftTriggers.map((draft) => ({ kind: 'draft' as const, draft })),
+    ];
+    return entries.map((entry, index) => {
+      const triggerKey =
+        entry.kind === 'subscription' ? entry.subscription.trigger_key : entry.draft.triggerKey;
+      const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
+      const id =
+        entry.kind === 'subscription'
+          ? `trigger-${entry.subscription.subscription_id}`
+          : entry.draft.id;
+      return {
+        id,
+        type: 'trigger',
+        position: {
+          x: -360,
+          y: index * 220 + 40,
+        },
+        data: {
+          type: 'trigger',
+          label: descriptor?.title ?? triggerKey,
+          triggerMeta: {
+            subscription: entry.kind === 'subscription' ? entry.subscription : undefined,
+            descriptor,
+            workflowInputs: workflowInputsDef,
+            handlers: triggerHandlers,
+            integration:
+              triggerKey === GMAIL_TRIGGER_KEY
+                ? {
+                    gmail: {
+                      ready: gmailIntegrationReady,
+                      connectionId: gmailConnectionId,
+                      onConnect: gmailIntegrationReady ? undefined : handleConnectGmail,
+                      isConnecting: isConnectingGmail,
+                    },
+                  }
+                : undefined,
+            draft: entry.kind === 'draft' ? entry.draft : undefined,
+          },
+        },
+        // draggable: false,
+      } as Node<WorkflowNodeData>;
+    });
+  }, [
+    triggerSubscriptions,
+    draftTriggers,
+    triggerCatalog,
+    workflowInputsDef,
+    triggerHandlers,
+    gmailIntegrationReady,
+    gmailConnectionId,
+    handleConnectGmail,
+    isConnectingGmail,
+  ]);
+
+  const baseCanvasNodes = previewGraph?.nodes ?? nodes;
+  const canvasNodes = useMemo(
+    () => [...baseCanvasNodes, ...triggerNodes],
+    [baseCanvasNodes, triggerNodes],
+  );
   const canvasEdges = previewGraph?.edges ?? edges;
+  const handleCanvasNodesChange = useCallback(
+    (updatedNodes: Node<WorkflowNodeData>[]) => {
+      const workflowNodesOnly = updatedNodes.filter((node) => node.type !== 'trigger');
+      setNodes(workflowNodesOnly);
+    },
+    [setNodes],
+  );
+
+  const handleCanvasNodeDoubleClick = useCallback(
+    (node: Node<WorkflowNodeData>) => {
+      if (node.type === 'trigger') {
+        return;
+      }
+      setEditingNodeId(node.id);
+      setIsConfigDialogOpen(true);
+      setSelectedNodeId(node.id);
+    },
+    [setSelectedNodeId],
+  );
+
+  const handleConfigDialogOpenChange = useCallback((open: boolean) => {
+    setIsConfigDialogOpen(open);
+    if (!open) {
+      setEditingNodeId(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (isPreviewActive) {
       setSelectedNodeId(null);
     }
   }, [isPreviewActive]);
+
+  useEffect(() => {
+    setDraftTriggers([]);
+  }, [selectedWorkflowId]);
+
+  useEffect(() => {
+    if (!editingNodeId) {
+      return;
+    }
+    const exists = nodes.some((node) => node.id === editingNodeId);
+    if (!exists) {
+      setEditingNodeId(null);
+      setIsConfigDialogOpen(false);
+    }
+  }, [editingNodeId, nodes]);
 
   // Extract input blocks from current workflow
   const inputBlocks = useMemo(() => {
@@ -383,6 +689,68 @@ export default function Workflows() {
 
     return fields;
   }, [inputBlocks]);
+
+  const triggerOptions = useMemo<TriggerListOption[]>(() => {
+    const options: TriggerListOption[] = [];
+    const blockDueToInputs = !workflowHasInputs;
+
+    const webhookTrigger = triggerCatalog.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY);
+    if (webhookTrigger) {
+      options.push({
+        key: WEBHOOK_TRIGGER_KEY,
+        title: webhookTrigger.title ?? 'Generic Webhook',
+        description:
+          webhookTrigger.description ?? 'Accept HTTP POST requests from any service.',
+        disabled: blockDueToInputs,
+        onPrimaryAction: () => handleAddTriggerDraft(WEBHOOK_TRIGGER_KEY),
+        actionLabel: 'Add to canvas',
+        badge: 'Webhook',
+        status: 'ready',
+      });
+    }
+
+    const gmailTrigger = triggerCatalog.find((trigger) => trigger.key === GMAIL_TRIGGER_KEY);
+    if (gmailTrigger) {
+      let disabledReason: string | undefined;
+      let disabled = blockDueToInputs;
+      let secondaryActionLabel: string | undefined;
+      let onSecondaryAction: (() => void) | undefined;
+      if (!disabled && !gmailIntegrationReady) {
+        disabledReason = 'Connect Gmail to continue';
+        disabled = true;
+        secondaryActionLabel = 'Connect Gmail';
+        onSecondaryAction = handleConnectGmail;
+      }
+
+      options.push({
+        key: GMAIL_TRIGGER_KEY,
+        title: gmailTrigger.title ?? 'Gmail – New Email',
+        description:
+          gmailTrigger.description ?? 'Poll a Gmail inbox for newly received emails.',
+        disabled,
+        disabledReason,
+        onPrimaryAction: () => handleAddTriggerDraft(GMAIL_TRIGGER_KEY),
+        actionLabel: 'Add to canvas',
+        badge: gmailIntegrationReady ? 'Connected' : 'Action required',
+        status: gmailIntegrationReady ? 'ready' : 'action-required',
+        secondaryActionLabel,
+        onSecondaryAction,
+        isSecondaryActionLoading: secondaryActionLabel ? isConnectingGmail : false,
+      });
+    }
+
+    return options;
+  }, [
+    workflowHasInputs,
+    triggerCatalog,
+    handleAddTriggerDraft,
+    gmailIntegrationReady,
+    handleConnectGmail,
+    isConnectingGmail,
+  ]);
+  const triggerInfoMessage = workflowHasInputs
+    ? undefined
+    : 'Add an Input block before attaching triggers.';
 
   const handleExecute = useCallback(async () => {
     if (!selectedWorkflowId) {
@@ -596,9 +964,10 @@ export default function Workflows() {
             <WorkflowCanvas
               initialNodes={canvasNodes}
               initialEdges={canvasEdges}
-              onNodesChange={isPreviewActive ? undefined : setNodes}
+              onNodesChange={isPreviewActive ? undefined : handleCanvasNodesChange}
               onEdgesChange={isPreviewActive ? undefined : setEdges}
               onNodeSelect={isPreviewActive ? undefined : setSelectedNodeId}
+              onNodeDoubleClick={isPreviewActive ? undefined : handleCanvasNodeDoubleClick}
               selectedNodeId={isPreviewActive ? null : selectedNodeId}
               readOnly={isPreviewActive}
             />
@@ -648,14 +1017,25 @@ export default function Workflows() {
                 collapsed={buildChatCollapsed}
                 onCollapseChange={handleBuildChatCollapseChange}
                 functionBlocks={availableBlocks}
-                onTriggerClick={() => setShowTriggerModal(true)}
                 onRunClick={handleExecute}
                 isExecuting={isExecuting}
+                triggerOptions={triggerOptions}
+                isLoadingTriggers={isLoadingTriggers || isLoadingSubscriptions}
+                triggerInfoMessage={triggerInfoMessage}
               />
             </ResizablePanel>
           </>
         )}
       </ResizablePanelGroup>
+
+      <WorkflowNodeConfigDialog
+        open={isConfigDialogOpen}
+        node={editingNode}
+        allNodes={nodes}
+        allEdges={edges}
+        onOpenChange={handleConfigDialogOpenChange}
+        onUpdate={handleNodeConfigUpdate}
+      />
 
       {/* Input Dialog */}
       <AlertDialog open={showInputDialog} onOpenChange={setShowInputDialog}>
@@ -689,13 +1069,6 @@ export default function Workflows() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <WorkflowTriggerModal
-        open={showTriggerModal}
-        onOpenChange={setShowTriggerModal}
-        workflowId={selectedWorkflowId}
-        workflowName={workflowName}
-        workflowInputs={loadedWorkflow?.spec.inputs}
-      />
     </div>
   );
 }

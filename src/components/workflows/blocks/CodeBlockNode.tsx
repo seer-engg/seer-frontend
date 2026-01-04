@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Code } from 'lucide-react';
 import { NodeProps } from '@xyflow/react';
 import { WorkflowNodeData } from '../types';
-import { InlineBlockConfig } from '../InlineBlockConfig';
+import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
 import { BaseBlockNode } from './BaseBlockNode';
 
 export const CodeBlockNode = memo(function CodeBlockNode(
@@ -18,7 +18,10 @@ export const CodeBlockNode = memo(function CodeBlockNode(
         outputs: ['output'],
       }}
     >
-      <InlineBlockConfig nodeId={props.id} />
+      <WorkflowNodeSummary
+        config={props.data?.config}
+        priorityKeys={['entrypoint', 'file', 'handler']}
+      />
     </BaseBlockNode>
   );
 });

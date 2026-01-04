@@ -16,6 +16,7 @@ import AgentTraces from "./pages/AgentTraces";
 import AgentTraceDetail from "./pages/AgentTraceDetail";
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
+import { getStoredSignupSource } from "./utils/utm-tracker";
 
 
 
@@ -51,7 +52,11 @@ const App = () => (
               path="/sign-up/*"
               element={
                 <div className="min-h-screen flex items-center justify-center bg-background p-4">
-                  <SignUp routing="path" path="/sign-up" />
+                  <SignUp
+                    routing="path"
+                    path="/sign-up"
+                    afterSignUpUrl={`/workflows?signup_source=${getStoredSignupSource() || 'Direct'}`}
+                  />
                 </div>
               }
             />

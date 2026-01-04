@@ -18,6 +18,10 @@ import {
   NodeMouseHandler,
   ConnectionMode,
   MarkerType,
+  applyNodeChanges,
+  applyEdgeChanges,
+  type NodeChange,
+  type EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
@@ -35,6 +39,7 @@ import { LLMBlockNode } from './blocks/LLMBlockNode';
 import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
 import { InputBlockNode } from './blocks/InputBlockNode';
+import { TriggerBlockNode } from './blocks/TriggerBlockNode';
 
 /**
  * Extract tool names from workflow nodes
@@ -55,6 +60,7 @@ const nodeTypes = {
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
   input: InputBlockNode,
+  trigger: TriggerBlockNode,
 };
 
 interface WorkflowCanvasProps {
@@ -63,6 +69,7 @@ interface WorkflowCanvasProps {
   onNodesChange?: (nodes: Node<WorkflowNodeData>[]) => void;
   onEdgesChange?: (edges: WorkflowEdge[]) => void;
   onNodeSelect?: (nodeId: string) => void;
+  onNodeDoubleClick?: (node: Node<WorkflowNodeData>) => void;
   selectedNodeId?: string | null;
   className?: string;
   readOnly?: boolean;
@@ -74,12 +81,13 @@ export function WorkflowCanvas({
   onNodesChange,
   onEdgesChange,
   onNodeSelect,
+  onNodeDoubleClick,
   selectedNodeId,
   className,
   readOnly = false,
 }: WorkflowCanvasProps) {
-  const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
+  const [nodes, setNodes] = useNodesState(initialNodes);
+  const [edges, setEdges] = useEdgesState(initialEdges);
 
   const updateNodeData = useCallback(
     (nodeId: string, updates: Partial<WorkflowNodeData>) => {
@@ -136,54 +144,30 @@ export function WorkflowCanvas({
 
   // Handle node changes
   const handleNodesChange = useCallback(
-    (changes: any) => {
-      onNodesChangeInternal(changes);
-      if (onNodesChange) {
-        const updatedNodes = changes.reduce((acc: Node[], change: any) => {
-          if (change.type === 'remove') {
-            return acc.filter((n) => n.id !== change.id);
-          }
-          if (change.type === 'add') {
-            return [...acc, change.item];
-          }
-          if (change.type === 'position' && change.position) {
-            return acc.map((n) =>
-              n.id === change.id ? { ...n, position: change.position } : n
-            );
-          }
-          if (change.type === 'dimensions' && change.dimensions) {
-            return acc.map((n) =>
-              n.id === change.id
-                ? { ...n, measured: change.dimensions }
-                : n
-            );
-          }
-          return acc;
-        }, nodes);
-        onNodesChange(updatedNodes);
-      }
+    (changes: NodeChange<Node<WorkflowNodeData>>[]) => {
+      setNodes((currentNodes) => {
+        const updatedNodes = applyNodeChanges<Node<WorkflowNodeData>>(changes, currentNodes);
+        if (onNodesChange) {
+          onNodesChange(updatedNodes);
+        }
+        return updatedNodes;
+      });
     },
-    [nodes, onNodesChange, onNodesChangeInternal]
+    [onNodesChange, setNodes]
   );
 
   // Handle edge changes
   const handleEdgesChange = useCallback(
-    (changes: any) => {
-      onEdgesChangeInternal(changes);
-      if (onEdgesChange) {
-        const updatedEdges = changes.reduce((acc: WorkflowEdge[], change: any) => {
-          if (change.type === 'remove') {
-            return acc.filter((e) => e.id !== change.id);
-          }
-          if (change.type === 'add') {
-            return [...acc, change.item];
-          }
-          return acc;
-        }, edges);
-        onEdgesChange(updatedEdges);
-      }
+    (changes: EdgeChange<WorkflowEdge>[]) => {
+      setEdges((currentEdges) => {
+        const updatedEdges = applyEdgeChanges<WorkflowEdge>(changes, currentEdges);
+        if (onEdgesChange) {
+          onEdgesChange(updatedEdges);
+        }
+        return updatedEdges;
+      });
     },
-    [edges, onEdgesChange, onEdgesChangeInternal]
+    [onEdgesChange, setEdges]
   );
 
   // Handle connections
@@ -248,6 +232,15 @@ export function WorkflowCanvas({
     [onNodeSelect]
   );
 
+  const handleNodeDoubleClick: NodeMouseHandler = useCallback(
+    (event, node) => {
+      if (onNodeDoubleClick) {
+        onNodeDoubleClick(node as Node<WorkflowNodeData>);
+      }
+    },
+    [onNodeDoubleClick],
+  );
+
   const contextValue = useMemo(
     () => ({
       nodes,
@@ -268,6 +261,7 @@ export function WorkflowCanvas({
           onEdgesChange={handleEdgesChange}
           onConnect={readOnly ? undefined : onConnect}
           onNodeClick={handleNodeClick}
+          onNodeDoubleClick={readOnly ? undefined : handleNodeDoubleClick}
           connectionMode={ConnectionMode.Loose}
           fitView
           fitViewOptions={{ padding: 0.2 }}
