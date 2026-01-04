@@ -38,9 +38,10 @@ export function BuildAndChatPanel({
   collapsed: externalCollapsed,
   onCollapseChange,
   functionBlocks,
-  onTriggerClick,
   onRunClick,
   isExecuting,
+  triggerOptions = [],
+  isLoadingTriggers = false,
 }: BuildAndChatPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(() => {
     const saved = localStorage.getItem('buildChatPanelCollapsed');
@@ -364,21 +365,8 @@ export function BuildAndChatPanel({
             </TabsTrigger>
           </TabsList>
           <div className="flex-1 flex items-center justify-end gap-2">
-            <Button
-              onClick={onRunClick}
-              disabled={!workflowId || isExecuting}
-              size="sm"
-              variant="default"
-            >
+            <Button onClick={onRunClick} disabled={!workflowId || isExecuting} size="sm" variant="default">
               Run
-            </Button>
-            <Button
-              onClick={onTriggerClick}
-              disabled={!workflowId}
-              size="sm"
-              variant="outline"
-            >
-              Triggers
             </Button>
           </div>
         </div>
@@ -391,6 +379,8 @@ export function BuildAndChatPanel({
             blocks={functionBlocks}
             selectedWorkflowId={workflowId}
             isExecuting={isExecuting}
+            triggerOptions={triggerOptions}
+            isLoadingTriggers={isLoadingTriggers}
           />
         </TabsContent>
 

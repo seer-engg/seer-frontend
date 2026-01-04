@@ -74,6 +74,9 @@ function buildNodeOutputMetadata(node: Node<WorkflowNodeData>): NodeOutputMetada
   if (!nodeType) {
     return null;
   }
+  if (nodeType === 'trigger') {
+    return null;
+  }
 
   if (nodeType === 'input') {
     const propertyNames = collectInputFieldNames(node);

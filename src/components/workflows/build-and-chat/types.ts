@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Node } from '@xyflow/react';
 
 import { WorkflowEdge, WorkflowNodeData } from '../types';
+import type { TriggerListOption } from './build/TriggerSection';
 import type { WorkflowSpec } from '@/types/workflow-spec';
 
 export interface Tool {
@@ -98,8 +99,9 @@ export interface BuildAndChatPanelProps {
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   functionBlocks?: BuiltInBlock[];
-  onTriggerClick?: () => void;
   onRunClick?: () => void;
   isExecuting?: boolean;
+  triggerOptions?: TriggerListOption[];
+  isLoadingTriggers?: boolean;
 }
 
