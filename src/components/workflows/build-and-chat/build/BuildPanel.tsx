@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { BUILT_IN_BLOCKS } from '../constants';
 import type { BuiltInBlock, Tool } from '../types';
+import { TriggerSection, type TriggerListOption } from './TriggerSection';
 import { BlocksSection } from './BlocksSection';
 import { ToolsSection } from './ToolsSection';
 
@@ -14,6 +15,8 @@ interface BuildPanelProps {
   blocks?: BuiltInBlock[];
   selectedWorkflowId?: string | null;
   isExecuting?: boolean;
+  triggerOptions?: TriggerListOption[];
+  isLoadingTriggers?: boolean;
 }
 
 export function BuildPanel({
@@ -21,6 +24,8 @@ export function BuildPanel({
   isLoadingTools,
   onBlockSelect,
   blocks = BUILT_IN_BLOCKS,
+  triggerOptions = [],
+  isLoadingTriggers = false,
 }: BuildPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -57,6 +62,7 @@ export function BuildPanel({
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
+          <TriggerSection options={triggerOptions} isLoading={isLoadingTriggers} />
           <BlocksSection blocks={filteredBlocks} onSelectBlock={handleBuiltInSelect} />
           <ToolsSection
             tools={tools}
