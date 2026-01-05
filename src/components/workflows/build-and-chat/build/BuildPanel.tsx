@@ -64,12 +64,12 @@ export function BuildPanel({
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
+          <BlocksSection blocks={filteredBlocks} onSelectBlock={handleBuiltInSelect} />
           <TriggerSection
             options={triggerOptions}
             isLoading={isLoadingTriggers}
             infoMessage={triggerInfoMessage}
           />
-          <BlocksSection blocks={filteredBlocks} onSelectBlock={handleBuiltInSelect} />
           <ToolsSection
             tools={tools}
             searchQuery={searchQuery}
