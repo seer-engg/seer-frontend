@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, GitPullRequest, Plug, Wrench } from 'lucide-react';
+import { Globe, GitPullRequest, Plug, Wrench, Database } from 'lucide-react';
 
 import { GitHubIcon } from '@/components/icons/github';
 import { GmailIcon } from '@/components/icons/gmail';
@@ -40,6 +40,8 @@ export const getIntegrationTypeIcon = (integrationType: string) => {
     case 'github':
     case 'pull_request':
       return <GitHubIcon className="w-3.5 h-3.5 text-muted-foreground" />;
+    case 'supabase':
+      return <Database className="w-3.5 h-3.5 text-muted-foreground" />;
     default:
       return <Wrench className="w-3.5 h-3.5 text-muted-foreground" />;
   }
@@ -59,6 +61,8 @@ export const getIntegrationTypeLabel = (integrationType: string) => {
     case 'github':
     case 'pull_request':
       return 'GitHub';
+    case 'supabase':
+      return 'Supabase';
     default:
       return formatGroupLabel(integrationType);
   }

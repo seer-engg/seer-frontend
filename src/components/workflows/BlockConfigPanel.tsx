@@ -279,6 +279,16 @@ export function BlockConfigPanel({
 
   const handleSave = () => {
     if (node) {
+      const requiresSupabaseBinding = toolSchema?.integration_type === 'supabase';
+      if (
+        requiresSupabaseBinding &&
+        !config?.params?.integration_resource_id
+      ) {
+        toast.error('Supabase project required', {
+          description: 'Select and bind a Supabase project before saving this tool.',
+        });
+        return;
+      }
       const originalConfig = node.data.config || {};
       
       // Build merged config, always preserving fields if present

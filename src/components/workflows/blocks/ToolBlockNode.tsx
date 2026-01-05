@@ -17,6 +17,7 @@ import {
   AlertTriangle, 
   Loader2,
   ExternalLink,
+  Database,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,8 @@ function getIntegrationIcon(integrationType: IntegrationType | null) {
     case 'github':
     case 'pull_request':
       return <GitHubSVG width={16} height={16} />;
+    case 'supabase':
+      return <Database className="w-4 h-4" />;
     default:
       return <Wrench className="w-4 h-4" />;
   }
@@ -71,6 +74,8 @@ function getIntegrationDisplayName(integrationType: IntegrationType | null): str
       return 'Asana';
     case 'sandbox':
       return 'Sandbox';
+    case 'supabase':
+      return 'Supabase';
     default:
       return 'Tool';
   }

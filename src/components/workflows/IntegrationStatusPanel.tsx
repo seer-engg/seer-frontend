@@ -30,6 +30,7 @@ import {
   Mail,
   FolderOpen,
   Github,
+  Database,
   CheckCircle2,
   AlertTriangle,
   ExternalLink,
@@ -69,6 +70,7 @@ const INTEGRATION_META: Record<IntegrationType, { displayName: string; icon: Rea
   pull_request: { displayName: 'GitHub Pull Requests', icon: <GitPullRequest className="w-4 h-4" /> },
   asana: { displayName: 'Asana', icon: <Plug className="w-4 h-4" /> },
   sandbox: { displayName: 'Sandbox', icon: <Sparkles className="w-4 h-4" /> },
+  supabase: { displayName: 'Supabase', icon: <Database className="w-4 h-4" /> },
 };
 
 export function IntegrationStatusPanel({
