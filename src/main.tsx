@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { ClerkProvider } from '@clerk/clerk-react'
+import { PostHogProvider } from './components/PostHogProvider'
 import { captureUTMParams } from './utils/utm-tracker'
 
 // Import your Publishable Key
@@ -18,7 +19,9 @@ captureUTMParams()
 createRoot(document.getElementById('root')!).render(
 <StrictMode>
     <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-    <App />
+    <PostHogProvider>
+        <App />
+    </PostHogProvider>
     </ClerkProvider>
 </StrictMode>,
 )
