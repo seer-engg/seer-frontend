@@ -517,6 +517,32 @@ export async function bindSupabaseProject(params: {
 }
 
 /**
+ * Bind a Supabase project by directly supplying secrets instead of OAuth.
+ * Mirrors SupabaseManualBindRequest on the backend.
+ */
+export async function bindSupabaseProjectManual(params: {
+  projectRef: string;
+  projectName?: string;
+  serviceRoleKey?: string;
+  anonKey?: string;
+  connectionId?: string;
+}): Promise<SupabaseBindingResponse> {
+  return backendApiClient.request<SupabaseBindingResponse>(
+    '/api/integrations/supabase/projects/manual-bind',
+    {
+      method: 'POST',
+      body: {
+        project_ref: params.projectRef,
+        project_name: params.projectName,
+        service_role_key: params.serviceRoleKey,
+        anon_key: params.anonKey,
+        connection_id: params.connectionId,
+      },
+    },
+  );
+}
+
+/**
  * Delete (revoke) a persisted integration resource binding.
  */
 export async function deleteIntegrationResource(resourceId: number): Promise<void> {

@@ -14,6 +14,8 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,8 +30,10 @@ import {
   RefreshCw,
   Loader2
 } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { backendApiClient, bindSupabaseProject } from '@/lib/api-client';
+import { backendApiClient, bindSupabaseProject, bindSupabaseProjectManual } from '@/lib/api-client';
+import type { IntegrationResource } from '@/lib/api-client';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import { useToast } from '@/hooks/use-toast';
 
@@ -91,6 +95,25 @@ interface ResourcePickerProps {
   className?: string;
 }
 
+type SupabaseManualFormState = {
+  projectRef: string;
+  projectName: string;
+  serviceRoleKey: string;
+  anonKey: string;
+};
+
+const buildDefaultSupabaseManualForm = (): SupabaseManualFormState => ({
+  projectRef: '',
+  projectName: '',
+  serviceRoleKey: '',
+  anonKey: '',
+});
+
+interface SupabaseBindingFallback {
+  displayName?: string;
+  projectRef?: string;
+}
+
 export function ResourcePicker({
   config,
   provider,
@@ -110,6 +133,10 @@ export function ResourcePicker({
   const [bindingSearch, setBindingSearch] = useState('');
   const [bindingDebouncedSearch, setBindingDebouncedSearch] = useState('');
   const [bindingProjectId, setBindingProjectId] = useState<string | null>(null);
+  const [bindingTab, setBindingTab] = useState<'oauth' | 'manual'>('oauth');
+  const [manualForm, setManualForm] = useState<SupabaseManualFormState>(() => buildDefaultSupabaseManualForm());
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
   const { toast } = useToast();
   const {
     connectIntegration,
@@ -117,6 +144,12 @@ export function ResourcePicker({
     isIntegrationConnected,
     toolsWithStatus,
   } = useIntegrationTools();
+
+  const resetManualForm = useCallback(() => {
+    setManualForm(buildDefaultSupabaseManualForm());
+    setManualError(null);
+    setManualSubmitting(false);
+  }, []);
 
   // Debounce search query
   useEffect(() => {
@@ -138,8 +171,10 @@ export function ResourcePicker({
       setBindingSearch('');
       setBindingDebouncedSearch('');
       setBindingProjectId(null);
+      resetManualForm();
+      setBindingTab('oauth');
     }
-  }, [bindModalOpen]);
+  }, [bindModalOpen, resetManualForm]);
 
   // Current parent folder ID for navigation
   const currentParentId = currentPath.length > 0 ? currentPath[currentPath.length - 1].id : undefined;
@@ -230,6 +265,38 @@ export function ResourcePicker({
   }, [toolsWithStatus]);
 
   const supabaseConnected = isIntegrationConnected('supabase');
+  const manualFormIsValid =
+    manualForm.projectRef.trim().length >= 3 && manualForm.serviceRoleKey.trim().length >= 8;
+
+  const applySupabaseBindingSelection = useCallback(
+    (resource: IntegrationResource, fallback?: SupabaseBindingFallback) => {
+      const metadataProjectRef =
+        typeof resource.metadata?.project_ref === 'string'
+          ? (resource.metadata.project_ref as string)
+          : undefined;
+      const display =
+        resource.name ||
+        resource.resource_key ||
+        metadataProjectRef ||
+        fallback?.displayName ||
+        fallback?.projectRef ||
+        resource.id;
+      const description = metadataProjectRef || resource.resource_key || fallback?.projectRef;
+
+      const newItem: ResourceItem = {
+        id: String(resource.id),
+        name: String(display),
+        display_name: String(display),
+        type: 'binding',
+        description: description ? String(description) : undefined,
+        resource_key: resource.resource_key || undefined,
+      };
+
+      setSelectedItem(newItem);
+      onChange(newItem.id, newItem.display_name);
+    },
+    [onChange],
+  );
 
   // Fetch resources with infinite query for pagination
   const {
@@ -373,27 +440,14 @@ export function ResourcePicker({
           connectionId: getConnectionId('supabase') || undefined,
         });
         const { resource } = response;
-        const display =
-          resource.name ||
-          resource.resource_key ||
-          item.display_name ||
-          item.name ||
-          resource.id;
-        const description = resource.metadata?.project_ref || resource.resource_key || item.project_ref;
-        const newItem: ResourceItem = {
-          id: String(resource.id),
-          name: String(display),
-          display_name: String(display),
-          type: 'binding',
-          description: description ? String(description) : undefined,
-          resource_key: resource.resource_key || undefined,
-        };
-        setSelectedItem(newItem);
-        onChange(newItem.id, newItem.display_name);
+        applySupabaseBindingSelection(resource, {
+          displayName: item.display_name,
+          projectRef,
+        });
         await refetchResources();
         toast({
           title: 'Project bound',
-          description: `${display} is ready for Supabase tools.`,
+          description: `${resource.name || item.display_name || projectRef} is ready for Supabase tools.`,
         });
         setBindModalOpen(false);
       } catch (error) {
@@ -406,7 +460,66 @@ export function ResourcePicker({
         setBindingProjectId(null);
       }
     },
-    [getConnectionId, onChange, refetchResources, toast]
+    [applySupabaseBindingSelection, getConnectionId, refetchResources, toast]
+  );
+
+  const handleManualBind = useCallback(
+    async (event?: React.FormEvent<HTMLFormElement>) => {
+      event?.preventDefault();
+      setManualError(null);
+      const trimmedProjectRef = manualForm.projectRef.trim();
+      const trimmedProjectName = manualForm.projectName.trim();
+      const trimmedServiceRoleKey = manualForm.serviceRoleKey.trim();
+      const trimmedAnonKey = manualForm.anonKey.trim();
+
+      if (!manualFormIsValid) {
+        setManualError('Project reference and service role key are required.');
+        return;
+      }
+
+      setManualSubmitting(true);
+      try {
+        const response = await bindSupabaseProjectManual({
+          projectRef: trimmedProjectRef,
+          projectName: trimmedProjectName || undefined,
+          serviceRoleKey: trimmedServiceRoleKey,
+          anonKey: trimmedAnonKey || undefined,
+        });
+
+        applySupabaseBindingSelection(response.resource, {
+          displayName: trimmedProjectName || undefined,
+          projectRef: trimmedProjectRef,
+        });
+
+        await refetchResources();
+        toast({
+          title: 'Project bound',
+          description: `${response.resource.name || trimmedProjectRef} is ready for Supabase tools.`,
+        });
+        setBindModalOpen(false);
+        resetManualForm();
+        setBindingTab('oauth');
+      } catch (error) {
+        const description =
+          error instanceof Error ? error.message : 'Unable to bind Supabase project.';
+        toast({
+          title: 'Failed to bind project',
+          description,
+          variant: 'destructive',
+        });
+        setManualError(description);
+      } finally {
+        setManualSubmitting(false);
+      }
+    },
+    [
+      applySupabaseBindingSelection,
+      manualForm,
+      manualFormIsValid,
+      refetchResources,
+      resetManualForm,
+      toast,
+    ],
   );
 
   // Get icon for item type
@@ -619,85 +732,169 @@ export function ResourcePicker({
                 Select a Supabase project to store its REST credentials for workflows.
               </DialogDescription>
             </DialogHeader>
-            {!supabaseConnected ? (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Connect your Supabase management account to browse projects.
-                </p>
-                <Button onClick={handleConnectSupabase}>
-                  Connect Supabase
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search projects..."
-                    value={bindingSearch}
-                    onChange={(e) => setBindingSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <ScrollArea className="mt-3 max-h-[320px] pr-2">
-                  {supabaseProjectsLoading && supabaseProjectItems.length === 0 ? (
-                    <div className="space-y-2">
-                      {Array.from({ length: 4 }).map((_, i) => (
-                        <Skeleton key={i} className="h-14 w-full" />
-                      ))}
+            <Tabs
+              value={bindingTab}
+              onValueChange={(value) => setBindingTab(value as 'oauth' | 'manual')}
+              className="mt-2"
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="oauth">OAuth</TabsTrigger>
+                <TabsTrigger value="manual">Manual secrets</TabsTrigger>
+              </TabsList>
+              <TabsContent value="oauth" className="mt-4">
+                {!supabaseConnected ? (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Connect your Supabase management account to browse projects.
+                    </p>
+                    <Button onClick={handleConnectSupabase}>
+                      Connect Supabase
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search projects..."
+                        value={bindingSearch}
+                        onChange={(e) => setBindingSearch(e.target.value)}
+                        className="pl-9"
+                      />
                     </div>
-                  ) : supabaseProjectsIsError ? (
-                    <div className="p-4 text-center text-destructive text-sm">
-                      {supabaseProjectsError instanceof Error
-                        ? supabaseProjectsError.message
-                        : 'Unable to load Supabase projects'}
-                    </div>
-                  ) : supabaseProjectItems.length === 0 ? (
-                    <div className="p-4 text-center text-muted-foreground text-sm">
-                      {bindingDebouncedSearch ? 'No matching projects.' : 'No projects available.'}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {supabaseProjectItems.map((project) => (
-                        <div
-                          key={project.id}
-                          className="flex items-center justify-between gap-3 p-3 border rounded-md"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium text-sm truncate">{project.display_name}</p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {project.project_ref || project.id}
-                              {project.region ? ` • ${project.region}` : ''}
-                            </p>
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleBindProject(project)}
-                            disabled={isBindingProject && bindingProjectId !== project.id}
-                          >
-                            {bindingProjectId === project.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              'Bind'
-                            )}
-                          </Button>
+                    <ScrollArea className="mt-3 max-h-[320px] pr-2">
+                      {supabaseProjectsLoading && supabaseProjectItems.length === 0 ? (
+                        <div className="space-y-2">
+                          {Array.from({ length: 4 }).map((_, i) => (
+                            <Skeleton key={i} className="h-14 w-full" />
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
-                {supabaseProjectsHasNextPage && (
-                  <Button
-                    variant="ghost"
-                    className="w-full mt-2"
-                    onClick={() => fetchNextSupabaseProjects()}
-                    disabled={supabaseProjectsFetchingNextPage}
-                  >
-                    {supabaseProjectsFetchingNextPage ? 'Loading...' : 'Load more'}
-                  </Button>
+                      ) : supabaseProjectsIsError ? (
+                        <div className="p-4 text-center text-destructive text-sm">
+                          {supabaseProjectsError instanceof Error
+                            ? supabaseProjectsError.message
+                            : 'Unable to load Supabase projects'}
+                        </div>
+                      ) : supabaseProjectItems.length === 0 ? (
+                        <div className="p-4 text-center text-muted-foreground text-sm">
+                          {bindingDebouncedSearch ? 'No matching projects.' : 'No projects available.'}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {supabaseProjectItems.map((project) => (
+                            <div
+                              key={project.id}
+                              className="flex items-center justify-between gap-3 p-3 border rounded-md"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm truncate">{project.display_name}</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {project.project_ref || project.id}
+                                  {project.region ? ` • ${project.region}` : ''}
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => handleBindProject(project)}
+                                disabled={isBindingProject && bindingProjectId !== project.id}
+                              >
+                                {bindingProjectId === project.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  'Bind'
+                                )}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                    {supabaseProjectsHasNextPage && (
+                      <Button
+                        variant="ghost"
+                        className="w-full mt-2"
+                        onClick={() => fetchNextSupabaseProjects()}
+                        disabled={supabaseProjectsFetchingNextPage}
+                      >
+                        {supabaseProjectsFetchingNextPage ? 'Loading...' : 'Load more'}
+                      </Button>
+                    )}
+                  </>
                 )}
-              </>
-            )}
+              </TabsContent>
+              <TabsContent value="manual" className="mt-4">
+                <form className="space-y-4" onSubmit={handleManualBind}>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-project-ref">Project reference</Label>
+                    <Input
+                      id="manual-project-ref"
+                      placeholder="e.g. abcdefg"
+                      value={manualForm.projectRef}
+                      onChange={(e) =>
+                        setManualForm(prev => ({ ...prev, projectRef: e.target.value }))
+                      }
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Use the project ref from your Supabase dashboard (slug before .supabase.co).
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-project-name">Display name (optional)</Label>
+                    <Input
+                      id="manual-project-name"
+                      placeholder="My Supabase project"
+                      value={manualForm.projectName}
+                      onChange={(e) =>
+                        setManualForm(prev => ({ ...prev, projectName: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-service-role">Service role key</Label>
+                    <Textarea
+                      id="manual-service-role"
+                      placeholder="Paste your service role key"
+                      value={manualForm.serviceRoleKey}
+                      onChange={(e) =>
+                        setManualForm(prev => ({ ...prev, serviceRoleKey: e.target.value }))
+                      }
+                      rows={3}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Required. You can rotate this in Supabase at any time.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-anon-key">Anon/public key (optional)</Label>
+                    <Textarea
+                      id="manual-anon-key"
+                      placeholder="Paste your anon/public key"
+                      value={manualForm.anonKey}
+                      onChange={(e) =>
+                        setManualForm(prev => ({ ...prev, anonKey: e.target.value }))
+                      }
+                      rows={2}
+                    />
+                  </div>
+                  {manualError && (
+                    <p className="text-xs text-destructive">{manualError}</p>
+                  )}
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={!manualFormIsValid || manualSubmitting}
+                  >
+                    {manualSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Save secrets'
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
       )}
