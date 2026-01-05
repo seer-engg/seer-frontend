@@ -67,7 +67,6 @@ export function TriggerSection({
       <div className="mb-2 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-medium text-left">Triggers</h3>
-          <p className="text-xs text-muted-foreground">Define how this workflow starts.</p>
         </div>
       </div>
       {infoMessage && (
