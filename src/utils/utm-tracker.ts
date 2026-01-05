@@ -2,6 +2,7 @@
  * UTM Parameter Tracker
  * Captures UTM parameters from URL and stores them for signup attribution
  */
+import { posthog } from '@/lib/posthog'
 
 const STORAGE_KEY = 'seer_signup_source';
 const STORAGE_TIMESTAMP_KEY = 'seer_signup_source_timestamp';
@@ -31,6 +32,8 @@ export function captureUTMParams(): void {
   try {
     const urlParams = new URLSearchParams(window.location.search);
     const utmSource = urlParams.get('utm_source')?.toLowerCase();
+    const utmMedium = urlParams.get('utm_medium');
+    const utmCampaign = urlParams.get('utm_campaign');
 
     if (utmSource) {
       // Map UTM source to our standardized values
@@ -39,6 +42,16 @@ export function captureUTMParams(): void {
       // Store with timestamp
       localStorage.setItem(STORAGE_KEY, signupSource);
       localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
+
+      // Send to PostHog for unified tracking
+      if (posthog.__loaded) {
+        posthog.capture('utm_params_captured', {
+          utm_source: utmSource,
+          utm_medium: utmMedium,
+          utm_campaign: utmCampaign,
+          signup_source: signupSource,
+        })
+      }
 
       console.log(`[UTM Tracker] Captured signup source: ${signupSource} from utm_source=${utmSource}`);
     } else if (!localStorage.getItem(STORAGE_KEY)) {
