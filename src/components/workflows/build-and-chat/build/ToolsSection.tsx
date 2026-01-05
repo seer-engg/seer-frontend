@@ -95,7 +95,7 @@ export function ToolsSection({
           {Object.entries(filteredToolsByType)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([integrationType, integrationTools]) => (
-              <Collapsible key={integrationType} defaultOpen>
+              <Collapsible key={integrationType}>
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
