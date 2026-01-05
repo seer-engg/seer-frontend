@@ -4,11 +4,13 @@
  * Common functionality for all workflow block nodes.
  */
 import { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, type Node } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
 
-interface BaseBlockNodeProps extends NodeProps<WorkflowNodeData> {
+type WorkflowNode = Node<WorkflowNodeData>;
+
+interface BaseBlockNodeProps extends NodeProps<WorkflowNode> {
   icon?: React.ReactNode;
   color?: string;
   handles?: {

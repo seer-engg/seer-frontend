@@ -1,13 +1,15 @@
 import { memo } from 'react';
 import { Repeat } from 'lucide-react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, type Node } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
 import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
 import { BaseBlockNode } from './BaseBlockNode';
 
+type WorkflowNode = Node<WorkflowNodeData>;
+
 export const ForLoopBlockNode = memo(function ForLoopBlockNode(
-  props: NodeProps<WorkflowNodeData>
+  props: NodeProps<WorkflowNode>
 ) {
   const config = props.data.config || {};
   const literalItems = Array.isArray(config.array_literal) ? config.array_literal : [];
@@ -35,12 +37,13 @@ export const ForLoopBlockNode = memo(function ForLoopBlockNode(
         </p>
       )}
 
-      <div className="relative mt-4 h-16">
+      <div className="mt-4 h-16">
         <Handle
           id="loop"
           type="source"
           position={Position.Right}
           style={{
+            position: 'absolute',
             top: '35%',
             right: -8,
           }}
@@ -51,14 +54,28 @@ export const ForLoopBlockNode = memo(function ForLoopBlockNode(
           type="source"
           position={Position.Right}
           style={{
+            position: 'absolute',
             top: '75%',
             right: -8,
           }}
           className="!w-3 !h-3 !bg-muted-foreground !border-2 !border-background"
         />
-        <div className="absolute -right-12 top-4 flex flex-col gap-2 text-[11px] text-muted-foreground">
-          <span className={cn('rounded bg-muted px-2 py-0.5 text-xs')}>Loop</span>
-          <span className={cn('rounded bg-muted px-2 py-0.5 text-xs')}>Exit</span>
+        <div
+          className="pointer-events-none absolute inset-y-0 text-[11px] text-muted-foreground"
+          style={{ right: 'calc(-8px - 0.25rem)' }}
+        >
+          <span
+            className={cn('absolute rounded bg-muted px-2 py-0.5 text-xs')}
+            style={{ top: '35%', transform: 'translateY(-50%)' }}
+          >
+            Loop
+          </span>
+          <span
+            className={cn('absolute rounded bg-muted px-2 py-0.5 text-xs')}
+            style={{ top: '75%', transform: 'translateY(-50%)' }}
+          >
+            Exit
+          </span>
         </div>
       </div>
 
