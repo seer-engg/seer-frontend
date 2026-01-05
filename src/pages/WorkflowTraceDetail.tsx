@@ -88,11 +88,7 @@ export default function WorkflowTraceDetail() {
       : null;
 
   const handleBack = () => {
-    if (workflowId) {
-      navigate(`/workflows/${workflowId}/traces`);
-    } else {
-      navigate('/workflows');
-    }
+    navigate(-1);
   };
 
   // Extract reactflow graph from workflow spec

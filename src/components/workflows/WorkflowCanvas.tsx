@@ -92,6 +92,13 @@ export function WorkflowCanvas({
   const updateNodeData = useCallback(
     (nodeId: string, updates: Partial<WorkflowNodeData>) => {
       setNodes((prevNodes) => {
+        // Check if node still exists before updating
+        const nodeExists = prevNodes.some(n => n.id === nodeId);
+        if (!nodeExists) {
+          console.warn(`Attempted to update non-existent node: ${nodeId}`);
+          return prevNodes; // Return unchanged to prevent unnecessary render
+        }
+
         const updatedNodes = prevNodes.map((node) => {
           if (node.id === nodeId) {
             const mergedData = { ...node.data, ...updates };
@@ -111,26 +118,53 @@ export function WorkflowCanvas({
           }
           return node;
         });
-        if (onNodesChange) {
-          onNodesChange(updatedNodes);
-        }
+        // Remove onNodesChange call - useEffect will handle parent notification
         return updatedNodes;
       });
     },
-    [onNodesChange, setNodes],
+    [setNodes],
   );
 
-  // Sync with parent state changes
+  // Sync with parent state changes using smart change detection
   useEffect(() => {
-    setNodes(initialNodes);
-  }, [initialNodes, setNodes]);
+    setNodes(currentNodes => {
+      // Only sync if nodes truly changed (different count or IDs)
+      if (initialNodes.length !== currentNodes.length) {
+        return initialNodes;
+      }
+
+      // Check if node IDs differ (new nodes added or removed)
+      const currentIds = new Set(currentNodes.map(n => n.id));
+      const newIds = new Set(initialNodes.map(n => n.id));
+
+      const hasChanges =
+        currentIds.size !== newIds.size ||
+        [...newIds].some(id => !currentIds.has(id));
+
+      return hasChanges ? initialNodes : currentNodes;
+    });
+  }, [initialNodes]);
 
   useEffect(() => {
-    setEdges(initialEdges);
-  }, [initialEdges, setEdges]);
+    setEdges(currentEdges => {
+      // Only sync if edges truly changed
+      if (initialEdges.length !== currentEdges.length) {
+        return initialEdges;
+      }
+
+      const currentIds = new Set(currentEdges.map(e => e.id));
+      const newIds = new Set(initialEdges.map(e => e.id));
+
+      const hasChanges =
+        currentIds.size !== newIds.size ||
+        [...newIds].some(id => !currentIds.has(id));
+
+      return hasChanges ? initialEdges : currentEdges;
+    });
+  }, [initialEdges]);
 
   // Update nodes when selectedNodeId changes
-  useMemo(() => {
+  useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => ({
         ...node,
@@ -146,29 +180,35 @@ export function WorkflowCanvas({
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<WorkflowNodeData>>[]) => {
       setNodes((currentNodes) => {
-        const updatedNodes = applyNodeChanges<Node<WorkflowNodeData>>(changes, currentNodes);
-        if (onNodesChange) {
-          onNodesChange(updatedNodes);
-        }
-        return updatedNodes;
+        return applyNodeChanges<Node<WorkflowNodeData>>(changes, currentNodes);
       });
     },
-    [onNodesChange, setNodes]
+    [setNodes]
   );
 
   // Handle edge changes
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<WorkflowEdge>[]) => {
       setEdges((currentEdges) => {
-        const updatedEdges = applyEdgeChanges<WorkflowEdge>(changes, currentEdges);
-        if (onEdgesChange) {
-          onEdgesChange(updatedEdges);
-        }
-        return updatedEdges;
+        return applyEdgeChanges<WorkflowEdge>(changes, currentEdges);
       });
     },
-    [onEdgesChange, setEdges]
+    [setEdges]
   );
+
+  // Notify parent of node changes after state update completes
+  useEffect(() => {
+    if (onNodesChange) {
+      onNodesChange(nodes);
+    }
+  }, [nodes, onNodesChange]);
+
+  // Notify parent of edge changes after state update completes
+  useEffect(() => {
+    if (onEdgesChange) {
+      onEdgesChange(edges);
+    }
+  }, [edges, onEdgesChange]);
 
   // Handle connections
   const onConnect = useCallback(
@@ -215,11 +255,9 @@ export function WorkflowCanvas({
       };
 
       setEdges((eds) => addEdge(newEdge, eds));
-      if (onEdgesChange) {
-        onEdgesChange([...edges, newEdge]);
-      }
+      // Remove manual onEdgesChange call - useEffect will handle parent notification
     },
-    [edges, nodes, setEdges, onEdgesChange, readOnly]
+    [edges, nodes, setEdges, readOnly]
   );
 
   // Handle node clicks

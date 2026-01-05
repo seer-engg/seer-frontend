@@ -3,12 +3,12 @@ import { ChevronDown, Search } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { getIntegrationTypeIcon, getIntegrationTypeLabel } from '../utils';
@@ -91,56 +91,54 @@ export function ToolsSection({
         />
       </div>
       {Object.keys(filteredToolsByType).length > 0 ? (
-        <div>
+        <Accordion type="single" collapsible className="space-y-3">
           {Object.entries(filteredToolsByType)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([integrationType, integrationTools]) => (
-              <Collapsible key={integrationType}>
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className="group w-full flex items-center justify-between text-left px-2 py-1 rounded-md bg-background hover:bg-accent border border-border/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {getIntegrationTypeIcon(integrationType)}
-                      <span className="text-xs font-medium text-foreground truncate">
-                        {getIntegrationTypeLabel(integrationType)}
-                      </span>
-                      <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                        {integrationTools.length}
-                      </Badge>
-                    </div>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="ml-1 border-l border-border/40">
-                  <Table>
-                    <TableBody>
-                      {integrationTools.map((tool) => (
-                        <Tooltip key={tool.slug || tool.name}>
-                          <TooltipTrigger asChild>
-                            <TableRow
-                              className="cursor-pointer hover:bg-accent/60"
-                              onClick={() => onSelectTool(tool)}
-                            >
-                              <TableCell className="p-2 text-left">
-                                <p className="text-xs font-medium">{tool.name}</p>
-                              </TableCell>
-                            </TableRow>
-                          </TooltipTrigger>
-                          {tool.description && (
-                            <TooltipContent>
-                              <p>{tool.description}</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CollapsibleContent>
-              </Collapsible>
+              <AccordionItem key={integrationType} value={integrationType}>
+                <AccordionTrigger className="w-full flex items-center gap-2 text-left py-2 transition-colors hover:text-foreground [&>svg]:hidden">
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground transition-transform data-[state=open]:rotate-90 shrink-0" />
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {getIntegrationTypeIcon(integrationType)}
+                    <span className="text-sm font-medium text-foreground truncate">
+                      {getIntegrationTypeLabel(integrationType)}
+                    </span>
+                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] ml-auto">
+                      {integrationTools.length}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="mt-2 ml-6 space-y-1.5">
+                  {integrationTools.map((tool) => (
+                    <Tooltip key={tool.slug || tool.name}>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="w-full justify-start cursor-pointer hover:bg-accent hover:border-accent-foreground/20 transition-colors px-2.5 py-1.5 h-auto font-normal text-xs"
+                          onClick={() => onSelectTool(tool)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onSelectTool(tool);
+                            }
+                          }}
+                        >
+                          {tool.name}
+                        </Badge>
+                      </TooltipTrigger>
+                      {tool.description && (
+                        <TooltipContent>
+                          <p>{tool.description}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  ))}
+                </AccordionContent>
+              </AccordionItem>
             ))}
-        </div>
+        </Accordion>
       ) : tools.length === 0 ? (
         <div className="text-sm text-muted-foreground text-center py-4">No tools available</div>
       ) : (
