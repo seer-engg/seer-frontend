@@ -51,7 +51,7 @@ export default function AgentTraceDetail() {
       : null;
 
   const handleBack = () => {
-    navigate('/agents/traces');
+    navigate(-1);
   };
 
   return (

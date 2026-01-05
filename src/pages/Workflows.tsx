@@ -588,7 +588,10 @@ export default function Workflows() {
     isConnectingGmail,
   ]);
 
-  const baseCanvasNodes = previewGraph?.nodes ?? nodes;
+  const baseCanvasNodes = useMemo(
+    () => previewGraph?.nodes ?? nodes,
+    [previewGraph?.nodes, nodes]
+  );
   const canvasNodes = useMemo(
     () => [...baseCanvasNodes, ...triggerNodes],
     [baseCanvasNodes, triggerNodes],
@@ -597,9 +600,24 @@ export default function Workflows() {
   const handleCanvasNodesChange = useCallback(
     (updatedNodes: Node<WorkflowNodeData>[]) => {
       const workflowNodesOnly = updatedNodes.filter((node) => node.type !== 'trigger');
-      setNodes(workflowNodesOnly);
+
+      setNodes(prevNodes => {
+        // Only update if nodes actually changed
+        if (prevNodes.length === workflowNodesOnly.length) {
+          const hasChanges = prevNodes.some((prevNode, idx) => {
+            const newNode = workflowNodesOnly[idx];
+            return prevNode.id !== newNode?.id ||
+                   prevNode.position !== newNode?.position ||
+                   prevNode.data !== newNode?.data;
+          });
+          if (!hasChanges) {
+            return prevNodes; // Prevent unnecessary state update
+          }
+        }
+        return workflowNodesOnly;
+      });
     },
-    [setNodes],
+    [], // Remove setNodes from deps - it's stable
   );
 
   const handleCanvasNodeDoubleClick = useCallback(
@@ -962,6 +980,7 @@ export default function Workflows() {
           {/* Canvas */}
           <div className="flex-1 relative overflow-hidden">
             <WorkflowCanvas
+              key={selectedWorkflowId ?? 'new'}
               initialNodes={canvasNodes}
               initialEdges={canvasEdges}
               onNodesChange={isPreviewActive ? undefined : handleCanvasNodesChange}

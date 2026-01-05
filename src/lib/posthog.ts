@@ -17,6 +17,7 @@ export const initPostHog = () => {
 
   posthog.init(apiKey, {
     api_host: host,
+    ui_host: 'https://us.posthog.com', // PostHog dashboard for deep links
 
     // Enable session recording for debugging user issues
     session_recording: {
