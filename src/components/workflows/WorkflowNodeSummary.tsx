@@ -1,5 +1,7 @@
 import { memo, useMemo } from 'react';
 
+type JsonRecord = Record<string, unknown>;
+
 type SummaryEntry = {
   key: string;
   label: string;
@@ -55,8 +57,8 @@ const formatFieldsValue = (value: unknown) => {
         return '';
       }
       const nameCandidate =
-        (field as Record<string, any>).displayLabel ||
-        (field as Record<string, any>).name ||
+        (field as JsonRecord).displayLabel ||
+        (field as JsonRecord).name ||
         '';
       return typeof nameCandidate === 'string' ? nameCandidate.trim() : '';
     })
@@ -120,14 +122,14 @@ const addEntry = (
 };
 
 export interface WorkflowNodeSummaryProps {
-  config?: Record<string, any> | null;
+  config?: JsonRecord | null;
   priorityKeys?: string[];
   limit?: number;
   fallbackMessage?: string;
 }
 
 export const getWorkflowNodeSummaryEntries = (
-  config?: Record<string, any> | null,
+  config?: JsonRecord | null,
   priorityKeys: string[] = [],
   limit = 3,
 ): SummaryEntry[] => {
@@ -138,15 +140,29 @@ export const getWorkflowNodeSummaryEntries = (
   const entries: SummaryEntry[] = [];
   const seenKeys = new Set<string>();
   const orderedKeys = [...priorityKeys, ...DEFAULT_PRIORITY];
+  const getDisplayValue = (key: string, rawValue: unknown) => {
+    if (!config) {
+      return rawValue;
+    }
+    const labels = (config.__resourceLabels as Record<string, string> | undefined) || undefined;
+    if (key === 'integration_resource_id' && labels && typeof labels[key] === 'string') {
+      const label = labels[key];
+      if (rawValue === undefined || rawValue === null || rawValue === '') {
+        return label;
+      }
+      return `${label} (#${rawValue})`;
+    }
+    return rawValue;
+  };
 
   orderedKeys.forEach((key) => {
     if (key in config) {
-      addEntry(entries, seenKeys, key, config[key]);
+      addEntry(entries, seenKeys, key, getDisplayValue(key, config[key]));
     }
   });
 
   Object.entries(config).forEach(([key, value]) => {
-    addEntry(entries, seenKeys, key, value);
+    addEntry(entries, seenKeys, key, getDisplayValue(key, value));
   });
 
   return entries.slice(0, limit);

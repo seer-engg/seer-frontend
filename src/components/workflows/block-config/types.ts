@@ -6,16 +6,19 @@ export interface ResourcePickerConfig {
   value_field?: string;
   search_enabled?: boolean;
   hierarchy?: boolean;
-  filter?: Record<string, any>;
+  filter?: Record<string, unknown>;
   depends_on?: string;
+  endpoint?: string;
 }
 
 export interface ToolMetadata {
   name: string;
   description: string;
-  output_schema?: Record<string, any> | null;
+  provider?: string | null;
+  integration_type?: string | null;
+  output_schema?: Record<string, unknown> | null;
   parameters?: {
-    properties?: Record<string, any>;
+    properties?: Record<string, unknown>;
     required?: string[];
   };
 }

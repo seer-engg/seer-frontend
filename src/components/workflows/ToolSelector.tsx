@@ -30,6 +30,7 @@ import {
   Mail,
   FolderOpen,
   Github,
+  Database,
   CheckCircle2,
   AlertTriangle,
   Loader2,
@@ -66,6 +67,8 @@ function getIntegrationIcon(integrationType: IntegrationType | null, className?:
       return <Github className={iconClass} />;
     case 'sandbox':
       return <Sparkles className={iconClass} />;
+    case 'supabase':
+      return <Database className={iconClass} />;
     default:
       return <Wrench className={iconClass} />;
   }
@@ -93,6 +96,8 @@ function getIntegrationDisplayName(integrationType: IntegrationType | null): str
       return 'Asana';
     case 'sandbox':
       return 'Sandbox';
+    case 'supabase':
+      return 'Supabase';
     default:
       return 'General';
   }
