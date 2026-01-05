@@ -307,6 +307,40 @@ export interface ExecuteToolResponse {
   error?: string;
 }
 
+export interface IntegrationResource {
+  id: number;
+  provider: string;
+  resource_type: string;
+  resource_id: string;
+  resource_key?: string | null;
+  name?: string | null;
+  status: string;
+  metadata?: Record<string, unknown>;
+  oauth_connection_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface IntegrationSecret {
+  id: number;
+  provider: string;
+  name: string;
+  secret_type: string;
+  resource_id?: number | null;
+  oauth_connection_id?: string | null;
+  value_fingerprint?: string | null;
+  metadata?: Record<string, unknown>;
+  status: string;
+  expires_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface SupabaseBindingResponse {
+  resource: IntegrationResource;
+  secrets: IntegrationSecret[];
+}
+
 /**
  * List connected accounts for a user
  */
@@ -448,4 +482,45 @@ export async function executeTool(params: {
       error: errorMessage,
     };
   }
+}
+
+/**
+ * List persisted Supabase project bindings for the authenticated user.
+ */
+export async function listSupabaseBindings(params?: {
+  resourceType?: string;
+}): Promise<IntegrationResource[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.resourceType) {
+    searchParams.set('resource_type', params.resourceType);
+  }
+  const query = searchParams.toString();
+  const endpoint = `/api/integrations/supabase/resources/bindings${query ? `?${query}` : ''}`;
+  const response = await backendApiClient.request<{ items: IntegrationResource[] }>(endpoint);
+  return response.items || [];
+}
+
+/**
+ * Bind a Supabase project by project reference and optional connection ID.
+ */
+export async function bindSupabaseProject(params: {
+  projectRef: string;
+  connectionId?: string;
+}): Promise<SupabaseBindingResponse> {
+  return backendApiClient.request<SupabaseBindingResponse>('/api/integrations/supabase/projects/bind', {
+    method: 'POST',
+    body: {
+      project_ref: params.projectRef,
+      connection_id: params.connectionId,
+    },
+  });
+}
+
+/**
+ * Delete (revoke) a persisted integration resource binding.
+ */
+export async function deleteIntegrationResource(resourceId: number): Promise<void> {
+  await backendApiClient.request(`/api/integrations/resources/${resourceId}`, {
+    method: 'DELETE',
+  });
 }

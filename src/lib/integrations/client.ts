@@ -10,13 +10,14 @@ export type IntegrationType =
   | "google_drive"
   | "google_sheets"
   | "asana"
-  | "gmail";
+  | "gmail"
+  | "supabase";
 
 /**
  * OAuth provider type - used for OAuth connections
  * Multiple integration types can map to the same provider (e.g., gmail, google_drive, google_sheets all use 'google')
  */
-export type OAuthProvider = "google" | "github" | "asana";
+export type OAuthProvider = "google" | "github" | "asana" | "supabase_mgmt";
 
 /**
  * Map integration type to OAuth provider.
@@ -36,6 +37,8 @@ export function getOAuthProvider(integrationType: IntegrationType): OAuthProvide
       return "github";
     case "asana":
       return "asana";
+    case "supabase":
+      return "supabase_mgmt";
     case "sandbox":
       return null; // Sandbox doesn't need OAuth
     default:

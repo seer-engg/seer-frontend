@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useEffect, useCallback, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -20,11 +20,19 @@ import { TemplateAutocompleteControls, ResourcePickerConfig, ToolMetadata } from
 import { VariableAutocompleteDropdown } from '../widgets/VariableAutocompleteDropdown';
 
 interface ToolBlockSectionProps {
-  config: Record<string, any>;
-  setConfig: Dispatch<SetStateAction<Record<string, any>>>;
+  config: Record<string, unknown>;
+  setConfig: Dispatch<SetStateAction<Record<string, unknown>>>;
   toolSchema?: ToolMetadata;
   templateAutocomplete: TemplateAutocompleteControls;
 }
+
+type ToolParamDefinition = {
+  type?: string;
+  default?: unknown;
+  description?: string;
+  enum?: string[];
+  [key: string]: unknown;
+};
 
 export function ToolBlockSection({
   config,
@@ -35,7 +43,7 @@ export function ToolBlockSection({
   const toolParams = config.params || {};
   const paramSchema = toolSchema?.parameters?.properties || {};
   const requiredParams = toolSchema?.parameters?.required || [];
-  const toolProvider = config.provider || 'google';
+  const toolProvider = config.provider || toolSchema?.provider || 'google';
 
   const {
     autocompleteContext,
@@ -47,6 +55,29 @@ export function ToolBlockSection({
     selectedIndex,
     showAutocomplete,
   } = templateAutocomplete;
+
+  const updateResourceLabel = useCallback(
+    (paramName: string, label?: string) => {
+      setConfig(prev => {
+        const currentLabels = (prev.__resourceLabels as Record<string, string> | undefined) || {};
+        const nextLabels = { ...currentLabels };
+        if (label) {
+          nextLabels[paramName] = label;
+        } else {
+          delete nextLabels[paramName];
+        }
+        if (Object.keys(nextLabels).length === 0) {
+          const { __resourceLabels, ...rest } = prev;
+          return rest;
+        }
+        return {
+          ...prev,
+          __resourceLabels: nextLabels,
+        };
+      });
+    },
+    [setConfig],
+  );
 
   useEffect(() => {
     if (!toolSchema?.output_schema) {
@@ -63,7 +94,7 @@ export function ToolBlockSection({
     });
   }, [toolSchema?.output_schema, setConfig]);
 
-  const updateParams = (updater: (prev: Record<string, any>) => Record<string, any>) => {
+  const updateParams = (updater: (prev: Record<string, unknown>) => Record<string, unknown>) => {
     setConfig(prev => ({
       ...prev,
       params: updater(prev.params || {}),
@@ -103,8 +134,8 @@ export function ToolBlockSection({
     onChange,
   });
 
-  const renderParamField = (paramName: string, paramDef: any) => {
-    const paramType = paramDef.type || 'string';
+  const renderParamField = (paramName: string, paramDef: ToolParamDefinition) => {
+    const paramType = typeof paramDef.type === 'string' ? paramDef.type : 'string';
     const paramValue = toolParams[paramName];
     const isRequired = requiredParams.includes(paramName);
     const hasDefault = paramDef.default !== undefined;
@@ -119,7 +150,7 @@ export function ToolBlockSection({
     const inputId = `param-${paramName}`;
     const showDropdown = showAutocomplete && autocompleteContext?.inputId === inputId;
 
-    const setParamValue = (value: any) => {
+    const setParamValue = (value: unknown) => {
       updateParams(prev => ({
         ...prev,
         [paramName]: value,
@@ -128,7 +159,7 @@ export function ToolBlockSection({
 
     const setParamValueFromRaw = (
       raw: string,
-      validator: (parsed: any) => boolean
+      validator: (parsed: unknown) => boolean
     ) => {
       try {
         const parsed = JSON.parse(raw);
@@ -179,24 +210,39 @@ export function ToolBlockSection({
 
         <div className="space-y-1 relative">
           {resourcePicker ? (
-            <ResourcePicker
-              config={resourcePicker}
-              provider={toolProvider}
-              value={paramValue}
-              onChange={value => {
-                updateParams(prev => ({
-                  ...prev,
-                  [paramName]: value,
-                }));
-              }}
-              placeholder={`Select ${paramName}...`}
-              dependsOnValues={
-                resourcePicker.depends_on
-                  ? { [resourcePicker.depends_on]: toolParams[resourcePicker.depends_on] }
-                  : undefined
-              }
-              className="text-xs"
-            />
+            <>
+              <ResourcePicker
+                config={resourcePicker}
+                provider={toolProvider}
+                value={paramValue != null ? String(paramValue) : undefined}
+                onChange={(nextValue, displayName) => {
+                  const parsedValue =
+                    paramType === 'integer'
+                      ? (() => {
+                          const asNumber = typeof nextValue === 'string' ? parseInt(nextValue, 10) : Number(nextValue);
+                          return Number.isNaN(asNumber) ? nextValue : asNumber;
+                        })()
+                      : nextValue;
+                  updateParams(prev => ({
+                    ...prev,
+                    [paramName]: parsedValue,
+                  }));
+                  updateResourceLabel(paramName, displayName);
+                }}
+                placeholder={`Select ${paramName}...`}
+                dependsOnValues={
+                  resourcePicker.depends_on
+                    ? { [resourcePicker.depends_on]: toolParams[resourcePicker.depends_on] }
+                    : undefined
+                }
+                className="text-xs"
+              />
+              {toolProvider === 'supabase' && paramName === 'integration_resource_id' && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Connect Supabase Mgmt, then use “Bind project” to select a project.
+                </p>
+              )}
+            </>
           ) : paramType === 'boolean' ? (
             <div className="flex items-center space-x-2">
               <input

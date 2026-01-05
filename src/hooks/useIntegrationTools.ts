@@ -70,8 +70,19 @@ function getIntegrationTypeFromToolName(toolName: string): IntegrationType | nul
   if (nameLower.includes('drive') || nameLower.includes('google_drive')) return 'google_drive';
   if (nameLower.includes('github')) return 'github';
   if (nameLower.includes('asana')) return 'asana';
+  if (nameLower.includes('supabase')) return 'supabase';
   return null;
 }
+
+const NON_OAUTH_INTEGRATIONS = new Set<IntegrationType>(['sandbox']);
+
+const INTEGRATION_SCOPE_DEFAULTS: Partial<Record<IntegrationType, string[]>> = {
+  supabase: ['read:projects'],
+};
+
+const integrationNeedsConnection = (integrationType: IntegrationType | null): integrationType is IntegrationType => {
+  return !!integrationType && !NON_OAUTH_INTEGRATIONS.has(integrationType);
+};
 
 /**
  * Hook for managing integration tools and their authorization status
@@ -168,7 +179,7 @@ export function useIntegrationTools() {
       if (conn.status === 'ACTIVE') {
         const provider = conn.provider || conn.toolkit?.slug;
         if (provider) {
-          const scopes = new Set((conn.scopes || '').split(' ').filter(Boolean));
+        const scopes = new Set<string>((conn.scopes || '').split(' ').filter(Boolean));
           map.set(provider, {
             scopes,
             connectionId: conn.id
@@ -213,7 +224,7 @@ export function useIntegrationTools() {
       const integrationType = getToolIntegrationType(tool);
       if (!integrationType) continue;
       if (!map.has(integrationType)) {
-        map.set(integrationType, new Set());
+        map.set(integrationType, new Set<string>());
       }
       const scopeSet = map.get(integrationType)!;
       for (const scope of tool.required_scopes || []) {
@@ -224,12 +235,19 @@ export function useIntegrationTools() {
   }, [tools, getToolIntegrationType]);
 
   const getIntegrationProviderForType = useCallback((integrationType: IntegrationType): string | null => {
-    return integrationProviderMap.get(integrationType) || getOAuthProvider(integrationType);
+    const oauthProvider = getOAuthProvider(integrationType);
+    if (oauthProvider) {
+      return oauthProvider;
+    }
+    return integrationProviderMap.get(integrationType) || null;
   }, [integrationProviderMap]);
 
   const getIntegrationScopesForType = useCallback((integrationType: IntegrationType): string[] => {
     const backendScopes = integrationScopesMap.get(integrationType);
-    return backendScopes ? Array.from(backendScopes) : [];
+    if (backendScopes && backendScopes.size > 0) {
+      return Array.from(backendScopes);
+    }
+    return INTEGRATION_SCOPE_DEFAULTS[integrationType] ?? [];
   }, [integrationScopesMap]);
 
   /**
@@ -296,9 +314,10 @@ export function useIntegrationTools() {
 
     // Determine integration type
     const integrationType = getToolIntegrationType(tool);
+    const needsConnection = integrationNeedsConnection(integrationType);
 
     // If no integration required, tool is always available
-    if (!integrationType || tool.required_scopes.length === 0) {
+    if (!needsConnection) {
       return {
         tool,
         integrationType: null,
@@ -307,6 +326,11 @@ export function useIntegrationTools() {
         requiredScopes: [],
       };
     }
+
+    const assuredIntegrationType = integrationType!;
+    const requiredScopes = tool.required_scopes.length > 0
+      ? tool.required_scopes
+      : getIntegrationScopesForType(assuredIntegrationType);
 
     // First check if we have status from the tools/status API
     if (toolStatusMap) {
@@ -317,26 +341,26 @@ export function useIntegrationTools() {
         const isConnected = status.has_required_scopes && (status.access_token_valid !== false);
         return {
           tool,
-          integrationType,
+          integrationType: assuredIntegrationType,
           isConnected,
           connectionId: status.connection_id,
-          requiredScopes: tool.required_scopes,
+          requiredScopes,
         };
       }
     }
 
     // Fallback: Check using OAuth provider and scopes
-    const oauthProvider = getIntegrationProviderForType(integrationType);
+    const oauthProvider = getIntegrationProviderForType(assuredIntegrationType);
     if (oauthProvider) {
       const providerConn = providerConnectionsMap.get(oauthProvider);
       if (providerConn) {
-        const hasAllScopes = tool.required_scopes.every(scope => providerConn.scopes.has(scope));
+        const hasAllScopes = requiredScopes.every(scope => providerConn.scopes.has(scope));
         return {
           tool,
-          integrationType,
+          integrationType: assuredIntegrationType,
           isConnected: hasAllScopes,
           connectionId: hasAllScopes ? providerConn.connectionId : null,
-          requiredScopes: tool.required_scopes,
+          requiredScopes,
         };
       }
     }
@@ -344,12 +368,12 @@ export function useIntegrationTools() {
     // No connection found
     return {
       tool,
-      integrationType,
+      integrationType: assuredIntegrationType,
       isConnected: false,
       connectionId: null,
-      requiredScopes: tool.required_scopes,
+      requiredScopes,
     };
-  }, [tools, toolStatusMap, providerConnectionsMap, getToolIntegrationType, getIntegrationProviderForType]);
+  }, [tools, toolStatusMap, providerConnectionsMap, getToolIntegrationType, getIntegrationProviderForType, getIntegrationScopesForType]);
 
   /**
    * Get all tools with their integration status
@@ -357,8 +381,9 @@ export function useIntegrationTools() {
   const toolsWithStatus = useMemo((): ToolIntegrationStatus[] => {
     return tools.map(tool => {
       const integrationType = getToolIntegrationType(tool);
+      const needsConnection = integrationNeedsConnection(integrationType);
 
-      if (!integrationType || tool.required_scopes.length === 0) {
+      if (!needsConnection) {
         return {
           tool,
           integrationType: null,
@@ -367,6 +392,11 @@ export function useIntegrationTools() {
           requiredScopes: [],
         };
       }
+
+      const assuredIntegrationType = integrationType!;
+      const requiredScopes = tool.required_scopes.length > 0
+        ? tool.required_scopes
+        : getIntegrationScopesForType(assuredIntegrationType);
 
       // Use toolStatusMap if available
       if (toolStatusMap) {
@@ -377,45 +407,48 @@ export function useIntegrationTools() {
           const fullyConnected = status.has_required_scopes && (status.access_token_valid !== false);
           return {
             tool,
-            integrationType,
+            integrationType: assuredIntegrationType,
             isConnected: fullyConnected,
             connectionId: status.connection_id,
-            requiredScopes: tool.required_scopes,
+            requiredScopes,
           };
         }
       }
 
       // Fallback: check using OAuth provider and scopes
-      const oauthProvider = getIntegrationProviderForType(integrationType);
+      const oauthProvider = getIntegrationProviderForType(assuredIntegrationType);
       if (oauthProvider) {
         const providerConn = providerConnectionsMap.get(oauthProvider);
         if (providerConn) {
-          const hasAllScopes = tool.required_scopes.every(scope => providerConn.scopes.has(scope));
+          const hasAllScopes = requiredScopes.every(scope => providerConn.scopes.has(scope));
           return {
             tool,
-            integrationType,
+            integrationType: assuredIntegrationType,
             isConnected: hasAllScopes,
             connectionId: hasAllScopes ? providerConn.connectionId : null,
-            requiredScopes: tool.required_scopes,
+            requiredScopes,
           };
         }
       }
 
       return {
         tool,
-        integrationType,
+        integrationType: assuredIntegrationType,
         isConnected: false,
         connectionId: null,
-        requiredScopes: tool.required_scopes,
+        requiredScopes,
       };
     });
-  }, [tools, toolStatusMap, providerConnectionsMap, getToolIntegrationType, getIntegrationProviderForType]);
+  }, [tools, toolStatusMap, providerConnectionsMap, getToolIntegrationType, getIntegrationProviderForType, getIntegrationScopesForType]);
 
   /**
    * Check if a specific integration type is connected
    * Now properly checks if OAuth provider has required scopes
    */
   const isIntegrationConnected = useCallback((type: IntegrationType): boolean => {
+    if (!integrationNeedsConnection(type)) {
+      return true;
+    }
     // First check connectedIntegrations (which now uses proper scope checking)
     if (connectedIntegrations.has(type)) {
       return true;
@@ -463,6 +496,10 @@ export function useIntegrationTools() {
       console.error(`[useIntegrationTools] No user email found`);
       return null; 
     }
+    if (!integrationNeedsConnection(type)) {
+      console.warn(`[useIntegrationTools] Integration ${type} does not require OAuth connection.`);
+      return null;
+    }
     
     // Require explicit tool names - no fallbacks
     const toolNamesToUse = options?.toolNames || (options?.toolName ? [options.toolName] : []);
@@ -482,14 +519,19 @@ export function useIntegrationTools() {
         }
       }
     }
-    
+
+    if (scopeSet.size === 0) {
+      const fallbackScopes = getIntegrationScopesForType(type);
+      fallbackScopes.forEach(scope => scopeSet.add(scope));
+    }
+
     const scopes = Array.from(scopeSet);
-    
+
     if (scopes.length === 0) {
-      console.error(`[useIntegrationTools] No scopes found for tools: ${toolNamesToUse.join(', ')}`);
+      console.error(`[useIntegrationTools] No scopes available for integration type ${type}. Tools: ${toolNamesToUse.join(', ')}`);
       return null;
     }
-    
+
     console.log(`[useIntegrationTools] Connecting ${type} with tools: ${toolNamesToUse.join(', ')}, scopes: ${scopes.join(' ')}`);
 
     // Get the OAuth provider for this integration type
@@ -511,7 +553,7 @@ export function useIntegrationTools() {
     });
 
     return result.redirectUrl;
-  }, [userEmail, tools, getIntegrationProviderForType]);
+  }, [userEmail, tools, getIntegrationProviderForType, getIntegrationScopesForType]);
 
   /**
    * Refresh all data
