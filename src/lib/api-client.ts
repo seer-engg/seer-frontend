@@ -271,6 +271,10 @@ export interface ToolConnectionStatus {
   missing_scopes: string[];
   connection_id: string | null;
   provider_account_id?: string;
+  requires_oauth_connection?: boolean;
+  requires_secrets?: boolean;
+  supports_tokenless_auth?: boolean;
+  auth_mode?: "none" | "oauth" | "secrets" | "oauth_and_secrets";
 }
 
 export interface ToolsConnectionStatusResponse {
