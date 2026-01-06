@@ -38,8 +38,8 @@ const renderVersionLabel = (
     return `${label}: —`;
   }
   const versionNumber = version.version_number ?? version.version_id;
-  const statusSuffix = version.status ? ` (${version.status.toLowerCase()})` : '';
-  return `${label}: v${versionNumber}${statusSuffix}`;
+  // const statusSuffix = version.status ? ` (${version.status.toLowerCase()})` : '';
+  return `${label}: v${versionNumber}`;
 };
 
 const formatHistoryLabel = (version: WorkflowVersionListItem): string => {
@@ -112,7 +112,7 @@ export function WorkflowLifecycleBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
-              Draft revision {lifecycleStatus?.draftRevision ?? '—'}
+              Draft revision
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             {isVersionsLoading && (
@@ -132,11 +132,11 @@ export function WorkflowLifecycleBar({
                 >
                   <div className="flex flex-col gap-0.5 text-xs">
                     <span className="font-medium text-foreground">{formatHistoryLabel(version)}</span>
-                    {version.created_from_draft_revision && (
+                    {/* {version.created_from_draft_revision && (
                       <span className="text-muted-foreground">
                         Draft rev {version.created_from_draft_revision}
                       </span>
-                    )}
+                    )} */}
                   </div>
                 </DropdownMenuItem>
               ))

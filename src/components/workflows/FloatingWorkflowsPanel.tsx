@@ -198,9 +198,9 @@ export function FloatingWorkflowsPanel({
                   ) : (
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium truncate">{workflow.name}</p>
-                      <span className="text-xs text-muted-foreground">
+                      {/* <span className="text-xs text-muted-foreground">
                         Rev {workflow.draft_revision ?? '—'}
-                      </span>
+                      </span> */}
                       <span className="text-xs text-muted-foreground">
                         {new Date(workflow.updated_at).toLocaleDateString()}
                       </span>
