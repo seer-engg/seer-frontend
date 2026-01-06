@@ -142,11 +142,36 @@ export function WorkflowCanvas({
       const currentIds = new Set(currentNodes.map(n => n.id));
       const newIds = new Set(initialNodes.map(n => n.id));
 
-      const hasChanges =
+      const hasIdChanges =
         currentIds.size !== newIds.size ||
         [...newIds].some(id => !currentIds.has(id));
 
-      return hasChanges ? initialNodes : currentNodes;
+      if (hasIdChanges) {
+        return initialNodes;
+      }
+
+      // Check for data changes in existing nodes
+      let hasDataChanges = false;
+      const updatedNodes = currentNodes.map(currentNode => {
+        const newNode = initialNodes.find(n => n.id === currentNode.id);
+        if (!newNode) return currentNode;
+
+        // Compare data objects (including config)
+        const currentData = JSON.stringify(currentNode.data);
+        const newData = JSON.stringify(newNode.data);
+        
+        if (currentData !== newData) {
+          hasDataChanges = true;
+          return {
+            ...currentNode,
+            data: newNode.data,
+          };
+        }
+        
+        return currentNode;
+      });
+
+      return hasDataChanges ? updatedNodes : currentNodes;
     });
   }, [initialNodes]);
 
@@ -160,11 +185,33 @@ export function WorkflowCanvas({
       const currentIds = new Set(currentEdges.map(e => e.id));
       const newIds = new Set(initialEdges.map(e => e.id));
 
-      const hasChanges =
+      const hasIdChanges =
         currentIds.size !== newIds.size ||
         [...newIds].some(id => !currentIds.has(id));
 
-      return hasChanges ? initialEdges : currentEdges;
+      if (hasIdChanges) {
+        return initialEdges;
+      }
+
+      // Check for data changes in existing edges
+      let hasDataChanges = false;
+      const updatedEdges = currentEdges.map(currentEdge => {
+        const newEdge = initialEdges.find(e => e.id === currentEdge.id);
+        if (!newEdge) return currentEdge;
+
+        // Compare edge objects
+        const currentData = JSON.stringify(currentEdge);
+        const newData = JSON.stringify(newEdge);
+        
+        if (currentData !== newData) {
+          hasDataChanges = true;
+          return newEdge;
+        }
+        
+        return currentEdge;
+      });
+
+      return hasDataChanges ? updatedEdges : currentEdges;
     });
   }, [initialEdges]);
 
