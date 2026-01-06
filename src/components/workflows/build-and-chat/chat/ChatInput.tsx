@@ -61,7 +61,7 @@ export function ChatInput({
         onKeyDown={handleKeyDown}
         placeholder="Ask about your workflow..."
         disabled={isSending}
-        className="min-h-[80px] resize-none w-full bg-white overflow-hidden"
+        className="min-h-[80px] resize-none w-full bg-background dark:bg-muted overflow-hidden"
         style={{ maxHeight: '300px' }}
       />
       <div className="flex items-center justify-end gap-2">
