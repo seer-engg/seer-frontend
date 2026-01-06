@@ -48,9 +48,7 @@ export function MessageBubble({
       </div>
       <div className="flex-1 max-w-[85%]">
         <div
-          className={`rounded-lg p-3 ${
-            message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
-          }`}
+          className={`rounded-lg p-3 bg-muted`}
         >
           <p className="text-sm whitespace-pre-wrap text-left">{showContent}</p>
           {message.thinking && message.thinking.length > 0 && (
