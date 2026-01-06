@@ -307,7 +307,9 @@ export function WorkflowCanvas({
           nodesConnectable={!readOnly}
           elementsSelectable={!readOnly}
           panOnDrag={[0, 1, 2]}
-          zoomOnScroll
+          panOnScroll
+          zoomOnScroll={false}
+          zoomOnPinch
           minZoom={0.1}
           maxZoom={2}
           selectNodesOnDrag={!readOnly}
