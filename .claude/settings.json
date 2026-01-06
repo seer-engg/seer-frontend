@@ -4,14 +4,7 @@
       "Read(**)",
       "Edit(src/components/**)",
       "Edit(src/lib/**)",
-      "Edit(src/pages/**)",
-      "Bash(npm run *)",
-      "Bash(git *)"
-    ],
-    "deny": [
-      "Read(.env)",
-      "Read(.env.*)",
-      "Edit(.env.*)"
+      "Edit(src/pages/**)"
     ]
   },
   "env": {
