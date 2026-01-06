@@ -19,6 +19,12 @@ export interface GmailConfigState {
   overlapMs: string;
 }
 
+export interface CronConfigState {
+  cronExpression: string;
+  timezone: string;
+  description: string;
+}
+
 const EVENT_PREFIX = 'event.';
 
 export const makeDefaultGmailConfig = (): GmailConfigState => ({
@@ -177,5 +183,57 @@ export function serializeGmailConfig(state: GmailConfigState): Record<string, Js
     providerConfig.overlap_ms = Math.min(Math.max(overlapMsValue, 0), 900000);
   }
   return providerConfig;
+}
+
+export const makeDefaultCronConfig = (): CronConfigState => ({
+  cronExpression: '0 9 * * *',
+  timezone: 'UTC',
+  description: '',
+});
+
+export function buildCronConfigFromProviderConfig(
+  providerConfig?: Record<string, any> | null,
+): CronConfigState {
+  if (!providerConfig) {
+    return makeDefaultCronConfig();
+  }
+  return {
+    cronExpression: String(providerConfig['cron_expression'] ?? '0 9 * * *'),
+    timezone: String(providerConfig['timezone'] ?? 'UTC'),
+    description: String(providerConfig['description'] ?? ''),
+  };
+}
+
+export function serializeCronConfig(state: CronConfigState): Record<string, JsonValue> {
+  const providerConfig: Record<string, JsonValue> = {
+    cron_expression: state.cronExpression.trim(),
+    timezone: state.timezone,
+  };
+  const description = state.description.trim();
+  if (description) {
+    providerConfig.description = description;
+  }
+  return providerConfig;
+}
+
+export function validateCronExpression(expression: string): { valid: boolean; error?: string } {
+  const trimmed = expression.trim();
+  if (!trimmed) {
+    return { valid: false, error: 'Cron expression is required' };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  if (parts.length !== 5) {
+    return { valid: false, error: 'Cron expression must have 5 fields (minute hour day month weekday)' };
+  }
+
+  const cronFieldRegex = /^(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?)(,(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?))*$/;
+  for (let i = 0; i < parts.length; i++) {
+    if (!cronFieldRegex.test(parts[i])) {
+      return { valid: false, error: `Invalid syntax in field ${i + 1}: ${parts[i]}` };
+    }
+  }
+
+  return { valid: true };
 }
 

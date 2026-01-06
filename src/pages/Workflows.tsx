@@ -23,6 +23,7 @@ import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { Button } from '@/components/ui/button';
 import { Rocket } from 'lucide-react';
+import { Rocket, Menu, Calendar } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
@@ -32,7 +33,7 @@ import { toast } from '@/components/ui/sonner';
 import { BackendAPIError } from '@/lib/api-client';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import { WEBHOOK_TRIGGER_KEY, GMAIL_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
+import { WEBHOOK_TRIGGER_KEY, GMAIL_TRIGGER_KEY, CRON_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
 import {
   buildBindingsPayload,
   buildDefaultBindingState,
@@ -384,10 +385,6 @@ export default function Workflows() {
 
   const handleAddTriggerDraft = useCallback(
     (triggerKey: string) => {
-      if (!workflowHasInputs) {
-        toast.error('Add an Input block before configuring triggers');
-        return;
-      }
       const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
       if (!descriptor) {
         toast.error('Trigger metadata unavailable');
@@ -401,7 +398,7 @@ export default function Workflows() {
       };
       setDraftTriggers((prev) => [...prev, draft]);
     },
-    [triggerCatalog, workflowHasInputs, workflowInputsDef],
+    [triggerCatalog, workflowInputsDef],
   );
 
   const handleDiscardTriggerDraft = useCallback((draftId: string) => {
@@ -673,7 +670,10 @@ export default function Workflows() {
     isConnectingGmail,
   ]);
 
-  const baseCanvasNodes = previewGraph?.nodes ?? nodes;
+  const baseCanvasNodes = useMemo(
+    () => previewGraph?.nodes ?? nodes,
+    [previewGraph?.nodes, nodes]
+  );
   const canvasNodes = useMemo(
     () => [...baseCanvasNodes, ...triggerNodes],
     [baseCanvasNodes, triggerNodes],
@@ -682,9 +682,24 @@ export default function Workflows() {
   const handleCanvasNodesChange = useCallback(
     (updatedNodes: Node<WorkflowNodeData>[]) => {
       const workflowNodesOnly = updatedNodes.filter((node) => node.type !== 'trigger');
-      setNodes(workflowNodesOnly);
+
+      setNodes(prevNodes => {
+        // Only update if nodes actually changed
+        if (prevNodes.length === workflowNodesOnly.length) {
+          const hasChanges = prevNodes.some((prevNode, idx) => {
+            const newNode = workflowNodesOnly[idx];
+            return prevNode.id !== newNode?.id ||
+                   prevNode.position !== newNode?.position ||
+                   prevNode.data !== newNode?.data;
+          });
+          if (!hasChanges) {
+            return prevNodes; // Prevent unnecessary state update
+          }
+        }
+        return workflowNodesOnly;
+      });
     },
-    [setNodes],
+    [], // Remove setNodes from deps - it's stable
   );
 
   const handleCanvasNodeDoubleClick = useCallback(
@@ -777,7 +792,6 @@ export default function Workflows() {
 
   const triggerOptions = useMemo<TriggerListOption[]>(() => {
     const options: TriggerListOption[] = [];
-    const blockDueToInputs = !workflowHasInputs;
 
     const webhookTrigger = triggerCatalog.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY);
     if (webhookTrigger) {
@@ -786,7 +800,7 @@ export default function Workflows() {
         title: webhookTrigger.title ?? 'Generic Webhook',
         description:
           webhookTrigger.description ?? 'Accept HTTP POST requests from any service.',
-        disabled: blockDueToInputs,
+        disabled: false,
         onPrimaryAction: () => handleAddTriggerDraft(WEBHOOK_TRIGGER_KEY),
         actionLabel: 'Add to canvas',
         badge: 'Webhook',
@@ -797,10 +811,10 @@ export default function Workflows() {
     const gmailTrigger = triggerCatalog.find((trigger) => trigger.key === GMAIL_TRIGGER_KEY);
     if (gmailTrigger) {
       let disabledReason: string | undefined;
-      let disabled = blockDueToInputs;
+      let disabled = false;
       let secondaryActionLabel: string | undefined;
       let onSecondaryAction: (() => void) | undefined;
-      if (!disabled && !gmailIntegrationReady) {
+      if (!gmailIntegrationReady) {
         disabledReason = 'Connect Gmail to continue';
         disabled = true;
         secondaryActionLabel = 'Connect Gmail';
@@ -824,18 +838,29 @@ export default function Workflows() {
       });
     }
 
+    const cronTrigger = triggerCatalog.find((trigger) => trigger.key === CRON_TRIGGER_KEY);
+    if (cronTrigger) {
+      options.push({
+        key: CRON_TRIGGER_KEY,
+        title: cronTrigger.title ?? 'Cron Schedule',
+        description: cronTrigger.description ?? 'Schedule workflows with cron expressions',
+        disabled: false,
+        onPrimaryAction: () => handleAddTriggerDraft(CRON_TRIGGER_KEY),
+        actionLabel: 'Add to canvas',
+        badge: 'Scheduler',
+        status: 'ready',
+      });
+    }
+
     return options;
   }, [
-    workflowHasInputs,
     triggerCatalog,
     handleAddTriggerDraft,
     gmailIntegrationReady,
     handleConnectGmail,
     isConnectingGmail,
   ]);
-  const triggerInfoMessage = workflowHasInputs
-    ? undefined
-    : 'Add an Input block before attaching triggers.';
+  const triggerInfoMessage = undefined;
 
   const lifecycleStatus = useMemo(() => {
     if (!loadedWorkflow) {
@@ -1155,6 +1180,7 @@ export default function Workflows() {
           {/* Canvas */}
           <div className="flex-1 relative overflow-hidden">
             <WorkflowCanvas
+              key={selectedWorkflowId ?? 'new'}
               initialNodes={canvasNodes}
               initialEdges={canvasEdges}
               onNodesChange={isPreviewActive ? undefined : handleCanvasNodesChange}
