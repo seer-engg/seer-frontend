@@ -78,9 +78,28 @@ export function TriggerSection({
         {options.map((option) => {
           const Icon = TRIGGER_ICON_BY_KEY[option.key];
           const disabled = option.disabled ?? Boolean(option.disabledReason);
+          
+          const handleDragStart = (e: React.DragEvent) => {
+            if (disabled) {
+              e.preventDefault();
+              return;
+            }
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData(
+              'application/reactflow',
+              JSON.stringify({
+                type: 'trigger',
+                triggerKey: option.key,
+                title: option.title,
+              })
+            );
+          };
+
           const cardContent = (
             <Card
               key={option.key}
+              draggable={!disabled}
+              onDragStart={handleDragStart}
               role="button"
               tabIndex={disabled ? -1 : 0}
               aria-disabled={disabled}
@@ -100,8 +119,10 @@ export function TriggerSection({
                 }
               }}
               className={cn(
-                'border border-border/70 bg-background transition-colors cursor-pointer',
-                disabled ? 'opacity-80 grayscale-[20%] cursor-not-allowed' : 'hover:border-primary/50',
+                'border border-border/70 bg-background transition-colors',
+                disabled 
+                  ? 'opacity-80 grayscale-[20%] cursor-not-allowed' 
+                  : 'cursor-grab active:cursor-grabbing hover:border-primary/50',
               )}
             >
               <CardContent className="flex flex-col gap-3 p-1">
