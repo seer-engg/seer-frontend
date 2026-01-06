@@ -75,15 +75,11 @@ export function WorkflowLifecycleBar({
   return (
     <div className="bg-card/95 backdrop-blur border rounded-full shadow-xl px-4 py-2 flex items-center gap-4 text-xs text-muted-foreground">
       {lifecycleStatus ? (
-        <div className="flex items-center gap-2 flex-wrap text-[11px]">
-          <Badge variant="outline">Draft rev {lifecycleStatus.draftRevision ?? '—'}</Badge>
+        <div className="flex items-center gap-2 text-[11px]">
           <Badge variant="outline">{renderVersionLabel('Latest', lifecycleStatus.latestVersion)}</Badge>
           <Badge variant={lifecycleStatus.publishedVersion ? 'default' : 'outline'}>
             {renderVersionLabel('Published', lifecycleStatus.publishedVersion)}
           </Badge>
-          <span className="uppercase tracking-wide">
-            Last test version: {lifecycleStatus.lastTestedVersionId ?? '—'}
-          </span>
         </div>
       ) : (
         <span>No workflow selected</span>
@@ -93,7 +89,7 @@ export function WorkflowLifecycleBar({
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               className="text-muted-foreground"
               disabled={versionButtonDisabled}
               title={
@@ -164,7 +160,7 @@ export function WorkflowLifecycleBar({
           onClick={onPublishClick}
           disabled={!canPublish || isPublishing}
           size="sm"
-          variant="secondary"
+          variant="default"
           title={publishDisabledReason}
         >
           {isPublishing ? 'Publishing…' : 'Publish'}
