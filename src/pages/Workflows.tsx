@@ -6,7 +6,7 @@
  */
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
-import { Node } from '@xyflow/react';
+import { Node, ReactFlowProvider } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeConfigDialog } from '@/components/workflows/WorkflowNodeConfigDialog';
 import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema, TriggerDraftMeta } from '@/components/workflows/types';
@@ -22,7 +22,6 @@ import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { Button } from '@/components/ui/button';
-import { Rocket } from 'lucide-react';
 import { Rocket, Menu, Calendar } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
@@ -336,6 +335,26 @@ export default function Workflows() {
           x: Math.random() * 400 + 100,
           y: Math.random() * 400 + 100,
         },
+        data: {
+          type: block.type as any,
+          label: block.label,
+          config: defaultConfig,
+        },
+      };
+      setNodes((nds) => [...nds, newNode]);
+    },
+    [functionBlocksMap],
+  );
+
+  const handleNodeDrop = useCallback(
+    (block: { type: string; label: string; config?: any }, position: { x: number; y: number }) => {
+      // Set default config based on block type
+      const defaultConfig = withDefaultBlockConfig(block.type, block.config, functionBlocksMap);
+      
+      const newNode: Node<WorkflowNodeData> = {
+        id: `node-${Date.now()}`,
+        type: block.type as any,
+        position,
         data: {
           type: block.type as any,
           label: block.label,
@@ -1178,8 +1197,9 @@ export default function Workflows() {
         {/* Main Canvas Area */}
         <ResizablePanel defaultSize={75} minSize={50} className="flex flex-col">
           {/* Canvas */}
-          <div className="flex-1 relative overflow-hidden">
-            <WorkflowCanvas
+          <ReactFlowProvider>
+            <div className="flex-1 relative overflow-hidden">
+              <WorkflowCanvas
               key={selectedWorkflowId ?? 'new'}
               initialNodes={canvasNodes}
               initialEdges={canvasEdges}
@@ -1187,6 +1207,7 @@ export default function Workflows() {
               onEdgesChange={isPreviewActive ? undefined : setEdges}
               onNodeSelect={isPreviewActive ? undefined : setSelectedNodeId}
               onNodeDoubleClick={isPreviewActive ? undefined : handleCanvasNodeDoubleClick}
+              onNodeDrop={isPreviewActive ? undefined : handleNodeDrop}
               selectedNodeId={isPreviewActive ? null : selectedNodeId}
               readOnly={isPreviewActive}
             />
@@ -1234,7 +1255,8 @@ export default function Workflows() {
               onNewWorkflow={handleNewWorkflow}
             />
             
-          </div>
+            </div>
+          </ReactFlowProvider>
         </ResizablePanel>
         
         {/* Build & Chat Panel - Always render with collapsible behavior */}

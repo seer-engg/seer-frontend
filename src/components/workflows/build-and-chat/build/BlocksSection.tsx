@@ -9,6 +9,18 @@ interface BlocksSectionProps {
 }
 
 export function BlocksSection({ blocks, onSelectBlock }: BlocksSectionProps) {
+  const handleDragStart = (e: React.DragEvent, block: BuiltInBlock) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(
+      'application/reactflow',
+      JSON.stringify({
+        type: 'block',
+        blockType: block.type,
+        label: block.label,
+      })
+    );
+  };
+
   return (
     <div>
       <h3 className="text-sm font-medium mb-2 text-left">Blocks</h3>
@@ -17,7 +29,9 @@ export function BlocksSection({ blocks, onSelectBlock }: BlocksSectionProps) {
           <Tooltip key={block.type}>
             <TooltipTrigger asChild>
               <Card
-                className="cursor-pointer hover:bg-accent transition-colors"
+                draggable
+                onDragStart={(e) => handleDragStart(e, block)}
+                className="cursor-grab active:cursor-grabbing hover:bg-accent transition-colors"
                 onClick={() => onSelectBlock(block)}
               >
                 <CardContent className="p-2">

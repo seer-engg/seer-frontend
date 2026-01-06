@@ -109,32 +109,53 @@ export function ToolsSection({
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="mt-2 ml-6 space-y-1.5">
-                  {integrationTools.map((tool) => (
-                    <Tooltip key={tool.slug || tool.name}>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="w-full justify-start cursor-pointer hover:bg-accent hover:border-accent-foreground/20 transition-colors px-2.5 py-1.5 h-auto font-normal text-xs"
-                          onClick={() => onSelectTool(tool)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              onSelectTool(tool);
-                            }
-                          }}
-                        >
-                          {tool.name}
-                        </Badge>
-                      </TooltipTrigger>
-                      {tool.description && (
-                        <TooltipContent>
-                          <p>{tool.description}</p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  ))}
+                  {integrationTools.map((tool) => {
+                    const handleDragStart = (e: React.DragEvent) => {
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData(
+                        'application/reactflow',
+                        JSON.stringify({
+                          type: 'tool',
+                          tool: {
+                            name: tool.name,
+                            slug: tool.slug,
+                            provider: tool.provider,
+                            integration_type: tool.integration_type,
+                            output_schema: tool.output_schema,
+                          },
+                        })
+                      );
+                    };
+
+                    return (
+                      <Tooltip key={tool.slug || tool.name}>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            draggable
+                            onDragStart={handleDragStart}
+                            variant="outline"
+                            className="w-full justify-start cursor-grab active:cursor-grabbing hover:bg-accent hover:border-accent-foreground/20 transition-colors px-2.5 py-1.5 h-auto font-normal text-xs"
+                            onClick={() => onSelectTool(tool)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onSelectTool(tool);
+                              }
+                            }}
+                          >
+                            {tool.name}
+                          </Badge>
+                        </TooltipTrigger>
+                        {tool.description && (
+                          <TooltipContent>
+                            <p>{tool.description}</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    );
+                  })}
                 </AccordionContent>
               </AccordionItem>
             ))}

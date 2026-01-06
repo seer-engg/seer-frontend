@@ -4,7 +4,7 @@
  * Supports drag-and-drop blocks, custom node types, and connection validation.
  * Based on ReactFlow (@xyflow/react).
  */
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -22,6 +22,7 @@ import {
   applyEdgeChanges,
   type NodeChange,
   type EdgeChange,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
@@ -70,6 +71,7 @@ interface WorkflowCanvasProps {
   onEdgesChange?: (edges: WorkflowEdge[]) => void;
   onNodeSelect?: (nodeId: string) => void;
   onNodeDoubleClick?: (node: Node<WorkflowNodeData>) => void;
+  onNodeDrop?: (blockData: { type: string; label: string; config?: any }, position: { x: number; y: number }) => void;
   selectedNodeId?: string | null;
   className?: string;
   readOnly?: boolean;
@@ -82,12 +84,15 @@ export function WorkflowCanvas({
   onEdgesChange,
   onNodeSelect,
   onNodeDoubleClick,
+  onNodeDrop,
   selectedNodeId,
   className,
   readOnly = false,
 }: WorkflowCanvasProps) {
   const [nodes, setNodes] = useNodesState(initialNodes);
   const [edges, setEdges] = useEdgesState(initialEdges);
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   const updateNodeData = useCallback(
     (nodeId: string, updates: Partial<WorkflowNodeData>) => {
@@ -279,6 +284,99 @@ export function WorkflowCanvas({
     [onNodeDoubleClick],
   );
 
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      if (readOnly) return;
+
+      const data = event.dataTransfer.getData('application/reactflow');
+      if (!data) return;
+
+      try {
+        const dragData = JSON.parse(data);
+        const position = screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+
+        if (dragData.type === 'block') {
+          // Use the onNodeDrop callback if provided, otherwise create node directly
+          if (onNodeDrop) {
+            onNodeDrop(
+              {
+                type: dragData.blockType,
+                label: dragData.label,
+              },
+              position
+            );
+          } else {
+            const newNode: Node<WorkflowNodeData> = {
+              id: `node-${Date.now()}`,
+              type: dragData.blockType,
+              position,
+              data: {
+                type: dragData.blockType,
+                label: dragData.label,
+                config: {},
+              },
+            };
+            setNodes((nds) => [...nds, newNode]);
+          }
+        } else if (dragData.type === 'tool') {
+          const tool = dragData.tool;
+          if (onNodeDrop) {
+            onNodeDrop(
+              {
+                type: 'tool',
+                label: tool.name,
+                config: {
+                  tool_name: tool.slug || tool.name,
+                  provider: tool.provider,
+                  integration_type: tool.integration_type,
+                  ...(tool.output_schema ? { output_schema: tool.output_schema } : {}),
+                  params: {},
+                },
+              },
+              position
+            );
+          } else {
+            const newNode: Node<WorkflowNodeData> = {
+              id: `node-${Date.now()}`,
+              type: 'tool',
+              position,
+              data: {
+                type: 'tool',
+                label: tool.name,
+                config: {
+                  tool_name: tool.slug || tool.name,
+                  provider: tool.provider,
+                  integration_type: tool.integration_type,
+                  ...(tool.output_schema ? { output_schema: tool.output_schema } : {}),
+                  params: {},
+                },
+              },
+            };
+            setNodes((nds) => [...nds, newNode]);
+          }
+        } else if (dragData.type === 'trigger') {
+          // Triggers are handled differently - we don't add them directly
+          // They should be added through the proper trigger creation flow
+          console.log('Trigger dragged:', dragData.triggerKey);
+          return;
+        }
+      } catch (error) {
+        console.error('Error processing drop:', error);
+      }
+    },
+    [readOnly, screenToFlowPosition, setNodes, onNodeDrop]
+  );
+
   const contextValue = useMemo(
     () => ({
       nodes,
@@ -290,7 +388,12 @@ export function WorkflowCanvas({
 
   return (
     <WorkflowCanvasContext.Provider value={contextValue}>
-      <div className={cn('w-full h-full bg-[hsl(var(--canvas-bg))]', className)}>
+      <div 
+        ref={reactFlowWrapper}
+        className={cn('w-full h-full bg-[hsl(var(--canvas-bg))]', className)}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
