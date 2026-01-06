@@ -20,7 +20,7 @@ import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { Button } from '@/components/ui/button';
-import { Rocket, Menu } from 'lucide-react';
+import { Rocket, Menu, Calendar } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
@@ -29,7 +29,7 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { toast } from '@/components/ui/sonner';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import { WEBHOOK_TRIGGER_KEY, GMAIL_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
+import { WEBHOOK_TRIGGER_KEY, GMAIL_TRIGGER_KEY, CRON_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
 import {
   buildBindingsPayload,
   buildDefaultBindingState,
@@ -367,10 +367,6 @@ export default function Workflows() {
 
   const handleAddTriggerDraft = useCallback(
     (triggerKey: string) => {
-      if (!workflowHasInputs) {
-        toast.error('Add an Input block before configuring triggers');
-        return;
-      }
       const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
       if (!descriptor) {
         toast.error('Trigger metadata unavailable');
@@ -384,7 +380,7 @@ export default function Workflows() {
       };
       setDraftTriggers((prev) => [...prev, draft]);
     },
-    [triggerCatalog, workflowHasInputs, workflowInputsDef],
+    [triggerCatalog, workflowInputsDef],
   );
 
   const handleDiscardTriggerDraft = useCallback((draftId: string) => {
@@ -710,7 +706,6 @@ export default function Workflows() {
 
   const triggerOptions = useMemo<TriggerListOption[]>(() => {
     const options: TriggerListOption[] = [];
-    const blockDueToInputs = !workflowHasInputs;
 
     const webhookTrigger = triggerCatalog.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY);
     if (webhookTrigger) {
@@ -719,7 +714,7 @@ export default function Workflows() {
         title: webhookTrigger.title ?? 'Generic Webhook',
         description:
           webhookTrigger.description ?? 'Accept HTTP POST requests from any service.',
-        disabled: blockDueToInputs,
+        disabled: false,
         onPrimaryAction: () => handleAddTriggerDraft(WEBHOOK_TRIGGER_KEY),
         actionLabel: 'Add to canvas',
         badge: 'Webhook',
@@ -730,10 +725,10 @@ export default function Workflows() {
     const gmailTrigger = triggerCatalog.find((trigger) => trigger.key === GMAIL_TRIGGER_KEY);
     if (gmailTrigger) {
       let disabledReason: string | undefined;
-      let disabled = blockDueToInputs;
+      let disabled = false;
       let secondaryActionLabel: string | undefined;
       let onSecondaryAction: (() => void) | undefined;
-      if (!disabled && !gmailIntegrationReady) {
+      if (!gmailIntegrationReady) {
         disabledReason = 'Connect Gmail to continue';
         disabled = true;
         secondaryActionLabel = 'Connect Gmail';
@@ -757,18 +752,29 @@ export default function Workflows() {
       });
     }
 
+    const cronTrigger = triggerCatalog.find((trigger) => trigger.key === CRON_TRIGGER_KEY);
+    if (cronTrigger) {
+      options.push({
+        key: CRON_TRIGGER_KEY,
+        title: cronTrigger.title ?? 'Cron Schedule',
+        description: cronTrigger.description ?? 'Schedule workflows with cron expressions',
+        disabled: false,
+        onPrimaryAction: () => handleAddTriggerDraft(CRON_TRIGGER_KEY),
+        actionLabel: 'Add to canvas',
+        badge: 'Scheduler',
+        status: 'ready',
+      });
+    }
+
     return options;
   }, [
-    workflowHasInputs,
     triggerCatalog,
     handleAddTriggerDraft,
     gmailIntegrationReady,
     handleConnectGmail,
     isConnectingGmail,
   ]);
-  const triggerInfoMessage = workflowHasInputs
-    ? undefined
-    : 'Add an Input block before attaching triggers.';
+  const triggerInfoMessage = undefined;
 
   const handleExecute = useCallback(async () => {
     if (!selectedWorkflowId) {
