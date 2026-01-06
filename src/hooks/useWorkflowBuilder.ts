@@ -15,6 +15,7 @@ import type {
   WorkflowListResponse,
   WorkflowResponse,
   WorkflowSummary,
+  WorkflowVersionRestoreRequest,
 } from '@/types/workflow-spec';
 
 export type WorkflowListItem = WorkflowSummary;
@@ -173,6 +174,36 @@ export function useWorkflowBuilder() {
     },
   });
 
+  const restoreVersionMutation = useMutation({
+    mutationFn: async ({
+      workflowId,
+      versionId,
+      baseRevision,
+    }: {
+      workflowId: string;
+      versionId: number;
+      baseRevision?: number;
+    }) => {
+      const body: WorkflowVersionRestoreRequest = {};
+      if (typeof baseRevision === 'number') {
+        body.base_revision = baseRevision;
+      }
+      const response = await backendApiClient.request<WorkflowResponse>(
+        `/api/v1/workflows/${workflowId}/versions/${versionId}/restore`,
+        {
+          method: 'POST',
+          body,
+        },
+      );
+      return toWorkflowModel(response);
+    },
+    onSuccess: (workflow) => {
+      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
+      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
+      queryClient.invalidateQueries({ queryKey: ['workflowVersions', workflow.workflow_id] });
+    },
+  });
+
   const executeMutation = useMutation({
     mutationFn: async ({
       workflowId,
@@ -242,6 +273,17 @@ export function useWorkflowBuilder() {
     [deleteMutation],
   );
 
+  const restoreWorkflowVersion = useCallback(
+    async (workflowId: string, params: { versionId: number; baseRevision?: number }) => {
+      return restoreVersionMutation.mutateAsync({
+        workflowId,
+        versionId: params.versionId,
+        baseRevision: params.baseRevision,
+      });
+    },
+    [restoreVersionMutation],
+  );
+
   const executeWorkflow = useCallback(
     async (workflowId: string, inputs?: Record<string, any>, config?: Record<string, any>) => {
       return executeMutation.mutateAsync({
@@ -263,6 +305,7 @@ export function useWorkflowBuilder() {
     updateWorkflowMetadata,
     saveWorkflowDraft,
     deleteWorkflow,
+    restoreWorkflowVersion,
     executeWorkflow,
     publishWorkflow,
     getWorkflow,
@@ -272,5 +315,6 @@ export function useWorkflowBuilder() {
     isPublishing: publishMutation.isPending,
     isDeleting: deleteMutation.isPending,
     isExecuting: executeMutation.isPending,
+    isRestoringVersion: restoreVersionMutation.isPending,
   };
 }

@@ -17,6 +17,7 @@ import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { WorkflowLifecycleBar } from '@/components/workflows/WorkflowLifecycleBar';
 import { useWorkflowBuilder, WorkflowListItem, WorkflowModel } from '@/hooks/useWorkflowBuilder';
+import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
@@ -226,12 +227,20 @@ export default function Workflows() {
     executeWorkflow,
     publishWorkflow,
     getWorkflow,
+    restoreWorkflowVersion,
     isCreating,
     isExecuting,
     isDeleting,
     isSavingDraft,
     isPublishing,
+    isRestoringVersion,
   } = useWorkflowBuilder();
+
+  const {
+    versions: workflowVersions,
+    isLoading: isLoadingWorkflowVersions,
+    invalidate: invalidateWorkflowVersions,
+  } = useWorkflowVersions(selectedWorkflowId);
   const {
     blocks: functionBlockSchemas,
     blocksByType: functionBlocksMap,
@@ -453,6 +462,7 @@ export default function Workflows() {
       setEdges(normalizeEdges(latest.graph.edges));
       setLastRunVersionId(null);
       resetSavedDataRef.current?.();
+      invalidateWorkflowVersions();
       toast.error('Draft conflict detected', {
         description: 'Reloaded the latest draft from the server. Please retry your change.',
       });
@@ -462,7 +472,7 @@ export default function Workflows() {
         description: 'Reload failed. Please refresh the page to continue.',
       });
     }
-  }, [selectedWorkflowId, getWorkflow, functionBlocksMap]);
+  }, [selectedWorkflowId, getWorkflow, functionBlocksMap, invalidateWorkflowVersions]);
 
   const handleSave = useCallback(async () => {
     const graphData = { nodes, edges };
@@ -860,6 +870,7 @@ export default function Workflows() {
       try {
         const response = await executeWorkflow(selectedWorkflowId, inputs ?? {});
         setLastRunVersionId(response.workflow_version_id ?? null);
+        invalidateWorkflowVersions();
         toast.success('Test run started', {
           description: `Run ID ${response.run_id}`,
         });
@@ -869,7 +880,7 @@ export default function Workflows() {
         throw error;
       }
     },
-    [selectedWorkflowId, executeWorkflow],
+    [selectedWorkflowId, executeWorkflow, invalidateWorkflowVersions],
   );
 
   const handleExecute = useCallback(() => {
@@ -921,12 +932,13 @@ export default function Workflows() {
       const updated = await publishWorkflow(selectedWorkflowId, lastRunVersionId);
       setLoadedWorkflow(updated);
       setLastRunVersionId(null);
+      invalidateWorkflowVersions();
       toast.success('Workflow published');
     } catch (error) {
       console.error('Failed to publish workflow:', error);
       toast.error('Failed to publish workflow');
     }
-  }, [selectedWorkflowId, lastRunVersionId, publishWorkflow]);
+  }, [selectedWorkflowId, lastRunVersionId, publishWorkflow, invalidateWorkflowVersions]);
 
   const handleLoadWorkflow = useCallback(
     async (workflow: WorkflowListItem) => {
@@ -987,13 +999,59 @@ export default function Workflows() {
     }
   }, [createWorkflow, navigate]);
 
-  const handleWorkflowGraphSync = useCallback((graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
-    if (!graph) return;
-    setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
-    setEdges(normalizeEdges(graph.edges));
-    setProposalPreview(null);
-    setLastRunVersionId(null);
-  }, [functionBlocksMap]);
+  const handleWorkflowGraphSync = useCallback(
+    (graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
+      if (!graph) return;
+      setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
+      setEdges(normalizeEdges(graph.edges));
+      setProposalPreview(null);
+      setLastRunVersionId(null);
+    },
+    [functionBlocksMap],
+  );
+
+  const handleRestoreVersion = useCallback(
+    async (versionId: number) => {
+      if (!selectedWorkflowId) {
+        toast.error('Select a workflow before restoring a version');
+        return;
+      }
+      if (!loadedWorkflow) {
+        toast.error('Workflow is still loading. Please try again in a moment.');
+        return;
+      }
+      try {
+        const restored = await restoreWorkflowVersion(selectedWorkflowId, {
+          versionId,
+          baseRevision: loadedWorkflow.draft_revision,
+        });
+        setLoadedWorkflow(restored);
+        setNodes(normalizeNodes(restored.graph.nodes, functionBlocksMap));
+        setEdges(normalizeEdges(restored.graph.edges));
+        setLastRunVersionId(null);
+        resetSavedDataRef.current?.();
+        toast.success('Version restored', {
+          description: `Draft now matches version ${versionId}`,
+        });
+      } catch (error) {
+        console.error('Failed to restore workflow version:', error);
+        if (error instanceof BackendAPIError && error.status === 409) {
+          await handleDraftConflict();
+          return;
+        }
+        toast.error('Failed to restore version', {
+          description: error instanceof BackendAPIError ? error.message : undefined,
+        });
+      }
+    },
+    [
+      selectedWorkflowId,
+      loadedWorkflow,
+      restoreWorkflowVersion,
+      functionBlocksMap,
+      handleDraftConflict,
+    ],
+  );
 
   const handleProposalPreviewChange = useCallback((preview: WorkflowProposalPreview | null) => {
     setProposalPreview(preview);
@@ -1114,10 +1172,17 @@ export default function Workflows() {
                   onPublishClick={handlePublish}
                   isExecuting={isExecuting}
                   isPublishing={isPublishing}
+                isRestoringVersion={isRestoringVersion}
                   canRun={canRun}
                   canPublish={canPublish}
                   publishDisabledReason={publishDisabledReason}
                   runDisabledReason={runDisabledReason}
+                versionOptions={workflowVersions}
+                isVersionsLoading={isLoadingWorkflowVersions}
+                onVersionRestore={handleRestoreVersion}
+                versionRestoreDisabledReason={
+                  selectedWorkflowId ? undefined : 'Save the workflow before restoring versions'
+                }
                 />
               </div>
               {proposalPreview && (

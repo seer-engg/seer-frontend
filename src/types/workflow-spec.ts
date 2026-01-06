@@ -114,6 +114,23 @@ export interface WorkflowVersionSummary {
   created_at: string;
 }
 
+export interface WorkflowVersionListItem extends WorkflowVersionSummary {
+  is_latest: boolean;
+  is_published: boolean;
+}
+
+export interface WorkflowVersionListResponse {
+  workflow_id: string;
+  draft_revision: number;
+  versions: WorkflowVersionListItem[];
+  latest_version_id?: number | null;
+  published_version_id?: number | null;
+}
+
+export interface WorkflowVersionRestoreRequest {
+  base_revision?: number;
+}
+
 export interface WorkflowSummary {
   workflow_id: string;
   name: string;
