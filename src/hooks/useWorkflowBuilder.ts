@@ -3,7 +3,7 @@
  * 
  * Manages workflow state, CRUD operations, and execution.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { WorkflowGraphData } from '@/lib/workflow-graph';
@@ -17,18 +17,24 @@ import type {
   WorkflowSummary,
 } from '@/types/workflow-spec';
 
-export interface WorkflowListItem extends WorkflowSummary {}
+export type WorkflowListItem = WorkflowSummary;
 
 export interface WorkflowModel extends WorkflowResponse {
   graph: WorkflowGraphData;
 }
 
+const toWorkflowModel = (response: WorkflowResponse): WorkflowModel => ({
+  ...response,
+  graph: workflowSpecToGraph(response.spec),
+});
+
 export function useWorkflowBuilder() {
   const queryClient = useQueryClient();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const workflowListQueryKey = useMemo(() => ['workflows'] as const, []);
 
   const workflowsQuery = useQuery({
-    queryKey: ['workflows'],
+    queryKey: workflowListQueryKey,
     queryFn: async () => {
       const response = await backendApiClient.request<WorkflowListResponse>('/api/v1/workflows', {
         method: 'GET',
@@ -46,10 +52,7 @@ export function useWorkflowBuilder() {
             `/api/v1/workflows/${workflowId}`,
             { method: 'GET' },
           );
-          return {
-            ...response,
-            graph: workflowSpecToGraph(response.spec),
-          };
+          return toWorkflowModel(response);
         },
       });
     },
@@ -71,30 +74,26 @@ export function useWorkflowBuilder() {
           spec,
         },
       });
-      return {
-        ...response,
-        graph: workflowSpecToGraph(response.spec),
-      };
+      return toWorkflowModel(response);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflows'] });
+    onSuccess: (workflow) => {
+      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
+      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
     },
   });
 
-  const updateMutation = useMutation({
+  const updateMetadataMutation = useMutation({
     mutationFn: async ({
       workflowId,
       name,
       description,
-      graph,
+      tags,
     }: {
       workflowId: string;
       name?: string;
       description?: string;
-      graph?: WorkflowGraphData;
+      tags?: string[];
     }) => {
-      const existing = queryClient.getQueryData<WorkflowModel>(['workflow', workflowId]);
-      const spec = graph ? graphToWorkflowSpec(graph, existing?.spec) : undefined;
       const response = await backendApiClient.request<WorkflowResponse>(
         `/api/v1/workflows/${workflowId}`,
         {
@@ -102,17 +101,63 @@ export function useWorkflowBuilder() {
           body: {
             name,
             description,
+            tags,
+          },
+        },
+      );
+      return toWorkflowModel(response);
+    },
+    onSuccess: (workflow) => {
+      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
+      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
+    },
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: async ({
+      workflowId,
+      graph,
+      baseRevision,
+    }: {
+      workflowId: string;
+      graph: WorkflowGraphData;
+      baseRevision: number;
+    }) => {
+      const existing = queryClient.getQueryData<WorkflowModel>(['workflow', workflowId]);
+      const spec = graphToWorkflowSpec(graph, existing?.spec);
+      const response = await backendApiClient.request<WorkflowResponse>(
+        `/api/v1/workflows/${workflowId}/draft`,
+        {
+          method: 'PATCH',
+          body: {
+            base_revision: baseRevision,
             spec,
           },
         },
       );
-      return {
-        ...response,
-        graph: workflowSpecToGraph(response.spec),
-      };
+      return toWorkflowModel(response);
     },
     onSuccess: (workflow) => {
-      queryClient.invalidateQueries({ queryKey: ['workflows'] });
+      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
+      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async ({ workflowId, versionId }: { workflowId: string; versionId: number }) => {
+      const response = await backendApiClient.request<WorkflowResponse>(
+        `/api/v1/workflows/${workflowId}/publish`,
+        {
+          method: 'POST',
+          body: {
+            version_id: versionId,
+          },
+        },
+      );
+      return toWorkflowModel(response);
+    },
+    onSuccess: (workflow) => {
+      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
       queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
     },
   });
@@ -124,7 +169,7 @@ export function useWorkflowBuilder() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflows'] });
+      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
     },
   });
 
@@ -160,14 +205,34 @@ export function useWorkflowBuilder() {
     [createMutation],
   );
 
-  const updateWorkflow = useCallback(
-    async (workflowId: string, updates: { name?: string; description?: string; graph?: WorkflowGraphData }) => {
-      return updateMutation.mutateAsync({
+  const updateWorkflowMetadata = useCallback(
+    async (workflowId: string, updates: { name?: string; description?: string; tags?: string[] }) => {
+      return updateMetadataMutation.mutateAsync({
         workflowId,
         ...updates,
       });
     },
-    [updateMutation],
+    [updateMetadataMutation],
+  );
+
+  const saveWorkflowDraft = useCallback(
+    async (workflowId: string, params: { graph: WorkflowGraphData; baseRevision: number }) => {
+      return saveDraftMutation.mutateAsync({
+        workflowId,
+        ...params,
+      });
+    },
+    [saveDraftMutation],
+  );
+
+  const publishWorkflow = useCallback(
+    async (workflowId: string, versionId: number) => {
+      return publishMutation.mutateAsync({
+        workflowId,
+        versionId,
+      });
+    },
+    [publishMutation],
   );
 
   const deleteWorkflow = useCallback(
@@ -194,12 +259,17 @@ export function useWorkflowBuilder() {
     selectedNodeId,
     setSelectedNodeId,
     createWorkflow,
-    updateWorkflow,
+    updateWorkflow: updateWorkflowMetadata,
+    updateWorkflowMetadata,
+    saveWorkflowDraft,
     deleteWorkflow,
     executeWorkflow,
+    publishWorkflow,
     getWorkflow,
     isCreating: createMutation.isPending,
-    isUpdating: updateMutation.isPending,
+    isUpdating: updateMetadataMutation.isPending,
+    isSavingDraft: saveDraftMutation.isPending,
+    isPublishing: publishMutation.isPending,
     isDeleting: deleteMutation.isPending,
     isExecuting: executeMutation.isPending,
   };

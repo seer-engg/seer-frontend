@@ -3,7 +3,7 @@ import { Node } from '@xyflow/react';
 
 import { WorkflowEdge, WorkflowNodeData } from '../types';
 import type { TriggerListOption } from './build/TriggerSection';
-import type { WorkflowSpec } from '@/types/workflow-spec';
+import type { WorkflowSpec, WorkflowVersionSummary } from '@/types/workflow-spec';
 
 export interface Tool {
   name: string;
@@ -59,6 +59,13 @@ export interface WorkflowProposalPreview {
   graph: WorkflowGraphPayload;
 }
 
+export interface WorkflowLifecycleStatus {
+  draftRevision?: number;
+  latestVersion?: WorkflowVersionSummary | null;
+  publishedVersion?: WorkflowVersionSummary | null;
+  lastTestedVersionId?: number | null;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -99,8 +106,6 @@ export interface BuildAndChatPanelProps {
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   functionBlocks?: BuiltInBlock[];
-  onRunClick?: () => void;
-  isExecuting?: boolean;
   triggerOptions?: TriggerListOption[];
   isLoadingTriggers?: boolean;
   triggerInfoMessage?: string;

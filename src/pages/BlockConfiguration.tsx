@@ -23,7 +23,7 @@ export default function BlockConfiguration() {
   const { workflowId, blockId } = useParams<{ workflowId: string; blockId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { updateWorkflow } = useWorkflowBuilder();
+  const { saveWorkflowDraft } = useWorkflowBuilder();
 
   const { data: workflow, isLoading, error } = useQuery<WorkflowModel>({
     queryKey: ['workflow', workflowId],
@@ -57,14 +57,19 @@ export default function BlockConfiguration() {
 
   // Update workflow mutation
   const updateMutation = useMutation({
-    mutationFn: async (updates: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[] }) => {
+    mutationFn: async (updates: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[]; baseRevision: number }) => {
       if (!workflowId) throw new Error('Workflow ID is required');
-      return await updateWorkflow(workflowId, {
-        graph: updates,
+      const updated = await saveWorkflowDraft(workflowId, {
+        graph: {
+          nodes: updates.nodes,
+          edges: updates.edges,
+        },
+        baseRevision: updates.baseRevision,
       });
+      return updated;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow', workflowId] });
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['workflow', workflowId], updated);
       queryClient.invalidateQueries({ queryKey: ['workflows'] });
       toast.success('Block configuration saved', {
         description: 'Changes have been saved successfully',
@@ -87,12 +92,18 @@ export default function BlockConfiguration() {
         n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n,
       );
 
+      if (typeof workflow.draft_revision !== 'number') {
+        toast.error('Unable to save block. Draft revision missing.');
+        return;
+      }
+
       updateMutation.mutate({
         nodes: updatedNodes,
         edges: workflow.graph.edges,
+        baseRevision: workflow.draft_revision,
       });
     },
-    [updateMutation, workflow?.graph],
+    [updateMutation, workflow],
   );
 
   const handleBack = () => {
