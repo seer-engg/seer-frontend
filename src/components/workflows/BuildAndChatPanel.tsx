@@ -38,8 +38,6 @@ export function BuildAndChatPanel({
   collapsed: externalCollapsed,
   onCollapseChange,
   functionBlocks,
-  onRunClick,
-  isExecuting,
   triggerOptions = [],
   isLoadingTriggers = false,
   triggerInfoMessage,
@@ -365,11 +363,7 @@ export function BuildAndChatPanel({
               Executions
             </TabsTrigger>
           </TabsList>
-          <div className="flex-1 flex items-center justify-end gap-2">
-            <Button onClick={onRunClick} disabled={!workflowId || isExecuting} size="sm" variant="default">
-              Run
-            </Button>
-          </div>
+          <div className="flex-1" />
         </div>
 
         <TabsContent value="build" className="flex-1 mt-0 overflow-hidden">
@@ -379,7 +373,6 @@ export function BuildAndChatPanel({
             onBlockSelect={onBlockSelect}
             blocks={functionBlocks}
             selectedWorkflowId={workflowId}
-            isExecuting={isExecuting}
             triggerOptions={triggerOptions}
             isLoadingTriggers={isLoadingTriggers}
             triggerInfoMessage={triggerInfoMessage}

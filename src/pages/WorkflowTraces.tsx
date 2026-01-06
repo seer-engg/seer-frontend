@@ -214,6 +214,13 @@ export default function WorkflowTraces() {
 
   const runs = allRuns ?? [];
   const isLoading = isLoadingWorkflows || isLoadingRuns;
+  const workflowById = useMemo(() => {
+    const entries = new Map<string, WorkflowSummary>();
+    (workflows ?? []).forEach((workflow) => {
+      entries.set(workflow.workflow_id, workflow);
+    });
+    return entries;
+  }, [workflows]);
   
   // Calculate aggregate stats
   const stats = useMemo(() => {
@@ -252,6 +259,18 @@ export default function WorkflowTraces() {
           <span className="font-medium text-sm">
             {row.getValue('workflow_name')}
           </span>
+        );
+      },
+    },
+    {
+      id: 'draft_revision',
+      header: 'Draft Rev',
+      cell: ({ row }) => {
+        const wf = workflowById.get(row.original.workflow_id);
+        return (
+          <Badge variant="outline" className="text-xs font-mono">
+            {wf?.draft_revision ?? '—'}
+          </Badge>
         );
       },
     },
@@ -335,7 +354,7 @@ export default function WorkflowTraces() {
         );
       },
     },
-  ], [navigate]);
+  ], [navigate, workflowById]);
 
   const table = useReactTable({
     data: runs,

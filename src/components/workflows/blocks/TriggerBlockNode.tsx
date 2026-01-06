@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
-import { Copy, Info, Link, Loader2, Mail, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Copy, Info, Link, Loader2, Mail, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 import type { WorkflowNodeData } from '../types';
 import {
@@ -15,12 +16,17 @@ import {
   buildBindingsPayload,
   buildDefaultBindingState,
   buildGmailConfigFromProviderConfig,
+  buildCronConfigFromProviderConfig,
   deriveBindingStateFromSubscription,
   makeDefaultGmailConfig,
+  makeDefaultCronConfig,
   serializeGmailConfig,
+  serializeCronConfig,
+  validateCronExpression,
   type GmailConfigState,
+  type CronConfigState,
 } from '../triggers/utils';
-import { GMAIL_FIELD_OPTIONS, GMAIL_TRIGGER_KEY, WEBHOOK_TRIGGER_KEY } from '../triggers/constants';
+import { GMAIL_FIELD_OPTIONS, GMAIL_TRIGGER_KEY, WEBHOOK_TRIGGER_KEY, CRON_TRIGGER_KEY, CRON_FIELD_OPTIONS, CRON_PRESETS, TIMEZONE_OPTIONS } from '../triggers/constants';
 
 type WorkflowNode = FlowNode<WorkflowNodeData>;
 
@@ -57,6 +63,11 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       ? buildGmailConfigFromProviderConfig(subscription.provider_config)
       : draft?.initialGmailConfig ?? makeDefaultGmailConfig(),
   );
+  const [cronConfig, setCronConfig] = useState<CronConfigState>(() =>
+    subscription
+      ? buildCronConfigFromProviderConfig(subscription.provider_config)
+      : draft?.initialCronConfig ?? makeDefaultCronConfig(),
+  );
   const [isExpanded, setIsExpanded] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
@@ -67,6 +78,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
 
   const isWebhookTrigger = triggerKey === WEBHOOK_TRIGGER_KEY;
   const isGmailTrigger = triggerKey === GMAIL_TRIGGER_KEY;
+  const isCronTrigger = triggerKey === CRON_TRIGGER_KEY;
 
   useEffect(() => {
     if (subscription) {
@@ -91,6 +103,20 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       setGmailConfig(makeDefaultGmailConfig());
     }
   }, [subscription?.provider_config, isGmailTrigger, draft?.initialGmailConfig]);
+
+  useEffect(() => {
+    if (!isCronTrigger) {
+      setCronConfig(makeDefaultCronConfig());
+      return;
+    }
+    if (subscription) {
+      setCronConfig(buildCronConfigFromProviderConfig(subscription.provider_config));
+    } else if (draft?.initialCronConfig) {
+      setCronConfig(draft.initialCronConfig);
+    } else {
+      setCronConfig(makeDefaultCronConfig());
+    }
+  }, [subscription?.provider_config, isCronTrigger, draft?.initialCronConfig]);
 
   const handleCopy = async (value: string | null | undefined, label: string) => {
     if (!value) {
@@ -156,7 +182,11 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
         await handlers.saveDraft(draft.id, {
           triggerKey,
           bindings: bindingState,
-          providerConfig: isGmailTrigger ? serializeGmailConfig(gmailConfig) : undefined,
+          providerConfig: isGmailTrigger
+            ? serializeGmailConfig(gmailConfig)
+            : isCronTrigger
+            ? serializeCronConfig(cronConfig)
+            : undefined,
         });
         toast.success('Trigger saved');
       } catch (error) {
@@ -179,6 +209,8 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       };
       if (isGmailTrigger) {
         payload.provider_config = serializeGmailConfig(gmailConfig);
+      } else if (isCronTrigger) {
+        payload.provider_config = serializeCronConfig(cronConfig);
       }
       await handlers.update(subscription.subscription_id, payload);
       toast.success('Trigger updated');
@@ -232,8 +264,13 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   const renderBindingSection = () => {
     if (!hasInputs) {
       return (
-        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          Add an Input block to expose workflow inputs for this trigger.
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground space-y-2">
+          <p className="font-medium">No workflow inputs defined</p>
+          <p className="text-xs">
+            {isCronTrigger
+              ? 'This cron trigger will run on schedule without input data.'
+              : 'This trigger will start the workflow without input data.'}
+          </p>
         </div>
       );
     }
@@ -243,7 +280,11 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
         {workflowInputEntries.map(([inputName, inputDef]) => {
           const config = bindingState[inputName] ?? { mode: 'event', value: `data.${inputName}` };
           const defaultEventPath = `data.${inputName}`;
-          const quickOptions = isGmailTrigger ? GMAIL_FIELD_OPTIONS : [];
+          const quickOptions = isGmailTrigger
+            ? GMAIL_FIELD_OPTIONS
+            : isCronTrigger
+            ? CRON_FIELD_OPTIONS
+            : [];
           return (
             <div key={inputName} className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
@@ -479,6 +520,111 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     );
   };
 
+  const renderCronDetails = () => {
+    const validation = validateCronExpression(cronConfig.cronExpression);
+    return (
+      <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/40">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Calendar className="h-4 w-4" />
+          Schedule configuration
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">Expression</p>
+          <code className={cn("text-xs block", !validation.valid && "text-destructive")}>
+            {cronConfig.cronExpression}
+          </code>
+          {!validation.valid && validation.error && (
+            <p className="text-xs text-destructive">{validation.error}</p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">Timezone</p>
+          <p className="text-xs font-medium">{cronConfig.timezone}</p>
+        </div>
+        {cronConfig.description && (
+          <div className="space-y-1.5 pt-1.5 border-t border-dashed border-border/60">
+            <p className="text-xs text-muted-foreground">Description</p>
+            <p className="text-xs">{cronConfig.description}</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderCronConfig = () => {
+    if (!isCronTrigger) {
+      return null;
+    }
+    const validation = validateCronExpression(cronConfig.cronExpression);
+    return (
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label className="text-xs uppercase text-muted-foreground">Cron Expression</Label>
+          <Input
+            value={cronConfig.cronExpression}
+            placeholder="*/5 * * * *"
+            onChange={(e) => setCronConfig((prev) => ({ ...prev, cronExpression: e.target.value }))}
+            className={!validation.valid ? 'border-destructive' : ''}
+          />
+          {!validation.valid && validation.error && (
+            <p className="text-xs text-destructive">{validation.error}</p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Five fields: minute hour day month weekday
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs uppercase text-muted-foreground">Quick Presets</Label>
+          <div className="flex flex-wrap gap-2">
+            {CRON_PRESETS.map((preset) => (
+              <Button
+                key={preset.expression}
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                onClick={() => setCronConfig((prev) => ({ ...prev, cronExpression: preset.expression }))}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Timezone</Label>
+            <Select
+              value={cronConfig.timezone}
+              onValueChange={(value) => setCronConfig((prev) => ({ ...prev, timezone: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select timezone" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMEZONE_OPTIONS.map((tz) => (
+                  <SelectItem key={tz} value={tz}>
+                    {tz}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Description</Label>
+            <Input
+              value={cronConfig.description}
+              placeholder="Optional description"
+              onChange={(e) => setCronConfig((prev) => ({ ...prev, description: e.target.value }))}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       className={cn(
@@ -489,7 +635,13 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            {isGmailTrigger ? <Mail className="h-4 w-4 text-primary" /> : <Link className="h-4 w-4 text-primary" />}
+            {isCronTrigger ? (
+              <Calendar className="h-4 w-4 text-primary" />
+            ) : isGmailTrigger ? (
+              <Mail className="h-4 w-4 text-primary" />
+            ) : (
+              <Link className="h-4 w-4 text-primary" />
+            )}
             <p className="font-medium text-sm">
               {descriptor?.title ?? triggerKey}
             </p>
@@ -525,6 +677,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       <div className="mt-3 space-y-3">
         {isWebhookTrigger && renderWebhookDetails()}
         {isGmailTrigger && renderGmailDetails()}
+        {isCronTrigger && renderCronDetails()}
 
         <button
           type="button"
@@ -538,6 +691,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
         {isExpanded && (
           <div className="space-y-4">
             {renderGmailConfig()}
+            {renderCronConfig()}
             {renderBindingSection()}
           </div>
         )}

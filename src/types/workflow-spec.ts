@@ -106,11 +106,36 @@ export interface WorkflowMeta {
   last_compile_ok: boolean;
 }
 
+export interface WorkflowVersionSummary {
+  version_id: number;
+  status: string;
+  version_number?: number;
+  created_from_draft_revision?: number;
+  created_at: string;
+}
+
+export interface WorkflowVersionListItem extends WorkflowVersionSummary {
+  is_latest: boolean;
+  is_published: boolean;
+}
+
+export interface WorkflowVersionListResponse {
+  workflow_id: string;
+  draft_revision: number;
+  versions: WorkflowVersionListItem[];
+  latest_version_id?: number | null;
+  published_version_id?: number | null;
+}
+
+export interface WorkflowVersionRestoreRequest {
+  base_revision?: number;
+}
+
 export interface WorkflowSummary {
   workflow_id: string;
   name: string;
   description?: string | null;
-  version: number;
+  draft_revision: number;
   created_at: string;
   updated_at: string;
 }
@@ -119,6 +144,8 @@ export interface WorkflowResponse extends WorkflowSummary {
   spec: WorkflowSpec;
   tags: string[];
   meta: WorkflowMeta;
+  published_version?: WorkflowVersionSummary | null;
+  latest_version?: WorkflowVersionSummary | null;
 }
 
 export interface WorkflowListResponse {
@@ -136,8 +163,16 @@ export interface WorkflowCreateRequest {
 export interface WorkflowUpdateRequest {
   name?: string;
   description?: string | null;
-  spec?: WorkflowSpec;
   tags?: string[];
+}
+
+export interface WorkflowDraftPatchRequest {
+  base_revision?: number;
+  spec: WorkflowSpec;
+}
+
+export interface WorkflowPublishRequest {
+  version_id: number;
 }
 
 export interface RunFromWorkflowRequest {
@@ -155,6 +190,7 @@ export interface RunFromSpecRequest {
 export interface RunResponse {
   run_id: string;
   status: string;
+  workflow_version_id?: number;
   created_at: string;
   started_at?: string | null;
   finished_at?: string | null;

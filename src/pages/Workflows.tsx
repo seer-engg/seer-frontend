@@ -4,7 +4,7 @@
  * Main page for visual workflow builder.
  * Supports connecting to self-hosted backend via ?backend= URL parameter.
  */
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { Node } from '@xyflow/react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
@@ -15,21 +15,25 @@ import type { TriggerListOption } from '@/components/workflows/build-and-chat/bu
 import type { TriggerSubscriptionUpdateRequest } from '@/types/triggers';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
+import { WorkflowLifecycleBar } from '@/components/workflows/WorkflowLifecycleBar';
 import { useWorkflowBuilder, WorkflowListItem, WorkflowModel } from '@/hooks/useWorkflowBuilder';
+import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { Button } from '@/components/ui/button';
-import { Rocket, Menu } from 'lucide-react';
+import { Rocket } from 'lucide-react';
+import { Rocket, Menu, Calendar } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
+import { BackendAPIError } from '@/lib/api-client';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import { WEBHOOK_TRIGGER_KEY, GMAIL_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
+import { WEBHOOK_TRIGGER_KEY, GMAIL_TRIGGER_KEY, CRON_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
 import {
   buildBindingsPayload,
   buildDefaultBindingState,
@@ -207,6 +211,8 @@ export default function Workflows() {
   const [draftTriggers, setDraftTriggers] = useState<TriggerDraftMeta[]>([]);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [proposalPreview, setProposalPreview] = useState<WorkflowProposalPreview | null>(null);
+  const [lastRunVersionId, setLastRunVersionId] = useState<number | null>(null);
+  const resetSavedDataRef = useRef<(() => void) | null>(null);
   const editingNode = useMemo(
     () => nodes.find((node) => node.id === editingNodeId) ?? null,
     [nodes, editingNodeId],
@@ -216,14 +222,26 @@ export default function Workflows() {
     workflows,
     isLoading: isLoadingWorkflows,
     createWorkflow,
-    updateWorkflow,
+    updateWorkflowMetadata,
+    saveWorkflowDraft,
     deleteWorkflow,
     executeWorkflow,
+    publishWorkflow,
     getWorkflow,
+    restoreWorkflowVersion,
     isCreating,
     isExecuting,
     isDeleting,
+    isSavingDraft,
+    isPublishing,
+    isRestoringVersion,
   } = useWorkflowBuilder();
+
+  const {
+    versions: workflowVersions,
+    isLoading: isLoadingWorkflowVersions,
+    invalidate: invalidateWorkflowVersions,
+  } = useWorkflowVersions(selectedWorkflowId);
   const {
     blocks: functionBlockSchemas,
     blocksByType: functionBlocksMap,
@@ -367,10 +385,6 @@ export default function Workflows() {
 
   const handleAddTriggerDraft = useCallback(
     (triggerKey: string) => {
-      if (!workflowHasInputs) {
-        toast.error('Add an Input block before configuring triggers');
-        return;
-      }
       const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
       if (!descriptor) {
         toast.error('Trigger metadata unavailable');
@@ -384,7 +398,7 @@ export default function Workflows() {
       };
       setDraftTriggers((prev) => [...prev, draft]);
     },
-    [triggerCatalog, workflowHasInputs, workflowInputsDef],
+    [triggerCatalog, workflowInputsDef],
   );
 
   const handleDiscardTriggerDraft = useCallback((draftId: string) => {
@@ -434,56 +448,120 @@ export default function Workflows() {
     ],
   );
 
+  const handleDraftConflict = useCallback(async () => {
+    if (!selectedWorkflowId) {
+      return;
+    }
+    try {
+      const latest = await getWorkflow(selectedWorkflowId);
+      setLoadedWorkflow(latest);
+      setNodes(normalizeNodes(latest.graph.nodes, functionBlocksMap));
+      setEdges(normalizeEdges(latest.graph.edges));
+      setLastRunVersionId(null);
+      resetSavedDataRef.current?.();
+      invalidateWorkflowVersions();
+      toast.error('Draft conflict detected', {
+        description: 'Reloaded the latest draft from the server. Please retry your change.',
+      });
+    } catch (error) {
+      console.error('Failed to refresh workflow after conflict:', error);
+      toast.error('Draft conflict detected', {
+        description: 'Reload failed. Please refresh the page to continue.',
+      });
+    }
+  }, [selectedWorkflowId, getWorkflow, functionBlocksMap, invalidateWorkflowVersions]);
 
   const handleSave = useCallback(async () => {
     const graphData = { nodes, edges };
-    
+
     try {
       if (selectedWorkflowId) {
-        const updated = await updateWorkflow(selectedWorkflowId, {
-          name: workflowName,
+        if (!loadedWorkflow) {
+          toast.error('Workflow is still loading. Please try again in a moment.');
+          return;
+        }
+        const baseRevision = loadedWorkflow.draft_revision;
+        if (typeof baseRevision !== 'number') {
+          toast.error('Missing draft revision for this workflow.');
+          return;
+        }
+        const updated = await saveWorkflowDraft(selectedWorkflowId, {
           graph: graphData,
+          baseRevision,
         });
         setLoadedWorkflow(updated);
-        toast.success('Workflow saved successfully!');
+        if (updated.draft_revision !== baseRevision) {
+          setLastRunVersionId(null);
+        }
+        toast.success('Draft saved successfully!');
       } else {
         const workflow = await createWorkflow(workflowName || 'Untitled', undefined, graphData);
         setSelectedWorkflowId(workflow.workflow_id);
         setLoadedWorkflow(workflow);
+        setWorkflowName(workflow.name);
+        setLastRunVersionId(null);
         toast.success('Workflow created and saved!');
       }
     } catch (error) {
+      if (error instanceof BackendAPIError && error.status === 409) {
+        await handleDraftConflict();
+        return;
+      }
       console.error('Failed to save workflow:', error);
       toast.error('Failed to save workflow');
     }
-  }, [nodes, edges, workflowName, selectedWorkflowId, createWorkflow, updateWorkflow]);
+  }, [
+    nodes,
+    edges,
+    workflowName,
+    selectedWorkflowId,
+    createWorkflow,
+    saveWorkflowDraft,
+    loadedWorkflow,
+    handleDraftConflict,
+  ]);
 
   // Autosave callback - only saves if workflow already exists
-  const autosaveCallback = useCallback(async (data: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[]; workflowName: string }) => {
-    if (!selectedWorkflowId) {
-      return; // Don't autosave unsaved workflows
-    }
+  const autosaveCallback = useCallback(
+    async (data: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[] }) => {
+      if (!selectedWorkflowId || !loadedWorkflow) {
+        return; // Don't autosave unsaved workflows or unloaded drafts
+      }
 
-    setAutosaveStatus('saving');
-    try {
-      const updated = await updateWorkflow(selectedWorkflowId, {
-        name: data.workflowName,
-        graph: { nodes: data.nodes, edges: data.edges },
-      });
-      setLoadedWorkflow(updated);
-      setAutosaveStatus('saved');
-      // Reset status after 2 seconds
-      setTimeout(() => setAutosaveStatus('idle'), 2000);
-    } catch (error) {
-      console.error('Autosave failed:', error);
-      setAutosaveStatus('error');
-      throw error;
-    }
-  }, [selectedWorkflowId, updateWorkflow]);
+      const baseRevision = loadedWorkflow.draft_revision;
+      if (typeof baseRevision !== 'number') {
+        return;
+      }
+
+      setAutosaveStatus('saving');
+      try {
+        const updated = await saveWorkflowDraft(selectedWorkflowId, {
+          graph: { nodes: data.nodes, edges: data.edges },
+          baseRevision,
+        });
+        setLoadedWorkflow(updated);
+        if (updated.draft_revision !== baseRevision) {
+          setLastRunVersionId(null);
+        }
+        setAutosaveStatus('saved');
+        // Reset status after 2 seconds
+        setTimeout(() => setAutosaveStatus('idle'), 2000);
+      } catch (error) {
+        if (error instanceof BackendAPIError && error.status === 409) {
+          await handleDraftConflict();
+        } else {
+          console.error('Autosave failed:', error);
+        }
+        setAutosaveStatus('error');
+        throw error;
+      }
+    },
+    [selectedWorkflowId, loadedWorkflow, saveWorkflowDraft, handleDraftConflict],
+  );
 
   // Setup autosave hook
   const { triggerSave, resetSavedData } = useDebouncedAutosave({
-    data: { nodes, edges, workflowName },
+    data: { nodes, edges },
     onSave: autosaveCallback,
     options: {
       delay: 1000,
@@ -491,12 +569,16 @@ export default function Workflows() {
     },
   });
 
-  // Trigger autosave when nodes, edges, or workflowName change
+  useEffect(() => {
+    resetSavedDataRef.current = resetSavedData;
+  }, [resetSavedData]);
+
+  // Trigger autosave when nodes or edges change
   useEffect(() => {
     if (selectedWorkflowId && !isLoadingWorkflow) {
       triggerSave();
     }
-  }, [nodes, edges, workflowName, selectedWorkflowId, triggerSave, isLoadingWorkflow]);
+  }, [nodes, edges, selectedWorkflowId, triggerSave, isLoadingWorkflow]);
 
   // Handle autosave errors
   useEffect(() => {
@@ -710,7 +792,6 @@ export default function Workflows() {
 
   const triggerOptions = useMemo<TriggerListOption[]>(() => {
     const options: TriggerListOption[] = [];
-    const blockDueToInputs = !workflowHasInputs;
 
     const webhookTrigger = triggerCatalog.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY);
     if (webhookTrigger) {
@@ -719,7 +800,7 @@ export default function Workflows() {
         title: webhookTrigger.title ?? 'Generic Webhook',
         description:
           webhookTrigger.description ?? 'Accept HTTP POST requests from any service.',
-        disabled: blockDueToInputs,
+        disabled: false,
         onPrimaryAction: () => handleAddTriggerDraft(WEBHOOK_TRIGGER_KEY),
         actionLabel: 'Add to canvas',
         badge: 'Webhook',
@@ -730,10 +811,10 @@ export default function Workflows() {
     const gmailTrigger = triggerCatalog.find((trigger) => trigger.key === GMAIL_TRIGGER_KEY);
     if (gmailTrigger) {
       let disabledReason: string | undefined;
-      let disabled = blockDueToInputs;
+      let disabled = false;
       let secondaryActionLabel: string | undefined;
       let onSecondaryAction: (() => void) | undefined;
-      if (!disabled && !gmailIntegrationReady) {
+      if (!gmailIntegrationReady) {
         disabledReason = 'Connect Gmail to continue';
         disabled = true;
         secondaryActionLabel = 'Connect Gmail';
@@ -757,63 +838,132 @@ export default function Workflows() {
       });
     }
 
+    const cronTrigger = triggerCatalog.find((trigger) => trigger.key === CRON_TRIGGER_KEY);
+    if (cronTrigger) {
+      options.push({
+        key: CRON_TRIGGER_KEY,
+        title: cronTrigger.title ?? 'Cron Schedule',
+        description: cronTrigger.description ?? 'Schedule workflows with cron expressions',
+        disabled: false,
+        onPrimaryAction: () => handleAddTriggerDraft(CRON_TRIGGER_KEY),
+        actionLabel: 'Add to canvas',
+        badge: 'Scheduler',
+        status: 'ready',
+      });
+    }
+
     return options;
   }, [
-    workflowHasInputs,
     triggerCatalog,
     handleAddTriggerDraft,
     gmailIntegrationReady,
     handleConnectGmail,
     isConnectingGmail,
   ]);
-  const triggerInfoMessage = workflowHasInputs
-    ? undefined
-    : 'Add an Input block before attaching triggers.';
+  const triggerInfoMessage = undefined;
 
-  const handleExecute = useCallback(async () => {
+  const lifecycleStatus = useMemo(() => {
+    if (!loadedWorkflow) {
+      return null;
+    }
+    return {
+      draftRevision: loadedWorkflow.draft_revision,
+      latestVersion: loadedWorkflow.latest_version ?? null,
+      publishedVersion: loadedWorkflow.published_version ?? null,
+      lastTestedVersionId: lastRunVersionId,
+    };
+  }, [loadedWorkflow, lastRunVersionId]);
+
+  const canRun = Boolean(selectedWorkflowId);
+  const runDisabledReason = canRun ? undefined : 'Save the workflow before testing';
+  const canPublish = Boolean(selectedWorkflowId && lastRunVersionId);
+  // every workflow can be published 
+  //todo: add more checks if needed
+  // const canPublish = Boolean(selectedWorkflowId);
+  const publishDisabledReason = !selectedWorkflowId
+    ? 'Save the workflow before publishing'
+    : !lastRunVersionId
+      ? 'Run a test to create a publishable version'
+      : undefined;
+
+  const runWorkflowTest = useCallback(
+    async (inputs?: Record<string, any>) => {
+      if (!selectedWorkflowId) {
+        toast.error('Please save the workflow first');
+        return;
+      }
+      try {
+        const response = await executeWorkflow(selectedWorkflowId, inputs ?? {});
+        setLastRunVersionId(response.workflow_version_id ?? null);
+        invalidateWorkflowVersions();
+        toast.success('Test run started', {
+          description: `Run ID ${response.run_id}`,
+        });
+      } catch (error) {
+        console.error('Failed to execute workflow:', error);
+        toast.error('Failed to start test run');
+        throw error;
+      }
+    },
+    [selectedWorkflowId, executeWorkflow, invalidateWorkflowVersions],
+  );
+
+  const handleExecute = useCallback(() => {
     if (!selectedWorkflowId) {
-      alert('Please save the workflow first');
+      toast.error('Please save the workflow first');
       return;
     }
 
-    // Check if workflow has input blocks
     if (inputFields.length > 0) {
-      // Show input dialog
       setInputData({});
       setShowInputDialog(true);
-    } else {
-      // No input blocks, execute immediately
-      try {
-        await executeWorkflow(selectedWorkflowId, {});
-        alert('Workflow execution started!');
-      } catch (error) {
-        console.error('Failed to execute workflow:', error);
-        alert('Failed to execute workflow');
-      }
+      return;
     }
-  }, [selectedWorkflowId, executeWorkflow, inputFields]);
+
+    runWorkflowTest();
+  }, [selectedWorkflowId, inputFields, runWorkflowTest]);
 
   const handleExecuteWithInput = useCallback(async () => {
-    if (!selectedWorkflowId) return;
+    if (!selectedWorkflowId) {
+      toast.error('Please save the workflow first');
+      return;
+    }
 
-    // Transform input data to use variable names
     const transformedInputData: Record<string, any> = {};
     inputFields.forEach((field) => {
       const value = inputData[field.id];
-      // Use variable name (field name) as the key
       transformedInputData[field.variableName] = value;
     });
 
     try {
-      await executeWorkflow(selectedWorkflowId, transformedInputData);
+      await runWorkflowTest(transformedInputData);
       setShowInputDialog(false);
       setInputData({});
-      alert('Workflow execution started!');
-    } catch (error) {
-      console.error('Failed to execute workflow:', error);
-      alert('Failed to execute workflow');
+    } catch {
+      // runWorkflowTest handles toasts/logging
     }
-  }, [selectedWorkflowId, executeWorkflow, inputData, inputFields]);
+  }, [selectedWorkflowId, inputFields, inputData, runWorkflowTest]);
+
+  const handlePublish = useCallback(async () => {
+    if (!selectedWorkflowId) {
+      toast.error('Please save the workflow before publishing');
+      return;
+    }
+    if (!lastRunVersionId) {
+      toast.error('Run a test to create a publishable version');
+      return;
+    }
+    try {
+      const updated = await publishWorkflow(selectedWorkflowId, lastRunVersionId);
+      setLoadedWorkflow(updated);
+      setLastRunVersionId(null);
+      invalidateWorkflowVersions();
+      toast.success('Workflow published');
+    } catch (error) {
+      console.error('Failed to publish workflow:', error);
+      toast.error('Failed to publish workflow');
+    }
+  }, [selectedWorkflowId, lastRunVersionId, publishWorkflow, invalidateWorkflowVersions]);
 
   const handleLoadWorkflow = useCallback(
     async (workflow: WorkflowListItem) => {
@@ -832,6 +982,7 @@ export default function Workflows() {
       // Navigate to /workflows if the deleted workflow was selected
       if (selectedWorkflowId === workflowId) {
         navigate('/workflows', { replace: true });
+        setLastRunVersionId(null);
       }
     } catch (error) {
       console.error('Failed to delete workflow:', error);
@@ -845,7 +996,7 @@ export default function Workflows() {
       return;
     }
     try {
-      await updateWorkflow(workflowId, { name: newName.trim() });
+      await updateWorkflowMetadata(workflowId, { name: newName.trim() });
       // Update local workflow name if it's the currently selected workflow
       if (selectedWorkflowId === workflowId) {
         setWorkflowName(newName.trim());
@@ -859,7 +1010,7 @@ export default function Workflows() {
       toast.error('Failed to rename workflow');
       throw error; // Re-throw to allow ToolPalette to handle it
     }
-  }, [updateWorkflow, selectedWorkflowId]);
+  }, [updateWorkflowMetadata, selectedWorkflowId]);
 
   const handleNewWorkflow = useCallback(async () => {
     try {
@@ -873,12 +1024,59 @@ export default function Workflows() {
     }
   }, [createWorkflow, navigate]);
 
-  const handleWorkflowGraphSync = useCallback((graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
-    if (!graph) return;
-    setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
-    setEdges(normalizeEdges(graph.edges));
-    setProposalPreview(null);
-  }, [functionBlocksMap]);
+  const handleWorkflowGraphSync = useCallback(
+    (graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
+      if (!graph) return;
+      setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
+      setEdges(normalizeEdges(graph.edges));
+      setProposalPreview(null);
+      setLastRunVersionId(null);
+    },
+    [functionBlocksMap],
+  );
+
+  const handleRestoreVersion = useCallback(
+    async (versionId: number) => {
+      if (!selectedWorkflowId) {
+        toast.error('Select a workflow before restoring a version');
+        return;
+      }
+      if (!loadedWorkflow) {
+        toast.error('Workflow is still loading. Please try again in a moment.');
+        return;
+      }
+      try {
+        const restored = await restoreWorkflowVersion(selectedWorkflowId, {
+          versionId,
+          baseRevision: loadedWorkflow.draft_revision,
+        });
+        setLoadedWorkflow(restored);
+        setNodes(normalizeNodes(restored.graph.nodes, functionBlocksMap));
+        setEdges(normalizeEdges(restored.graph.edges));
+        setLastRunVersionId(null);
+        resetSavedDataRef.current?.();
+        toast.success('Version restored', {
+          description: `Draft now matches version ${versionId}`,
+        });
+      } catch (error) {
+        console.error('Failed to restore workflow version:', error);
+        if (error instanceof BackendAPIError && error.status === 409) {
+          await handleDraftConflict();
+          return;
+        }
+        toast.error('Failed to restore version', {
+          description: error instanceof BackendAPIError ? error.message : undefined,
+        });
+      }
+    },
+    [
+      selectedWorkflowId,
+      loadedWorkflow,
+      restoreWorkflowVersion,
+      functionBlocksMap,
+      handleDraftConflict,
+    ],
+  );
 
   const handleProposalPreviewChange = useCallback((preview: WorkflowProposalPreview | null) => {
     setProposalPreview(preview);
@@ -947,7 +1145,8 @@ export default function Workflows() {
           setNodes(normalizeNodes(fullWorkflow.graph.nodes, functionBlocksMap));
           setEdges(normalizeEdges(fullWorkflow.graph.edges));
           setProposalPreview(null);
-          resetSavedData();
+          setLastRunVersionId(null);
+          resetSavedDataRef.current?.();
         } catch (error) {
           console.error('Failed to load workflow from URL:', error);
           toast.error('Failed to load workflow', {
@@ -968,9 +1167,10 @@ export default function Workflows() {
       setEdges([]);
       setLoadedWorkflow(null);
       setProposalPreview(null);
-      resetSavedData();
+      setLastRunVersionId(null);
+      resetSavedDataRef.current?.();
     }
-  }, [urlWorkflowId, loadedWorkflow?.workflow_id, getWorkflow, functionBlocksMap, resetSavedData, navigate]);
+  }, [urlWorkflowId, loadedWorkflow, getWorkflow, functionBlocksMap, navigate]);
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -990,14 +1190,38 @@ export default function Workflows() {
               selectedNodeId={isPreviewActive ? null : selectedNodeId}
               readOnly={isPreviewActive}
             />
-            {proposalPreview && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                <div className="bg-sky-900/90 text-white px-4 py-2 rounded-full shadow-lg max-w-xl text-center">
-                  <p className="text-sm font-medium">Previewing workflow proposal</p>
-                  <p className="text-xs text-slate-100 line-clamp-2">{proposalPreview.proposal.summary}</p>
-                </div>
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 pointer-events-none">
+              <div className="pointer-events-auto">
+                <WorkflowLifecycleBar
+                  lifecycleStatus={lifecycleStatus}
+                  onRunClick={handleExecute}
+                  onPublishClick={handlePublish}
+                  isExecuting={isExecuting}
+                  isPublishing={isPublishing}
+                isRestoringVersion={isRestoringVersion}
+                  canRun={canRun}
+                  canPublish={canPublish}
+                  publishDisabledReason={publishDisabledReason}
+                  runDisabledReason={runDisabledReason}
+                versionOptions={workflowVersions}
+                isVersionsLoading={isLoadingWorkflowVersions}
+                onVersionRestore={handleRestoreVersion}
+                versionRestoreDisabledReason={
+                  selectedWorkflowId ? undefined : 'Save the workflow before restoring versions'
+                }
+                />
               </div>
-            )}
+              {proposalPreview && (
+                <div className="pointer-events-auto">
+                  <div className="bg-sky-900/90 text-white px-4 py-2 rounded-full shadow-lg max-w-xl text-center">
+                    <p className="text-sm font-medium">Previewing workflow proposal</p>
+                    <p className="text-xs text-slate-100 line-clamp-2">
+                      {proposalPreview.proposal.summary}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
             
             {/* Floating Workflows Panel */}
             <FloatingWorkflowsPanel
@@ -1036,8 +1260,6 @@ export default function Workflows() {
                 collapsed={buildChatCollapsed}
                 onCollapseChange={handleBuildChatCollapseChange}
                 functionBlocks={availableBlocks}
-                onRunClick={handleExecute}
-                isExecuting={isExecuting}
                 triggerOptions={triggerOptions}
                 isLoadingTriggers={isLoadingTriggers || isLoadingSubscriptions}
                 triggerInfoMessage={triggerInfoMessage}

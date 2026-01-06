@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Copy, KeyRound, Link as LinkIcon, Loader2, Mail, PlusCircle, Trash2 } from 'lucide-react';
+import { Calendar, Copy, KeyRound, Link as LinkIcon, Loader2, Mail, PlusCircle, Trash2 } from 'lucide-react';
 
 import {
   Dialog,
@@ -17,12 +17,26 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getBackendBaseUrl } from '@/lib/api-client';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import { cn } from '@/lib/utils';
 import type { InputDef, JsonValue } from '@/types/workflow-spec';
 import type { TriggerSubscriptionResponse } from '@/types/triggers';
+import {
+  CRON_TRIGGER_KEY,
+  CRON_FIELD_OPTIONS,
+  CRON_PRESETS,
+  TIMEZONE_OPTIONS,
+} from './constants';
+import {
+  type CronConfigState,
+  makeDefaultCronConfig,
+  buildCronConfigFromProviderConfig,
+  serializeCronConfig,
+  validateCronExpression,
+} from './utils';
 
 type BindingMode = 'event' | 'literal';
 
@@ -128,6 +142,7 @@ export function WorkflowTriggerModal({
   >({});
   const [selectedTriggerKey, setSelectedTriggerKey] = useState<string>(WEBHOOK_TRIGGER_KEY);
   const [gmailConfig, setGmailConfig] = useState<GmailConfigState>(() => makeDefaultGmailConfig());
+  const [cronConfig, setCronConfig] = useState<CronConfigState>(() => makeDefaultCronConfig());
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [creatingTriggerKey, setCreatingTriggerKey] = useState<string | null>(null);
   const [pendingToggleId, setPendingToggleId] = useState<number | null>(null);
@@ -139,6 +154,10 @@ export function WorkflowTriggerModal({
   );
   const gmailTrigger = useMemo(
     () => triggers.find((trigger) => trigger.key === GMAIL_TRIGGER_KEY),
+    [triggers],
+  );
+  const cronTrigger = useMemo(
+    () => triggers.find((trigger) => trigger.key === CRON_TRIGGER_KEY),
     [triggers],
   );
   const triggerOptions = useMemo(() => {
@@ -159,8 +178,16 @@ export function WorkflowTriggerModal({
           gmailTrigger.description ?? 'Poll a Gmail inbox for newly received emails.',
       });
     }
+    if (cronTrigger) {
+      options.push({
+        key: CRON_TRIGGER_KEY,
+        title: cronTrigger.title ?? 'Cron Schedule',
+        description:
+          cronTrigger.description ?? 'Execute workflow on a time-based schedule.',
+      });
+    }
     return options;
-  }, [genericTrigger, gmailTrigger]);
+  }, [genericTrigger, gmailTrigger, cronTrigger]);
 
   const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
 
@@ -233,6 +260,7 @@ export function WorkflowTriggerModal({
   const canCreateGmail = Boolean(
     workflowId && gmailTrigger && gmailIntegrationReady && workflowInputEntries.length,
   );
+  const canCreateCron = Boolean(workflowId && cronTrigger && workflowInputEntries.length);
 
   const getBindingState = useCallback(
     (triggerKey: string): Record<string, BindingConfig> => bindingStateByTrigger[triggerKey] ?? {},
@@ -405,6 +433,41 @@ export function WorkflowTriggerModal({
     }
   };
 
+  const handleCreateCronSubscription = async () => {
+    if (!workflowId || !cronTrigger) {
+      toast.error('Save the workflow before adding triggers');
+      return;
+    }
+    const validation = validateCronExpression(cronConfig.cronExpression);
+    if (!validation.valid) {
+      toast.error('Invalid cron expression', {
+        description: validation.error,
+      });
+      return;
+    }
+    setCreatingTriggerKey(CRON_TRIGGER_KEY);
+    try {
+      const providerConfig = serializeCronConfig(cronConfig);
+      const bindings = buildBindingsPayload(CRON_TRIGGER_KEY);
+      await createSubscription({
+        workflow_id: workflowId,
+        trigger_key: cronTrigger.key,
+        provider_config: providerConfig,
+        bindings,
+        enabled: true,
+      });
+      toast.success('Cron schedule trigger created');
+      setActiveTab('subscriptions');
+    } catch (error) {
+      console.error('Failed to create cron trigger', error);
+      toast.error('Unable to create cron trigger', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setCreatingTriggerKey(null);
+    }
+  };
+
   const handleToggle = async (subscriptionId: number, enabled: boolean) => {
     setPendingToggleId(subscriptionId);
     try {
@@ -439,10 +502,34 @@ export function WorkflowTriggerModal({
     const title = triggerMeta?.title ?? subscription.trigger_key;
     const isWebhookTrigger = subscription.trigger_key === WEBHOOK_TRIGGER_KEY;
     const isGmailTrigger = subscription.trigger_key === GMAIL_TRIGGER_KEY;
+    const isCronTrigger = subscription.trigger_key === CRON_TRIGGER_KEY;
     const absoluteWebhookUrl =
       isWebhookTrigger && subscription.webhook_url
         ? buildAbsoluteWebhookUrl(subscription.webhook_url)
         : null;
+    const renderCronSummary = () => {
+      const providerConfig = (subscription.provider_config ?? {}) as Record<string, unknown>;
+      const cronExpression = String(providerConfig['cron_expression'] ?? 'Not set');
+      const timezone = String(providerConfig['timezone'] ?? 'UTC');
+      const description = providerConfig['description']
+        ? String(providerConfig['description'])
+        : null;
+      return (
+        <div className="flex flex-col gap-2 rounded-md border border-dashed border-muted p-3 bg-muted/30 text-sm">
+          <div className="flex items-center gap-2 font-medium">
+            <Calendar className="h-4 w-4" />
+            Cron schedule configuration
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Badge variant="outline">
+              <code className="font-mono">{cronExpression}</code>
+            </Badge>
+            <Badge variant="outline">{timezone}</Badge>
+          </div>
+          {description && <p className="text-xs text-muted-foreground">Description: {description}</p>}
+        </div>
+      );
+    };
     const renderGmailSummary = () => {
       const providerConfig = (subscription.provider_config ?? {}) as Record<string, unknown>;
       const labelIdsValue = providerConfig['label_ids'];
@@ -549,6 +636,7 @@ export function WorkflowTriggerModal({
         )}
 
         {isGmailTrigger && renderGmailSummary()}
+        {isCronTrigger && renderCronSummary()}
 
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>Updated {new Date(subscription.updated_at).toLocaleString()}</span>
@@ -900,6 +988,128 @@ export function WorkflowTriggerModal({
     );
   };
 
+  const renderCronForm = () => {
+    if (!cronTrigger) {
+      return (
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          Cron trigger metadata is unavailable.
+        </div>
+      );
+    }
+    const isCreatingCron = creatingTriggerKey === CRON_TRIGGER_KEY;
+    const validation = validateCronExpression(cronConfig.cronExpression);
+    const bindingGrid = renderBindingGrid(CRON_TRIGGER_KEY, {
+      description: (
+        <p className="text-sm text-muted-foreground">
+          Map cron event outputs (for example{' '}
+          <code className="font-mono text-xs">{'${event.data.scheduled_time}'}</code>) to the inputs
+          your workflow expects. Use literal mode for static defaults.
+        </p>
+      ),
+      fieldOptions: CRON_FIELD_OPTIONS,
+    });
+    return (
+      <div className="space-y-5">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Cron Expression</Label>
+            <Input
+              value={cronConfig.cronExpression}
+              placeholder="*/5 * * * *"
+              onChange={(e) =>
+                setCronConfig((prev) => ({ ...prev, cronExpression: e.target.value }))
+              }
+              className={!validation.valid ? 'border-destructive' : ''}
+            />
+            {!validation.valid && validation.error && (
+              <p className="text-xs text-destructive">{validation.error}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Five fields: minute (0-59), hour (0-23), day (1-31), month (1-12), weekday (0-6)
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Quick Presets</Label>
+            <div className="flex flex-wrap gap-2">
+              {CRON_PRESETS.map((preset) => (
+                <Button
+                  key={preset.expression}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  onClick={() =>
+                    setCronConfig((prev) => ({ ...prev, cronExpression: preset.expression }))
+                  }
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-xs uppercase text-muted-foreground">Timezone</Label>
+              <Select
+                value={cronConfig.timezone}
+                onValueChange={(value) =>
+                  setCronConfig((prev) => ({ ...prev, timezone: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONE_OPTIONS.map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Schedule will execute in this timezone
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs uppercase text-muted-foreground">
+                Description (Optional)
+              </Label>
+              <Input
+                value={cronConfig.description}
+                placeholder="e.g., Daily morning report generation"
+                onChange={(e) =>
+                  setCronConfig((prev) => ({ ...prev, description: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+        </div>
+        {bindingGrid}
+        <Button
+          type="button"
+          onClick={handleCreateCronSubscription}
+          disabled={!canCreateCron || !validation.valid || isCreatingCron}
+        >
+          {isCreatingCron ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Create Cron Trigger
+            </>
+          )}
+        </Button>
+      </div>
+    );
+  };
+
   const renderCreateForm = () => {
     if (!workflowId) {
       return (
@@ -949,6 +1159,7 @@ export function WorkflowTriggerModal({
 
         {selectedTriggerKey === WEBHOOK_TRIGGER_KEY && renderWebhookForm()}
         {selectedTriggerKey === GMAIL_TRIGGER_KEY && renderGmailForm()}
+        {selectedTriggerKey === CRON_TRIGGER_KEY && renderCronForm()}
       </div>
     );
   };

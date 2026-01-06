@@ -14,7 +14,6 @@ interface BuildPanelProps {
   onBlockSelect?: (block: { type: string; label: string; config?: any }) => void;
   blocks?: BuiltInBlock[];
   selectedWorkflowId?: string | null;
-  isExecuting?: boolean;
   triggerOptions?: TriggerListOption[];
   isLoadingTriggers?: boolean;
   triggerInfoMessage?: string;
