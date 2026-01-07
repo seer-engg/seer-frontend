@@ -1,9 +1,10 @@
 import type { LucideIcon } from 'lucide-react';
-import { Calendar, Link, Mail } from 'lucide-react';
+import { Calendar, FileText, Link, Mail } from 'lucide-react';
 
 export const WEBHOOK_TRIGGER_KEY = 'webhook.generic';
 export const GMAIL_TRIGGER_KEY = 'poll.gmail.email_received';
 export const CRON_TRIGGER_KEY = 'schedule.cron';
+export const FORM_TRIGGER_KEY = 'trigger.form';
 
 export interface GmailFieldOption {
   label: string;
@@ -33,6 +34,7 @@ export const TRIGGER_ICON_BY_KEY: Record<string, LucideIcon> = {
   [WEBHOOK_TRIGGER_KEY]: Link,
   [GMAIL_TRIGGER_KEY]: Mail,
   [CRON_TRIGGER_KEY]: Calendar,
+  [FORM_TRIGGER_KEY]: FileText,
 };
 
 export const CRON_PRESETS = [

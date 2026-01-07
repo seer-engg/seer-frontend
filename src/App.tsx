@@ -13,6 +13,7 @@ import WorkflowTraces from "./pages/WorkflowTraces";
 import WorkflowTraceDetail from "./pages/WorkflowTraceDetail";
 import AgentTraces from "./pages/AgentTraces";
 import AgentTraceDetail from "./pages/AgentTraceDetail";
+import FormSubmission from "./pages/FormSubmission";
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { getStoredSignupSource } from "./utils/utm-tracker";
@@ -128,6 +129,10 @@ const App = () => (
                   </SeerLayout>
                 </ProtectedRoute>
               }
+            />
+            <Route
+              path="/forms/:subscriptionId"
+              element={<FormSubmission />}
             />
             <Route path="*" element={<NotFound />} />
           </Routes>

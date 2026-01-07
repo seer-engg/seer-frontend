@@ -25,6 +25,10 @@ export interface CronConfigState {
   description: string;
 }
 
+export interface FormConfigState {
+  description: string;
+}
+
 const EVENT_PREFIX = 'event.';
 
 export const makeDefaultGmailConfig = (): GmailConfigState => ({
@@ -235,5 +239,29 @@ export function validateCronExpression(expression: string): { valid: boolean; er
   }
 
   return { valid: true };
+}
+
+export const makeDefaultFormConfig = (): FormConfigState => ({
+  description: '',
+});
+
+export function buildFormConfigFromProviderConfig(
+  providerConfig?: Record<string, any> | null,
+): FormConfigState {
+  if (!providerConfig) {
+    return makeDefaultFormConfig();
+  }
+  return {
+    description: String(providerConfig['description'] ?? ''),
+  };
+}
+
+export function serializeFormConfig(state: FormConfigState): Record<string, JsonValue> {
+  const providerConfig: Record<string, JsonValue> = {};
+  const description = state.description.trim();
+  if (description) {
+    providerConfig.description = description;
+  }
+  return providerConfig;
 }
 
