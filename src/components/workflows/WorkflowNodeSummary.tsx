@@ -26,6 +26,10 @@ const FIELD_LABELS: Record<string, string> = {
   operation: 'Operation',
   endpoint: 'Endpoint',
   fields: 'Fields',
+  cron_expression: 'Expression',
+  cronExpression: 'Expression',
+  timezone: 'Timezone',
+  description: 'Description',
 };
 
 const DEFAULT_PRIORITY: string[] = [
@@ -42,6 +46,10 @@ const DEFAULT_PRIORITY: string[] = [
   'item_var',
   'variable_name',
   'fields',
+  'cron_expression',
+  'cronExpression',
+  'timezone',
+  'description',
 ];
 
 const isPrimitiveSummaryValue = (value: unknown) =>
@@ -128,6 +136,7 @@ export interface WorkflowNodeSummaryProps {
   fallbackMessage?: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const getWorkflowNodeSummaryEntries = (
   config?: JsonRecord | null,
   priorityKeys: string[] = [],

@@ -1,32 +1,21 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import type { Node as FlowNode, NodeProps } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
-import { Calendar, Copy, Info, Link, Loader2, Mail, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Copy, Link, Loader2, Mail } from 'lucide-react';
+import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
 
 import type { WorkflowNodeData } from '../types';
 import {
-  BindingState,
-  buildBindingsPayload,
-  buildDefaultBindingState,
-  buildGmailConfigFromProviderConfig,
   buildCronConfigFromProviderConfig,
-  deriveBindingStateFromSubscription,
-  makeDefaultGmailConfig,
   makeDefaultCronConfig,
-  serializeGmailConfig,
-  serializeCronConfig,
-  validateCronExpression,
-  type GmailConfigState,
   type CronConfigState,
 } from '../triggers/utils';
-import { GMAIL_FIELD_OPTIONS, GMAIL_TRIGGER_KEY, WEBHOOK_TRIGGER_KEY, CRON_TRIGGER_KEY, CRON_FIELD_OPTIONS, CRON_PRESETS, TIMEZONE_OPTIONS } from '../triggers/constants';
+import { GMAIL_TRIGGER_KEY, WEBHOOK_TRIGGER_KEY, CRON_TRIGGER_KEY } from '../triggers/constants';
 
 type WorkflowNode = FlowNode<WorkflowNodeData>;
 
@@ -39,8 +28,19 @@ const formatTimestamp = (value?: string) => {
   }
 };
 
+/* eslint-disable max-lines-per-function, complexity */
 export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected }: NodeProps<WorkflowNode>) {
   const triggerMeta = data.triggerMeta;
+
+  // Initialize hooks before any early returns (Rules of Hooks)
+  const subscription = triggerMeta?.subscription;
+  const draft = triggerMeta?.draft;
+  const [cronConfig] = useState<CronConfigState>(() =>
+    subscription
+      ? buildCronConfigFromProviderConfig(subscription.provider_config)
+      : draft?.initialCronConfig ?? makeDefaultCronConfig(),
+  );
+  const [isToggling, setIsToggling] = useState(false);
 
   if (!triggerMeta) {
     return (
@@ -50,73 +50,14 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     );
   }
 
-  const { subscription, descriptor, workflowInputs, handlers, integration, draft } = triggerMeta;
+  const { descriptor, workflowInputs, handlers, integration } = triggerMeta;
   const isDraft = !subscription;
   const triggerKey = subscription?.trigger_key ?? draft?.triggerKey ?? '';
-  const [bindingState, setBindingState] = useState<BindingState>(() =>
-    subscription
-      ? deriveBindingStateFromSubscription(workflowInputs, subscription)
-      : draft?.initialBindings ?? buildDefaultBindingState(workflowInputs),
-  );
-  const [gmailConfig, setGmailConfig] = useState<GmailConfigState>(() =>
-    subscription
-      ? buildGmailConfigFromProviderConfig(subscription.provider_config)
-      : draft?.initialGmailConfig ?? makeDefaultGmailConfig(),
-  );
-  const [cronConfig, setCronConfig] = useState<CronConfigState>(() =>
-    subscription
-      ? buildCronConfigFromProviderConfig(subscription.provider_config)
-      : draft?.initialCronConfig ?? makeDefaultCronConfig(),
-  );
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isToggling, setIsToggling] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
-  const hasInputs = workflowInputEntries.length > 0;
 
   const isWebhookTrigger = triggerKey === WEBHOOK_TRIGGER_KEY;
   const isGmailTrigger = triggerKey === GMAIL_TRIGGER_KEY;
   const isCronTrigger = triggerKey === CRON_TRIGGER_KEY;
 
-  useEffect(() => {
-    if (subscription) {
-      setBindingState(deriveBindingStateFromSubscription(workflowInputs, subscription));
-    } else if (draft?.initialBindings) {
-      setBindingState(draft.initialBindings);
-    } else {
-      setBindingState(buildDefaultBindingState(workflowInputs));
-    }
-  }, [subscription, workflowInputs, draft?.initialBindings]);
-
-  useEffect(() => {
-    if (!isGmailTrigger) {
-      setGmailConfig(makeDefaultGmailConfig());
-      return;
-    }
-    if (subscription) {
-      setGmailConfig(buildGmailConfigFromProviderConfig(subscription.provider_config));
-    } else if (draft?.initialGmailConfig) {
-      setGmailConfig(draft.initialGmailConfig);
-    } else {
-      setGmailConfig(makeDefaultGmailConfig());
-    }
-  }, [subscription?.provider_config, isGmailTrigger, draft?.initialGmailConfig]);
-
-  useEffect(() => {
-    if (!isCronTrigger) {
-      setCronConfig(makeDefaultCronConfig());
-      return;
-    }
-    if (subscription) {
-      setCronConfig(buildCronConfigFromProviderConfig(subscription.provider_config));
-    } else if (draft?.initialCronConfig) {
-      setCronConfig(draft.initialCronConfig);
-    } else {
-      setCronConfig(makeDefaultCronConfig());
-    }
-  }, [subscription?.provider_config, isCronTrigger, draft?.initialCronConfig]);
 
   const handleCopy = async (value: string | null | undefined, label: string) => {
     if (!value) {
@@ -148,213 +89,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     }
   };
 
-  const handleDelete = async () => {
-    if (isDraft) {
-      handlers?.discardDraft?.(draft?.id ?? '');
-      toast.success('Trigger draft removed');
-      return;
-    }
-    if (!handlers?.delete || !subscription) {
-      return;
-    }
-    if (!confirm('Delete this trigger subscription?')) {
-      return;
-    }
-    setIsDeleting(true);
-    try {
-      await handlers.delete(subscription.subscription_id);
-      toast.success('Trigger removed');
-    } catch (error) {
-      console.error('Failed to delete trigger', error);
-      toast.error('Unable to delete trigger');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
-  const handleSave = async () => {
-    if (isDraft) {
-      if (!handlers?.saveDraft || !draft) {
-        return;
-      }
-      setIsSaving(true);
-      try {
-        await handlers.saveDraft(draft.id, {
-          triggerKey,
-          bindings: bindingState,
-          providerConfig: isGmailTrigger
-            ? serializeGmailConfig(gmailConfig)
-            : isCronTrigger
-            ? serializeCronConfig(cronConfig)
-            : undefined,
-        });
-        toast.success('Trigger saved');
-      } catch (error) {
-        console.error('Failed to save trigger draft', error);
-        toast.error('Unable to save trigger', {
-          description: error instanceof Error ? error.message : undefined,
-        });
-      } finally {
-        setIsSaving(false);
-      }
-      return;
-    }
-    if (!handlers?.update || !subscription) {
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const payload: Parameters<NonNullable<typeof handlers.update>>[1] = {
-        bindings: buildBindingsPayload(bindingState),
-      };
-      if (isGmailTrigger) {
-        payload.provider_config = serializeGmailConfig(gmailConfig);
-      } else if (isCronTrigger) {
-        payload.provider_config = serializeCronConfig(cronConfig);
-      }
-      await handlers.update(subscription.subscription_id, payload);
-      toast.success('Trigger updated');
-      } catch (error) {
-        console.error('Failed to save trigger', error);
-        toast.error('Unable to save trigger', {
-          description: error instanceof Error ? error.message : undefined,
-        });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleBindingModeChange = (inputName: string, mode: 'event' | 'literal') => {
-    setBindingState((prev) => ({
-      ...prev,
-      [inputName]: {
-        mode,
-        value:
-          mode === 'event'
-            ? prev[inputName]?.mode === 'event'
-              ? prev[inputName]?.value ?? `data.${inputName}`
-              : `data.${inputName}`
-            : prev[inputName]?.mode === 'literal'
-              ? prev[inputName]?.value ?? ''
-              : '',
-      },
-    }));
-  };
-
-  const handleBindingValueChange = (inputName: string, value: string) => {
-    setBindingState((prev) => ({
-      ...prev,
-      [inputName]: {
-        mode: prev[inputName]?.mode ?? 'event',
-        value,
-      },
-    }));
-  };
-
-  const bindingQuickInsert = (inputName: string, value: string) => {
-    setBindingState((prev) => ({
-      ...prev,
-      [inputName]: {
-        mode: 'event',
-        value,
-      },
-    }));
-  };
-
-  const renderBindingSection = () => {
-    if (!hasInputs) {
-      return (
-        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground space-y-2">
-          <p className="font-medium">No workflow inputs defined</p>
-          <p className="text-xs">
-            {isCronTrigger
-              ? 'This cron trigger will run on schedule without input data.'
-              : 'This trigger will start the workflow without input data.'}
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        {workflowInputEntries.map(([inputName, inputDef]) => {
-          const config = bindingState[inputName] ?? { mode: 'event', value: `data.${inputName}` };
-          const defaultEventPath = `data.${inputName}`;
-          const quickOptions = isGmailTrigger
-            ? GMAIL_FIELD_OPTIONS
-            : isCronTrigger
-            ? CRON_FIELD_OPTIONS
-            : [];
-          return (
-            <div key={inputName} className="rounded-lg border p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-medium text-sm">{inputName}</p>
-                  {inputDef.description && (
-                    <p className="text-xs text-muted-foreground">{inputDef.description}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <Badge variant="secondary">{inputDef.type}</Badge>
-                  {inputDef.required && <Badge variant="outline">Required</Badge>}
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase text-muted-foreground">Binding mode</Label>
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      type="button"
-                      variant={config.mode === 'event' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handleBindingModeChange(inputName, 'event')}
-                    >
-                      Event path
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={config.mode === 'literal' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handleBindingModeChange(inputName, 'literal')}
-                    >
-                      Literal value
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase text-muted-foreground">
-                    {config.mode === 'event' ? 'Event path (relative to event.*)' : 'Literal value'}
-                  </Label>
-                  <Input
-                    value={config.value}
-                    placeholder={config.mode === 'event' ? defaultEventPath : '42'}
-                    onChange={(event) => handleBindingValueChange(inputName, event.target.value)}
-                  />
-                  {config.mode === 'event' && quickOptions.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                      <Info className="h-3.5 w-3.5" />
-                      {quickOptions.map((option) => (
-                        <Button
-                          key={`${inputName}-${option.path}`}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2"
-                          onClick={() => bindingQuickInsert(inputName, option.path)}
-                        >
-                          {option.label}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
 
   const renderWebhookDetails = () => {
     if (!subscription) {
@@ -449,181 +184,22 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     );
   };
 
-  const renderGmailConfig = () => {
-    if (!isGmailTrigger) {
-      return null;
-    }
-    return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label className="text-xs uppercase text-muted-foreground">Label filters</Label>
-          <Input
-            value={gmailConfig.labelIds}
-            placeholder="INBOX, UNREAD"
-            onChange={(event) =>
-              setGmailConfig((prev) => ({
-                ...prev,
-                labelIds: event.target.value,
-              }))
-            }
-          />
-          <p className="text-xs text-muted-foreground">Comma-separated Gmail label IDs (defaults to INBOX).</p>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs uppercase text-muted-foreground">Search query</Label>
-          <Input
-            value={gmailConfig.query}
-            placeholder="from:vip@example.com is:unread"
-            onChange={(event) =>
-              setGmailConfig((prev) => ({
-                ...prev,
-                query: event.target.value,
-              }))
-            }
-          />
-          <p className="text-xs text-muted-foreground">Optional Gmail query appended to the poll watermark.</p>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs uppercase text-muted-foreground">Max results per poll</Label>
-          <Input
-            type="number"
-            min={1}
-            max={25}
-            value={gmailConfig.maxResults}
-            onChange={(event) =>
-              setGmailConfig((prev) => ({
-                ...prev,
-                maxResults: event.target.value,
-              }))
-            }
-          />
-          <p className="text-xs text-muted-foreground">Between 1 and 25 messages per cycle.</p>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs uppercase text-muted-foreground">Overlap window (ms)</Label>
-          <Input
-            type="number"
-            min={0}
-            max={900000}
-            step={1000}
-            value={gmailConfig.overlapMs}
-            onChange={(event) =>
-              setGmailConfig((prev) => ({
-                ...prev,
-                overlapMs: event.target.value,
-              }))
-            }
-          />
-          <p className="text-xs text-muted-foreground">Re-read recent emails for dedupe protection.</p>
-        </div>
-      </div>
-    );
-  };
 
   const renderCronDetails = () => {
-    const validation = validateCronExpression(cronConfig.cronExpression);
     return (
-      <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/40">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Calendar className="h-4 w-4" />
-          Schedule configuration
-        </div>
-        <div className="space-y-1.5">
-          <p className="text-xs text-muted-foreground">Expression</p>
-          <code className={cn("text-xs block", !validation.valid && "text-destructive")}>
-            {cronConfig.cronExpression}
-          </code>
-          {!validation.valid && validation.error && (
-            <p className="text-xs text-destructive">{validation.error}</p>
-          )}
-        </div>
-        <div className="space-y-1.5">
-          <p className="text-xs text-muted-foreground">Timezone</p>
-          <p className="text-xs font-medium">{cronConfig.timezone}</p>
-        </div>
-        {cronConfig.description && (
-          <div className="space-y-1.5 pt-1.5 border-t border-dashed border-border/60">
-            <p className="text-xs text-muted-foreground">Description</p>
-            <p className="text-xs">{cronConfig.description}</p>
-          </div>
-        )}
-      </div>
+      <WorkflowNodeSummary
+        config={{
+          cronExpression: cronConfig.cronExpression,
+          timezone: cronConfig.timezone,
+          description: cronConfig.description,
+        }}
+        priorityKeys={['cronExpression', 'timezone', 'description']}
+        limit={3}
+        fallbackMessage="Double-click to configure schedule"
+      />
     );
   };
 
-  const renderCronConfig = () => {
-    if (!isCronTrigger) {
-      return null;
-    }
-    const validation = validateCronExpression(cronConfig.cronExpression);
-    return (
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label className="text-xs uppercase text-muted-foreground">Cron Expression</Label>
-          <Input
-            value={cronConfig.cronExpression}
-            placeholder="*/5 * * * *"
-            onChange={(e) => setCronConfig((prev) => ({ ...prev, cronExpression: e.target.value }))}
-            className={!validation.valid ? 'border-destructive' : ''}
-          />
-          {!validation.valid && validation.error && (
-            <p className="text-xs text-destructive">{validation.error}</p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Five fields: minute hour day month weekday
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-xs uppercase text-muted-foreground">Quick Presets</Label>
-          <div className="flex flex-wrap gap-2">
-            {CRON_PRESETS.map((preset) => (
-              <Button
-                key={preset.expression}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => setCronConfig((prev) => ({ ...prev, cronExpression: preset.expression }))}
-              >
-                {preset.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground">Timezone</Label>
-            <Select
-              value={cronConfig.timezone}
-              onValueChange={(value) => setCronConfig((prev) => ({ ...prev, timezone: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select timezone" />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMEZONE_OPTIONS.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground">Description</Label>
-            <Input
-              value={cronConfig.description}
-              placeholder="Optional description"
-              onChange={(e) => setCronConfig((prev) => ({ ...prev, description: e.target.value }))}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div
@@ -678,54 +254,21 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
         {isWebhookTrigger && renderWebhookDetails()}
         {isGmailTrigger && renderGmailDetails()}
         {isCronTrigger && renderCronDetails()}
-
-        <button
-          type="button"
-          className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm"
-          onClick={() => setIsExpanded((prev) => !prev)}
-        >
-          <span>Bindings & configuration</span>
-          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
-
-        {isExpanded && (
-          <div className="space-y-4">
-            {renderGmailConfig()}
-            {renderCronConfig()}
-            {renderBindingSection()}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={handleSave} disabled={isSaving}>
-            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isDraft ? 'Save trigger' : 'Save changes'}
-          </Button>
-          <Button
-            size="sm"
-            variant={isDraft ? 'outline' : 'destructive'}
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            {isDeleting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="mr-2 h-4 w-4" />
-            )}
-            {isDraft ? 'Discard' : 'Remove'}
-          </Button>
-        </div>
-
-        {subscription ? (
-          <p className="text-[11px] text-muted-foreground">
-            Updated {formatTimestamp(subscription.updated_at)}
-          </p>
-        ) : (
-          <p className="text-[11px] text-muted-foreground">
-            Configure bindings, then save to create this trigger.
-          </p>
-        )}
       </div>
+
+      {/* Output handle for connecting to next workflow node */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="output"
+        style={{
+          position: 'absolute',
+          right: -8,
+          top: '50%',
+          transform: 'translateY(-50%)',
+        }}
+        className="!w-3 !h-3 !bg-border !border-2 !border-background"
+      />
     </div>
   );
 });
