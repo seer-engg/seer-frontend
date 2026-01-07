@@ -23,20 +23,20 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
 
       // Code complexity and size limits
-      "max-lines": ["warn", {
-        "max": 500,
+      "max-lines": ["error", {
+        "max": 600,
         "skipBlankLines": true,
         "skipComments": true
       }],
-      "max-lines-per-function": ["warn", {
+      "max-lines-per-function": ["error", {
         "max": 100,
         "skipBlankLines": true,
         "skipComments": true
       }],
-      "complexity": ["warn", 15],
-      "max-depth": ["warn", 4],
-      "max-params": ["warn", 5],
-      "max-nested-callbacks": ["warn", 3],
+      "complexity": ["error", 10],
+      "max-depth": ["error", 4],
+      "max-params": ["error", 5],
+      "max-nested-callbacks": ["error", 3],
     },
   },
 );
