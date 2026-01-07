@@ -25,6 +25,16 @@ export interface CronConfigState {
   description: string;
 }
 
+export type SupabaseEventType = 'INSERT' | 'UPDATE' | 'DELETE';
+
+export interface SupabaseConfigState {
+  integrationResourceId: string;
+  integrationResourceLabel?: string;
+  schema: string;
+  table: string;
+  events: SupabaseEventType[];
+}
+
 const EVENT_PREFIX = 'event.';
 
 export const makeDefaultGmailConfig = (): GmailConfigState => ({
@@ -32,6 +42,16 @@ export const makeDefaultGmailConfig = (): GmailConfigState => ({
   query: '',
   maxResults: '25',
   overlapMs: '300000',
+});
+
+export const SUPABASE_EVENT_TYPES: SupabaseEventType[] = ['INSERT', 'UPDATE', 'DELETE'];
+
+export const makeDefaultSupabaseConfig = (): SupabaseConfigState => ({
+  integrationResourceId: '',
+  integrationResourceLabel: '',
+  schema: 'public',
+  table: '',
+  events: [...SUPABASE_EVENT_TYPES],
 });
 
 export function buildDefaultBindingState(workflowInputs: Record<string, InputDef>): BindingState {
@@ -183,6 +203,72 @@ export function serializeGmailConfig(state: GmailConfigState): Record<string, Js
     providerConfig.overlap_ms = Math.min(Math.max(overlapMsValue, 0), 900000);
   }
   return providerConfig;
+}
+
+export function buildSupabaseConfigFromProviderConfig(
+  providerConfig?: Record<string, any> | null,
+): SupabaseConfigState {
+  if (!providerConfig) {
+    return makeDefaultSupabaseConfig();
+  }
+  const rawEvents = Array.isArray(providerConfig['events']) ? providerConfig['events'] : SUPABASE_EVENT_TYPES;
+  const normalizedEvents = rawEvents
+    .map((event) => String(event).toUpperCase() as SupabaseEventType)
+    .filter((event): event is SupabaseEventType => SUPABASE_EVENT_TYPES.includes(event));
+
+  return {
+    integrationResourceId: providerConfig['integration_resource_id']
+      ? String(providerConfig['integration_resource_id'])
+      : '',
+    integrationResourceLabel:
+      typeof providerConfig['integration_resource_label'] === 'string'
+        ? providerConfig['integration_resource_label']
+        : '',
+    schema: providerConfig['schema'] ? String(providerConfig['schema']) : 'public',
+    table: providerConfig['table'] ? String(providerConfig['table']) : '',
+    events: normalizedEvents.length ? normalizedEvents : [...SUPABASE_EVENT_TYPES],
+  };
+}
+
+export function serializeSupabaseConfig(state: SupabaseConfigState): Record<string, JsonValue> {
+  const payload: Record<string, JsonValue> = {};
+  const resourceId = Number(state.integrationResourceId);
+  if (!Number.isNaN(resourceId)) {
+    payload.integration_resource_id = resourceId;
+  }
+  if (state.integrationResourceLabel) {
+    payload.integration_resource_label = state.integrationResourceLabel;
+  }
+  const schema = state.schema.trim() || 'public';
+  if (schema) {
+    payload.schema = schema;
+  }
+  const table = state.table.trim();
+  if (table) {
+    payload.table = table;
+  }
+  const normalizedEvents = state.events.filter((event) => SUPABASE_EVENT_TYPES.includes(event));
+  if (normalizedEvents.length) {
+    payload.events = normalizedEvents;
+  }
+  return payload;
+}
+
+export function validateSupabaseConfig(state: SupabaseConfigState): {
+  valid: boolean;
+  errors: Partial<Record<'resource' | 'table' | 'events', string>>;
+} {
+  const errors: Partial<Record<'resource' | 'table' | 'events', string>> = {};
+  if (!state.integrationResourceId) {
+    errors.resource = 'Select a Supabase project';
+  }
+  if (!state.table.trim()) {
+    errors.table = 'Table name is required';
+  }
+  if (!state.events.some((event) => SUPABASE_EVENT_TYPES.includes(event))) {
+    errors.events = 'Select at least one event type';
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
 }
 
 export const makeDefaultCronConfig = (): CronConfigState => ({

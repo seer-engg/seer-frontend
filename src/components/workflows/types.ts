@@ -6,7 +6,7 @@ import type {
   TriggerSubscriptionResponse,
   TriggerSubscriptionUpdateRequest,
 } from '@/types/triggers';
-import type { BindingState, GmailConfigState } from './triggers/utils';
+import type { BindingState, GmailConfigState, SupabaseConfigState, CronConfigState } from './triggers/utils';
 
 export type BlockType =
   | 'tool'
@@ -58,12 +58,20 @@ export interface GmailIntegrationContext {
   isConnecting?: boolean;
 }
 
+export interface SupabaseIntegrationContext {
+  ready: boolean;
+  onConnect?: () => Promise<void> | void;
+  isConnecting?: boolean;
+}
+
 export interface TriggerDraftMeta {
   id: string;
   triggerKey: string;
   initialBindings: BindingState;
   initialProviderConfig?: Record<string, any>;
   initialGmailConfig?: GmailConfigState;
+  initialCronConfig?: CronConfigState;
+  initialSupabaseConfig?: SupabaseConfigState;
 }
 
 export interface TriggerNodeMeta {
@@ -73,6 +81,7 @@ export interface TriggerNodeMeta {
   handlers: TriggerNodeHandlers;
   integration?: {
     gmail?: GmailIntegrationContext;
+    supabase?: SupabaseIntegrationContext;
   };
   draft?: TriggerDraftMeta;
 }

@@ -1,9 +1,10 @@
 import type { LucideIcon } from 'lucide-react';
-import { Calendar, Link, Mail } from 'lucide-react';
+import { Calendar, Database, Link, Mail } from 'lucide-react';
 
 export const WEBHOOK_TRIGGER_KEY = 'webhook.generic';
 export const GMAIL_TRIGGER_KEY = 'poll.gmail.email_received';
 export const CRON_TRIGGER_KEY = 'schedule.cron';
+export const SUPABASE_TRIGGER_KEY = 'webhook.supabase.db_changes';
 
 export interface GmailFieldOption {
   label: string;
@@ -33,6 +34,7 @@ export const TRIGGER_ICON_BY_KEY: Record<string, LucideIcon> = {
   [WEBHOOK_TRIGGER_KEY]: Link,
   [GMAIL_TRIGGER_KEY]: Mail,
   [CRON_TRIGGER_KEY]: Calendar,
+  [SUPABASE_TRIGGER_KEY]: Database,
 };
 
 export const CRON_PRESETS = [
@@ -61,5 +63,14 @@ export const TIMEZONE_OPTIONS = [
   'Australia/Sydney',
 ];
 
+export const SUPABASE_FIELD_OPTIONS: GmailFieldOption[] = [
+  { label: 'Change type', path: 'data.type' },
+  { label: 'Schema', path: 'data.schema' },
+  { label: 'Table', path: 'data.table' },
+  { label: 'New record', path: 'data.record' },
+  { label: 'Old record', path: 'data.old_record' },
+];
+
 export const GMAIL_TOOL_FALLBACK_NAMES = ['gmail_read_emails'];
+export const SUPABASE_TOOL_FALLBACK_NAMES = ['supabase_table_query'];
 
