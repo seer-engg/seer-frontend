@@ -12,5 +12,6 @@
     "UI_COMPONENTS": "src/components/ui",
     "BADGE_REFERENCE": "src/components/workflows/ToolSelector.tsx"
   },
-  "outputStyle": "Explanatory"
+  "outputStyle": "Explanatory",
+  "enableAllProjectMcpServers": true
 }
