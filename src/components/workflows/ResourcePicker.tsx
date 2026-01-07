@@ -588,15 +588,19 @@ export function ResourcePicker({
                   disabled={isLoading}
                   aria-label="Refresh resources"
                 >
+                  {
+                    isLoading &&
                   <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                  }
                 </Button>
                 {isSupabaseBindingPicker && (
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={() => setBindModalOpen(true)}
+                    className='mr-6'
                   >
-                    Bind project
+                    Connect
                   </Button>
                 )}
               </div>
