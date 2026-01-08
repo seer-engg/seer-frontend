@@ -10,7 +10,13 @@ import { Node, ReactFlowProvider } from '@xyflow/react';
 import { useShallow } from 'zustand/shallow';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeConfigDialog } from '@/components/workflows/WorkflowNodeConfigDialog';
-import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema, TriggerDraftMeta } from '@/components/workflows/types';
+import {
+  WorkflowNodeData,
+  WorkflowEdge,
+  FunctionBlockSchema,
+  TriggerDraftMeta,
+  WorkflowNodeUpdateOptions,
+} from '@/components/workflows/types';
 import type { TriggerListOption } from '@/components/workflows/build-and-chat/build/TriggerSection';
 import type { TriggerSubscriptionUpdateRequest } from '@/types/triggers';
 import type { InputDef } from '@/types/workflow-spec';
@@ -240,6 +246,7 @@ export default function Workflows() {
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [lastRunVersionId, setLastRunVersionId] = useState<number | null>(null);
   const resetSavedDataRef = useRef<(() => void) | null>(null);
+  const skipNextAutosaveRef = useRef(false);
   const editingNode = useMemo(
     () => nodes.find((node) => node.id === editingNodeId) ?? null,
     [nodes, editingNodeId],
@@ -444,41 +451,6 @@ export default function Workflows() {
     [functionBlocksMap, setNodes],
   );
 
-  const handleNodeConfigUpdate = useCallback(
-    (nodeId: string, updates: Partial<WorkflowNodeData>) => {
-      setNodes((prevNodes) =>
-        prevNodes.map((node) => {
-          if (node.id !== nodeId) {
-            return node;
-          }
-
-          const mergedData: WorkflowNodeData = {
-            ...node.data,
-            ...updates,
-          };
-
-          if (updates.config) {
-            const mergedConfig = {
-              ...(node.data?.config || {}),
-              ...updates.config,
-            };
-
-            if ('fields' in updates.config) {
-              mergedConfig.fields = updates.config.fields;
-            }
-
-            mergedData.config = mergedConfig;
-          }
-
-          return {
-            ...node,
-            data: mergedData,
-          };
-        }),
-      );
-    },
-    [setNodes],
-  );
 
   const handleAddTriggerDraft = useCallback(
     (triggerKey: string) => {
@@ -667,15 +639,89 @@ export default function Workflows() {
     },
   });
 
+  const handleNodeConfigUpdate = useCallback(
+    async (
+      nodeId: string,
+      updates: Partial<WorkflowNodeData>,
+      options?: WorkflowNodeUpdateOptions,
+    ) => {
+      const canPersistNow =
+        Boolean(
+          options?.persist &&
+            selectedWorkflowId &&
+            loadedWorkflow &&
+            typeof loadedWorkflow.draft_revision === 'number',
+        );
+
+      if (canPersistNow) {
+        skipNextAutosaveRef.current = true;
+      }
+
+      setNodes((prevNodes) =>
+        prevNodes.map((node) => {
+          if (node.id !== nodeId) {
+            return node;
+          }
+
+          const mergedData: WorkflowNodeData = {
+            ...node.data,
+            ...updates,
+          };
+
+          if (updates.config) {
+            const mergedConfig = {
+              ...(node.data?.config || {}),
+              ...updates.config,
+            };
+
+            if ('fields' in updates.config) {
+              mergedConfig.fields = updates.config.fields;
+            }
+
+            mergedData.config = mergedConfig;
+          }
+
+          return {
+            ...node,
+            data: mergedData,
+          };
+        }),
+      );
+
+      if (!canPersistNow) {
+        return;
+      }
+
+      const graph = {
+        nodes: useCanvasStore.getState().nodes,
+        edges: useCanvasStore.getState().edges,
+      };
+
+      try {
+        await autosaveCallback(graph);
+      } catch (error) {
+        skipNextAutosaveRef.current = false;
+        triggerSave();
+        throw error;
+      }
+    },
+    [autosaveCallback, loadedWorkflow, selectedWorkflowId, setNodes, triggerSave],
+  );
+
   useEffect(() => {
     resetSavedDataRef.current = resetSavedData;
   }, [resetSavedData]);
 
   // Trigger autosave when nodes or edges change
   useEffect(() => {
-    if (selectedWorkflowId && !isLoadingWorkflow) {
-      triggerSave();
+    if (!selectedWorkflowId || isLoadingWorkflow) {
+      return;
     }
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
+      return;
+    }
+    triggerSave();
   }, [nodes, edges, selectedWorkflowId, triggerSave, isLoadingWorkflow]);
 
   // Handle autosave errors
