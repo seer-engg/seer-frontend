@@ -15,6 +15,7 @@ import type { TriggerListOption } from '@/components/workflows/build-and-chat/bu
 import type { TriggerSubscriptionUpdateRequest } from '@/types/triggers';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
+import { WorkflowImportDialog } from '@/components/workflows/WorkflowImportDialog';
 import { WorkflowLifecycleBar } from '@/components/workflows/WorkflowLifecycleBar';
 import { useWorkflowBuilder, WorkflowListItem, WorkflowModel } from '@/hooks/useWorkflowBuilder';
 import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
@@ -29,6 +30,8 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { toast } from '@/components/ui/sonner';
 import { BackendAPIError } from '@/lib/api-client';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
+import { KeymapDialog } from '@/components/KeymapDialog';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import {
   WEBHOOK_TRIGGER_KEY,
@@ -217,12 +220,24 @@ export default function Workflows() {
   const [isConnectingSupabase, setIsConnectingSupabase] = useState(false);
   const [proposalPreview, setProposalPreview] = useState<WorkflowProposalPreview | null>(null);
   const [lastRunVersionId, setLastRunVersionId] = useState<number | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [keymapOpen, setKeymapOpen] = useState(false);
   const resetSavedDataRef = useRef<(() => void) | null>(null);
   const editingNode = useMemo(
     () => nodes.find((node) => node.id === editingNodeId) ?? null,
     [nodes, editingNodeId],
   );
-  
+
+  // Register global keyboard shortcut for keymap
+  useKeyboardShortcut({
+    key: '/',
+    modifiers: { ctrl: true, meta: true },
+    handler: () => setKeymapOpen(true),
+    category: 'Help',
+    description: 'Show keyboard shortcuts',
+    scope: 'global',
+  });
+
   const {
     workflows,
     isLoading: isLoadingWorkflows,
@@ -234,6 +249,8 @@ export default function Workflows() {
     publishWorkflow,
     getWorkflow,
     restoreWorkflowVersion,
+    exportWorkflow,
+    importWorkflow,
     isCreating,
     isExecuting,
     isDeleting,
@@ -1123,6 +1140,33 @@ export default function Workflows() {
     }
   }, [createWorkflow, navigate]);
 
+  const handleExportWorkflow = useCallback(async (workflowId: string) => {
+    try {
+      await exportWorkflow(workflowId);
+      toast.success('Workflow exported successfully');
+    } catch (error) {
+      console.error('Failed to export workflow:', error);
+      toast.error('Failed to export workflow');
+    }
+  }, [exportWorkflow]);
+
+  const handleImportWorkflow = useCallback(async (file: File, options: { name?: string; importTriggers: boolean }) => {
+    try {
+      const result = await importWorkflow(file, options);
+      // Navigate to the imported workflow
+      navigate(`/workflows/${result.workflow_id}`, { replace: true });
+      toast.success(`Workflow "${result.name}" imported successfully`);
+    } catch (error) {
+      console.error('Failed to import workflow:', error);
+      if (error instanceof BackendAPIError) {
+        toast.error(`Failed to import workflow: ${error.message}`);
+      } else {
+        toast.error('Failed to import workflow');
+      }
+      throw error;
+    }
+  }, [importWorkflow, navigate]);
+
   const handleWorkflowGraphSync = useCallback(
     (graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
       if (!graph) return;
@@ -1333,6 +1377,15 @@ export default function Workflows() {
               onDeleteWorkflow={handleDeleteWorkflow}
               onRenameWorkflow={handleRenameWorkflow}
               onNewWorkflow={handleNewWorkflow}
+              onExportWorkflow={handleExportWorkflow}
+              onImportWorkflow={() => setShowImportDialog(true)}
+            />
+
+            {/* Workflow Import Dialog */}
+            <WorkflowImportDialog
+              open={showImportDialog}
+              onOpenChange={setShowImportDialog}
+              onImport={handleImportWorkflow}
             />
             
             </div>
@@ -1412,6 +1465,9 @@ export default function Workflows() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Keyboard Shortcuts Dialog */}
+      <KeymapDialog open={keymapOpen} onOpenChange={setKeymapOpen} />
     </div>
   );
 }

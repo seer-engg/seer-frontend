@@ -34,6 +34,7 @@ interface BlockConfigPanelProps {
   variant?: 'panel' | 'inline';
   liveUpdate?: boolean;
   liveUpdateDelayMs?: number;
+  showSaveButton?: boolean; // Explicitly control save button visibility (default: auto-detect)
 }
 
 export function BlockConfigPanel({
@@ -45,6 +46,7 @@ export function BlockConfigPanel({
   variant = 'panel',
   liveUpdate = false,
   liveUpdateDelayMs = 350,
+  showSaveButton,
 }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
@@ -373,7 +375,7 @@ export function BlockConfigPanel({
     }
   };
 
-  const shouldShowSaveButton = !autoSave && !liveUpdate;
+  const shouldShowSaveButton = showSaveButton ?? (!autoSave && !liveUpdate);
   const saveButton = shouldShowSaveButton ? (
     <Button onClick={handleSave} className="w-full" size="sm">
       <Save className="w-4 h-4 mr-2" />

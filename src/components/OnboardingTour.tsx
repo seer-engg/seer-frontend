@@ -12,7 +12,7 @@ const getTourSteps = (): Step[] => [
       <div>
         <h3 className="text-lg font-semibold mb-2">Welcome to Seer! 👋</h3>
         <p className="text-sm text-muted-foreground">
-          Seer helps you evaluate and improve AI agents. Let's take a quick tour to get you started.
+          Seer helps you build and automate AI workflows. Let's take a quick tour to get you started.
         </p>
       </div>
     ),
@@ -21,81 +21,29 @@ const getTourSteps = (): Step[] => [
     disableOverlayClose: false,
   },
   {
-    target: "aside",
+    target: "main",
     content: (
       <div>
-        <h3 className="text-lg font-semibold mb-2">Main Navigation</h3>
+        <h3 className="text-lg font-semibold mb-2">Workflow Canvas ⚡</h3>
         <p className="text-sm text-muted-foreground">
-          Use the sidebar to navigate between Orchestrator, Evals, Traces, and Tool Hub. Click the collapse button to save space.
+          Build powerful AI workflows here. Connect LLM blocks, tools, and integrations to create automated processes. Drag and drop blocks to design your workflow visually.
         </p>
       </div>
     ),
-    placement: "right",
+    placement: "center",
     disableBeacon: true,
   },
   {
-    target: 'a[href="/tool-orchestrator"]',
+    target: '[data-floating-actions]',
     content: (
       <div>
-        <h3 className="text-lg font-semibold mb-2">Orchestrator ⚡</h3>
+        <h3 className="text-lg font-semibold mb-2">Quick Actions 🎯</h3>
         <p className="text-sm text-muted-foreground">
-          Build multi-step agent workflows here. The Orchestrator can coordinate complex tasks across multiple integrations like GitHub, Asana, and Google Drive.
+          Access Settings and switch themes from these floating buttons on the workflow canvas. Configure your OAuth connections, manage your profile, and customize your experience.
         </p>
       </div>
     ),
-    placement: "right",
-    disableBeacon: true,
-  },
-  {
-    target: 'a[href="/eval"]',
-    content: (
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Evals ✨</h3>
-        <p className="text-sm text-muted-foreground">
-          Generate agent specs and test cases here. Describe your agent idea, and Seer will create a detailed specification with test scenarios. This is where the magic happens!
-        </p>
-      </div>
-    ),
-    placement: "right",
-    disableBeacon: true,
-  },
-  {
-    target: 'a[href="/tools"]',
-    content: (
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Tool Hub 🛠️</h3>
-        <p className="text-sm text-muted-foreground">
-          Connect integrations to extend your agent capabilities. We support GitHub, Google Drive, and Asana, plus sandboxed testing for 15+ more integrations like Twitter, Slack, and Notion.
-        </p>
-      </div>
-    ),
-    placement: "right",
-    disableBeacon: true,
-  },
-  {
-    target: 'a[href="/trace"]',
-    content: (
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Traces 📊</h3>
-        <p className="text-sm text-muted-foreground">
-          View detailed execution traces of your agents. See every step, tool call, and decision your agents make. Perfect for debugging and understanding agent behavior.
-        </p>
-      </div>
-    ),
-    placement: "right",
-    disableBeacon: true,
-  },
-  {
-    target: 'a[href="/settings"]',
-    content: (
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Settings ⚙️</h3>
-        <p className="text-sm text-muted-foreground">
-          Configure your API keys, manage preferences, and customize your experience. Don't forget to set up your OpenAI API key for unlimited queries!
-        </p>
-      </div>
-    ),
-    placement: "right",
+    placement: "left",
     disableBeacon: true,
   },
   {
@@ -104,7 +52,7 @@ const getTourSteps = (): Step[] => [
       <div>
         <h3 className="text-lg font-semibold mb-2">You're All Set! 🎉</h3>
         <p className="text-sm text-muted-foreground">
-          You can restart this tour anytime from Settings. Ready to start evaluating agents? Try the Orchestrator or generate your first agent spec in Evals!
+          You can restart this tour anytime from Settings. Ready to start building? Create your first workflow and connect it to your favorite tools!
         </p>
       </div>
     ),
