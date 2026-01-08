@@ -36,6 +36,7 @@ interface BlockConfigPanelProps {
   liveUpdateDelayMs?: number;
   showSaveButton?: boolean; // Explicitly control save button visibility (default: auto-detect)
   validationErrors?: Record<string, string>; // Validation errors from parent
+  onChange?: (config: Record<string, any>, oauthScope?: string) => void; // Notify parent of local changes (for button enable, not for parent state update)
 }
 
 export function BlockConfigPanel({
@@ -49,6 +50,7 @@ export function BlockConfigPanel({
   liveUpdateDelayMs = 350,
   showSaveButton,
   validationErrors = {},
+  onChange,
 }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
@@ -77,7 +79,7 @@ export function BlockConfigPanel({
     oauthScopeRef.current = oauthScope;
   }, [config, inputRefs, oauthScope]);
 
-  // Notify parent of local state changes (for change detection in dialogs)
+  // Notify parent of local state changes (for change detection only, doesn't trigger parent state update)
   useEffect(() => {
     if (onChange && node) {
       // Only notify if we've synced the node already (avoid triggering on initial load)

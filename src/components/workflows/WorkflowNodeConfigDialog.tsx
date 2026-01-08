@@ -60,6 +60,10 @@ export function WorkflowNodeConfigDialog({
   const [pendingClose, setPendingClose] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
+  // Track local edits from BlockConfigPanel (for change detection without triggering autosave)
+  const [localConfig, setLocalConfig] = useState<Record<string, any> | null>(null);
+  const [localOauthScope, setLocalOauthScope] = useState<string | undefined>(undefined);
+
   // Track original node for comparison
   const originalNodeRef = useRef<Node<WorkflowNodeData> | null>(null);
 
@@ -83,24 +87,32 @@ export function WorkflowNodeConfigDialog({
   useEffect(() => {
     if (node?.id !== originalNodeRef.current?.id) {
       originalNodeRef.current = node ? JSON.parse(JSON.stringify(node)) : null;
+      setLocalConfig(null);
+      setLocalOauthScope(undefined);
       setHasUnsavedChanges(false);
       setPendingClose(false);
     }
   }, [node?.id]);
 
-  // Detect changes by comparing current node with original
+  // Detect changes by comparing LOCAL state with original node
   useEffect(() => {
-    if (!node || !originalNodeRef.current) return;
+    if (!node || !originalNodeRef.current) {
+      setHasUnsavedChanges(false);
+      return;
+    }
 
-    const currentConfig = JSON.stringify(node.data.config);
-    const originalConfig = JSON.stringify(originalNodeRef.current.data.config);
-    const currentOauth = node.data.oauth_scope;
+    // Use local state if available, otherwise fall back to node state
+    const currentConfig = localConfig ?? node.data.config;
+    const currentOauth = localOauthScope ?? node.data.oauth_scope;
+    const originalConfig = originalNodeRef.current.data.config;
     const originalOauth = originalNodeRef.current.data.oauth_scope;
 
     const hasChanges =
-      currentConfig !== originalConfig || currentOauth !== originalOauth;
+      JSON.stringify(currentConfig) !== JSON.stringify(originalConfig) ||
+      currentOauth !== originalOauth;
+
     setHasUnsavedChanges(hasChanges);
-  }, [node?.data.config, node?.data.oauth_scope]);
+  }, [node, localConfig, localOauthScope]);
 
   // Validate configuration when node changes
   useEffect(() => {
@@ -137,17 +149,30 @@ export function WorkflowNodeConfigDialog({
   const hasValidationErrors = Object.keys(validationErrors).length > 0;
   const validationErrorCount = Object.keys(validationErrors).length;
 
-  // Save handler
+  // Save handler - uses LOCAL state, not node state
   const handleSave = useCallback(() => {
     if (!node || !hasUnsavedChanges || hasValidationErrors) return;
 
+    // Use local state if available, otherwise fall back to node state
+    const finalConfig = localConfig ?? node.data.config;
+    const finalOauthScope = localOauthScope ?? node.data.oauth_scope;
+
+    // Update parent state - this triggers autosave which persists to backend
     onUpdate(node.id, {
-      config: node.data.config,
-      oauth_scope: node.data.oauth_scope,
+      config: finalConfig,
+      oauth_scope: finalOauthScope,
     });
 
+    // Reset local state after save
+    setLocalConfig(null);
+    setLocalOauthScope(undefined);
     setHasUnsavedChanges(false);
-    originalNodeRef.current = node ? JSON.parse(JSON.stringify(node)) : null;
+
+    // Update original ref with the saved state
+    originalNodeRef.current = node ? JSON.parse(JSON.stringify({
+      ...node,
+      data: { ...node.data, config: finalConfig, oauth_scope: finalOauthScope }
+    })) : null;
 
     toast.success('Configuration saved', {
       description: 'Block configuration has been saved successfully',
@@ -157,7 +182,7 @@ export function WorkflowNodeConfigDialog({
       setPendingClose(false);
       onOpenChange(false);
     }
-  }, [node, hasUnsavedChanges, hasValidationErrors, onUpdate, onOpenChange, pendingClose]);
+  }, [node, localConfig, localOauthScope, hasUnsavedChanges, hasValidationErrors, onUpdate, onOpenChange, pendingClose]);
 
   // Handle dialog close attempt
   const handleOpenChange = useCallback(
@@ -185,18 +210,14 @@ export function WorkflowNodeConfigDialog({
     handleSave();
   }, [handleSave]);
 
-  // Handle local config changes from BlockConfigPanel
-  const handleConfigChange = useCallback(
+  // Handle local config changes from BlockConfigPanel (for change detection only, doesn't trigger parent update)
+  const handleLocalConfigChange = useCallback(
     (config: Record<string, any>, oauthScope?: string) => {
-      if (!node) return;
-
-      // Update the node immediately so change detection can work
-      onUpdate(node.id, {
-        config,
-        oauth_scope: oauthScope,
-      });
+      // Just update local state - no parent update, no autosave trigger
+      setLocalConfig(config);
+      setLocalOauthScope(oauthScope);
     },
-    [node, onUpdate]
+    []
   );
 
   // Register Ctrl+S shortcut
