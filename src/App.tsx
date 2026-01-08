@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
+import PublicForm from "./pages/PublicForm";
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { getStoredSignupSource } from "./utils/utm-tracker";
@@ -87,6 +88,10 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
+            {/* Public form route - MUST come before NotFound to catch /:suffix */}
+            <Route path="/:suffix" element={<PublicForm />} />
+
             <Route path="*" element={<NotFound />} />
           </Routes>
           </BrowserRouter>

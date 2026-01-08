@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Calendar, Copy, KeyRound, Link as LinkIcon, Loader2, Mail, PlusCircle, Trash2 } from 'lucide-react';
+import { Calendar, Copy, KeyRound, Link as LinkIcon, Loader2, Mail, PlusCircle, Trash2, FormInput, ExternalLink } from 'lucide-react';
 
 import {
   Dialog,
@@ -18,6 +18,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { InputBlockSection } from '@/components/workflows/block-config/sections/InputBlockSection';
 import { getBackendBaseUrl } from '@/lib/api-client';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
@@ -29,6 +31,7 @@ import {
   CRON_FIELD_OPTIONS,
   CRON_PRESETS,
   TIMEZONE_OPTIONS,
+  FORM_TRIGGER_KEY,
 } from './constants';
 import {
   type CronConfigState,
@@ -37,6 +40,7 @@ import {
   serializeCronConfig,
   validateCronExpression,
 } from './utils';
+import { FormField } from '../block-config/widgets/FormField';
 
 type BindingMode = 'event' | 'literal';
 
@@ -155,6 +159,14 @@ export function WorkflowTriggerModal({
   const [selectedTriggerKey, setSelectedTriggerKey] = useState<string>(WEBHOOK_TRIGGER_KEY);
   const [gmailConfig, setGmailConfig] = useState<GmailConfigState>(() => makeDefaultGmailConfig());
   const [cronConfig, setCronConfig] = useState<CronConfigState>(() => makeDefaultCronConfig());
+  const [formConfig, setFormConfig] = useState({
+    suffix: '',
+    title: '',
+    description: '',
+    fields: [] as any[],
+    submitButtonText: 'Submit',
+    successMessage: 'Thank you for your submission!',
+  });
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [creatingTriggerKey, setCreatingTriggerKey] = useState<string | null>(null);
   const [pendingToggleId, setPendingToggleId] = useState<number | null>(null);
@@ -187,6 +199,12 @@ export function WorkflowTriggerModal({
   );
   const triggerOptions = useMemo(() => {
     const options: TriggerOption[] = [];
+    // Form trigger option
+    options.push({
+      key: FORM_TRIGGER_KEY,
+      title: 'Hosted Form',
+      description: 'Create a public form with custom URL that triggers this workflow',
+    });
     if (genericTrigger) {
       options.push({
         key: WEBHOOK_TRIGGER_KEY,
@@ -565,6 +583,64 @@ export function WorkflowTriggerModal({
     }
   };
 
+  const handleCreateFormSubscription = async () => {
+    if (!workflowId) {
+      toast.error('Save the workflow before adding triggers');
+      return;
+    }
+    if (!formConfig.suffix || !formConfig.title || formConfig.fields.length === 0) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    setCreatingTriggerKey(FORM_TRIGGER_KEY);
+    try {
+      // Build auto-bindings from form fields
+      const bindings: Record<string, string> = {};
+      formConfig.fields.forEach((field: any) => {
+        bindings[field.name] = `\${event.data.${field.name}}`;
+      });
+
+      await createSubscription({
+        workflow_id: workflowId,
+        trigger_key: FORM_TRIGGER_KEY, // Form triggers use dedicated form.hosted type
+        form_suffix: formConfig.suffix,
+        form_fields: formConfig.fields,
+        form_config: {
+          title: formConfig.title,
+          description: formConfig.description,
+          submitButtonText: formConfig.submitButtonText,
+          successMessage: formConfig.successMessage,
+        },
+        bindings,
+        enabled: true,
+      });
+
+      const formUrl = `${window.location.origin}/${formConfig.suffix}`;
+      toast.success('Form trigger created!', {
+        description: `Access at: ${formUrl}`,
+      });
+
+      // Reset form config
+      setFormConfig({
+        suffix: '',
+        title: '',
+        description: '',
+        fields: [],
+        submitButtonText: 'Submit',
+        successMessage: 'Thank you for your submission!',
+      });
+
+      setActiveTab('subscriptions');
+    } catch (error) {
+      console.error('Failed to create form trigger', error);
+      toast.error('Unable to create form trigger', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setCreatingTriggerKey(null);
+    }
+  };
+
   const handleToggle = async (subscriptionId: number, enabled: boolean) => {
     setPendingToggleId(subscriptionId);
     try {
@@ -729,6 +805,38 @@ export function WorkflowTriggerModal({
               <Copy className="mr-2 h-4 w-4" />
               Copy Secret
             </Button>
+          </div>
+        )}
+
+        {subscription.form_suffix && (
+          <div className="flex flex-col gap-2 rounded-md border border-dashed border-muted p-3 bg-muted/30">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <FormInput className="h-4 w-4" />
+              Public Form URL
+            </div>
+            <code className="text-xs break-all">
+              {window.location.origin}/{subscription.form_suffix}
+            </code>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  handleCopy(`${window.location.origin}/${subscription.form_suffix}`, 'Form URL')
+                }
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Copy URL
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(`/${subscription.form_suffix}`, '_blank')}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Preview
+              </Button>
+            </div>
           </div>
         )}
 
@@ -1145,9 +1253,12 @@ export function WorkflowTriggerModal({
             </Button>
           )}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground">Label filters</Label>
+        <div className="space-y-2">
+          <FormField
+            label="Label filters"
+            description="Comma-separated Gmail label IDs (defaults to INBOX)"
+            defaultValue="INBOX"
+          >
             <Input
               value={gmailConfig.labelIds}
               placeholder="INBOX, UNREAD"
@@ -1158,10 +1269,11 @@ export function WorkflowTriggerModal({
                 }))
               }
             />
-            <p className="text-xs text-muted-foreground">Comma-separated Gmail label IDs (defaults to INBOX).</p>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground">Search query</Label>
+          </FormField>
+          <FormField
+            label="Search query"
+            description="Optional Gmail query appended to the poll watermark"
+          >
             <Input
               value={gmailConfig.query}
               placeholder="from:vip@example.com is:unread"
@@ -1172,10 +1284,12 @@ export function WorkflowTriggerModal({
                 }))
               }
             />
-            <p className="text-xs text-muted-foreground">Optional Gmail query appended to the poll watermark.</p>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground">Max results per poll</Label>
+          </FormField>
+          <FormField
+            label="Max results per poll"
+            description="Between 1 and 25 messages per cycle"
+            defaultValue={25}
+          >
             <Input
               type="number"
               min={1}
@@ -1188,10 +1302,12 @@ export function WorkflowTriggerModal({
                 }))
               }
             />
-            <p className="text-xs text-muted-foreground">Between 1 and 25 messages per cycle.</p>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground">Overlap window (ms)</Label>
+          </FormField>
+          <FormField
+            label="Overlap window (ms)"
+            description="Re-read recent emails for dedupe protection"
+            defaultValue={300000}
+          >
             <Input
               type="number"
               min={0}
@@ -1205,8 +1321,7 @@ export function WorkflowTriggerModal({
                 }))
               }
             />
-            <p className="text-xs text-muted-foreground">Re-read recent emails for dedupe protection.</p>
-          </div>
+          </FormField>
         </div>
         {bindingGrid}
         <Button
@@ -1253,23 +1368,24 @@ export function WorkflowTriggerModal({
     return (
       <div className="space-y-5">
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground">Cron Expression</Label>
-            <Input
-              value={cronConfig.cronExpression}
-              placeholder="*/5 * * * *"
-              onChange={(e) =>
-                setCronConfig((prev) => ({ ...prev, cronExpression: e.target.value }))
-              }
-              className={!validation.valid ? 'border-destructive' : ''}
-            />
-            {!validation.valid && validation.error && (
-              <p className="text-xs text-destructive">{validation.error}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Five fields: minute (0-59), hour (0-23), day (1-31), month (1-12), weekday (0-6)
-            </p>
-          </div>
+          <FormField
+            label="Cron Expression"
+            description="Five fields: minute (0-59), hour (0-23), day (1-31), month (1-12), weekday (0-6)"
+          >
+            <div>
+              <Input
+                value={cronConfig.cronExpression}
+                placeholder="*/5 * * * *"
+                onChange={(e) =>
+                  setCronConfig((prev) => ({ ...prev, cronExpression: e.target.value }))
+                }
+                className={!validation.valid ? 'border-destructive' : ''}
+              />
+              {!validation.valid && validation.error && (
+                <p className="text-xs text-destructive mt-1">{validation.error}</p>
+              )}
+            </div>
+          </FormField>
 
           <div className="space-y-2">
             <Label className="text-xs uppercase text-muted-foreground">Quick Presets</Label>
@@ -1291,44 +1407,42 @@ export function WorkflowTriggerModal({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-xs uppercase text-muted-foreground">Timezone</Label>
-              <Select
-                value={cronConfig.timezone}
-                onValueChange={(value) =>
-                  setCronConfig((prev) => ({ ...prev, timezone: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select timezone" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIMEZONE_OPTIONS.map((tz) => (
-                    <SelectItem key={tz} value={tz}>
-                      {tz}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Schedule will execute in this timezone
-              </p>
-            </div>
+          <FormField
+            label="Timezone"
+            description="Schedule will execute in this timezone"
+            defaultValue="UTC"
+          >
+            <Select
+              value={cronConfig.timezone}
+              onValueChange={(value) =>
+                setCronConfig((prev) => ({ ...prev, timezone: value }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select timezone" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMEZONE_OPTIONS.map((tz) => (
+                  <SelectItem key={tz} value={tz}>
+                    {tz}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
 
-            <div className="space-y-2">
-              <Label className="text-xs uppercase text-muted-foreground">
-                Description (Optional)
-              </Label>
-              <Input
-                value={cronConfig.description}
-                placeholder="e.g., Daily morning report generation"
-                onChange={(e) =>
-                  setCronConfig((prev) => ({ ...prev, description: e.target.value }))
-                }
-              />
-            </div>
-          </div>
+          <FormField
+            label="Description"
+            description="Optional description for this cron schedule"
+          >
+            <Input
+              value={cronConfig.description}
+              placeholder="e.g., Daily morning report generation"
+              onChange={(e) =>
+                setCronConfig((prev) => ({ ...prev, description: e.target.value }))
+              }
+            />
+          </FormField>
         </div>
         {bindingGrid}
         <Button
@@ -1345,6 +1459,101 @@ export function WorkflowTriggerModal({
             <>
               <PlusCircle className="mr-2 h-4 w-4" />
               Create Cron Trigger
+            </>
+          )}
+        </Button>
+      </div>
+    );
+  };
+
+  const renderFormTriggerForm = () => {
+    const canCreate = workflowId && formConfig.suffix && formConfig.title && formConfig.fields.length > 0;
+    const isCreating = creatingTriggerKey === FORM_TRIGGER_KEY;
+
+    return (
+      <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="form-suffix">
+              Form URL <span className="text-destructive">*</span>
+            </Label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                {window.location.origin}/
+              </span>
+              <Input
+                id="form-suffix"
+                value={formConfig.suffix}
+                onChange={(e) =>
+                  setFormConfig((prev) => ({
+                    ...prev,
+                    suffix: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                  }))
+                }
+                placeholder="contact-form"
+                className="font-mono"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Lowercase letters, numbers, and hyphens only
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="form-title">
+              Form Title <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="form-title"
+              value={formConfig.title}
+              onChange={(e) => setFormConfig((prev) => ({ ...prev, title: e.target.value }))}
+              placeholder="Contact Us"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="form-description">Description (Optional)</Label>
+            <Textarea
+              id="form-description"
+              value={formConfig.description}
+              onChange={(e) =>
+                setFormConfig((prev) => ({ ...prev, description: e.target.value }))
+              }
+              placeholder="Fill out this form to get in touch"
+              rows={2}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>
+              Form Fields <span className="text-destructive">*</span>
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Define the fields that will appear in your form
+            </p>
+            <InputBlockSection
+              config={{ fields: formConfig.fields }}
+              setConfig={(newConfig) =>
+                setFormConfig((prev) => ({ ...prev, fields: newConfig.fields }))
+              }
+            />
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          onClick={handleCreateFormSubscription}
+          disabled={!canCreate || isCreating}
+        >
+          {isCreating ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Create Form Trigger
             </>
           )}
         </Button>
@@ -1399,6 +1608,7 @@ export function WorkflowTriggerModal({
           })}
         </div>
 
+        {selectedTriggerKey === FORM_TRIGGER_KEY && renderFormTriggerForm()}
         {selectedTriggerKey === WEBHOOK_TRIGGER_KEY && renderWebhookForm()}
         {selectedTriggerKey === GMAIL_TRIGGER_KEY && renderGmailForm()}
         {selectedTriggerKey === CRON_TRIGGER_KEY && renderCronForm()}

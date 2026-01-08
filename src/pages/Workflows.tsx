@@ -47,6 +47,7 @@ import {
   GMAIL_TOOL_FALLBACK_NAMES,
   SUPABASE_TRIGGER_KEY,
   SUPABASE_TOOL_FALLBACK_NAMES,
+  FORM_TRIGGER_KEY,
 } from '@/components/workflows/triggers/constants';
 import {
   buildBindingsPayload,
@@ -881,6 +882,21 @@ export default function Workflows() {
 
   const triggerOptions = useMemo<TriggerListOption[]>(() => {
     const options: TriggerListOption[] = [];
+
+    const formTrigger = triggerCatalog.find((trigger) => trigger.key === FORM_TRIGGER_KEY);
+    if (formTrigger) {
+      options.push({
+        key: FORM_TRIGGER_KEY,
+        title: formTrigger.title ?? 'Hosted Form',
+        description:
+          formTrigger.description ?? 'Create a public form with custom URL that triggers this workflow',
+        disabled: false,
+        onPrimaryAction: () => handleAddTriggerDraft(FORM_TRIGGER_KEY),
+        actionLabel: 'Add to canvas',
+        badge: 'Form',
+        status: 'ready',
+      });
+    }
 
     const webhookTrigger = triggerCatalog.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY);
     if (webhookTrigger) {
