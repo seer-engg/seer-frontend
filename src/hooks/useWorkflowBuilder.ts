@@ -13,6 +13,7 @@ export function useWorkflowBuilder() {
   const {
     workflows,
     isLoading,
+    workflowsLoaded,
     isCreating,
     isUpdating,
     isSavingDraft,
@@ -37,6 +38,7 @@ export function useWorkflowBuilder() {
     useShallow((state) => ({
       workflows: state.workflows,
       isLoading: state.isLoading,
+      workflowsLoaded: state.workflowsLoaded,
       isCreating: state.isCreating,
       isUpdating: state.isUpdating,
       isSavingDraft: state.isSavingDraft,
@@ -61,11 +63,11 @@ export function useWorkflowBuilder() {
   );
 
   useEffect(() => {
-    if (!workflows.length && !isLoading) {
+    if (!workflowsLoaded && !isLoading) {
       void loadWorkflows();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflows.length, isLoading]);
+  }, [workflowsLoaded, isLoading]);
 
   return {
     workflows,

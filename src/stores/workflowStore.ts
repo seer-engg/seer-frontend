@@ -31,6 +31,7 @@ interface WorkflowVersionState {
 export interface WorkflowStore {
   workflows: WorkflowListItem[];
   isLoading: boolean;
+  workflowsLoaded: boolean;
   error: string | null;
   currentWorkflowId: string | null;
   currentWorkflow: WorkflowModel | null;
@@ -118,6 +119,7 @@ interface BackendClientWithMeta {
 const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   workflows: [],
   isLoading: false,
+  workflowsLoaded: false,
   error: null,
   currentWorkflowId: null,
   currentWorkflow: null,
@@ -136,10 +138,10 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
       const response = await backendApiClient.request<WorkflowListResponse>('/api/v1/workflows', {
         method: 'GET',
       });
-      set({ workflows: response.items, isLoading: false });
+      set({ workflows: response.items, isLoading: false, workflowsLoaded: true });
       return response.items;
     } catch (error) {
-      set({ isLoading: false, error: error instanceof Error ? error.message : 'Failed to load workflows' });
+      set({ isLoading: false, workflowsLoaded: true, error: error instanceof Error ? error.message : 'Failed to load workflows' });
       throw error;
     }
   },
