@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { Calendar, Copy, Database, Info, Link, Loader2, Mail, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 import type { WorkflowNodeData } from '../types';
+import type { InputDef } from '@/types/workflow-spec';
 import { ResourcePicker } from '../ResourcePicker';
 import {
   BindingState,
@@ -72,6 +73,16 @@ const SUPABASE_EVENT_LABELS: Record<SupabaseEventType, string> = {
   DELETE: 'DELETE – Row removed',
 };
 
+const INPUT_NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const INPUT_TYPE_OPTIONS: Array<{ label: string; value: InputDef['type'] }> = [
+  { label: 'Text', value: 'string' },
+  { label: 'Number', value: 'number' },
+  { label: 'Integer', value: 'integer' },
+  { label: 'Boolean', value: 'boolean' },
+  { label: 'Object', value: 'object' },
+  { label: 'Array', value: 'array' },
+];
+
 export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected }: NodeProps<WorkflowNode>) {
   const triggerMeta = data.triggerMeta;
 
@@ -110,9 +121,23 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   const [isSaving, setIsSaving] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showInputsEditor, setShowInputsEditor] = useState(false);
+  const [isSavingWorkflowInput, setIsSavingWorkflowInput] = useState(false);
+  const [inputDraft, setInputDraft] = useState<{
+    name: string;
+    type: InputDef['type'];
+    description: string;
+    required: boolean;
+  }>({
+    name: '',
+    type: 'string',
+    description: '',
+    required: true,
+  });
 
   const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
   const hasInputs = workflowInputEntries.length > 0;
+  const canManageInputs = Boolean(triggerMeta.handlers.updateWorkflowInputs);
 
   const isSupabaseTrigger = triggerKey === SUPABASE_TRIGGER_KEY;
   const isWebhookTrigger = triggerKey === WEBHOOK_TRIGGER_KEY || isSupabaseTrigger;
@@ -133,6 +158,12 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       setBindingState(buildDefaultBindingState(workflowInputs));
     }
   }, [subscription, workflowInputs, draft?.initialBindings]);
+
+  useEffect(() => {
+    if (workflowInputEntries.length === 0) {
+      setShowInputsEditor(true);
+    }
+  }, [workflowInputEntries.length]);
 
   useEffect(() => {
     if (!isGmailTrigger) {
@@ -175,6 +206,80 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       setSupabaseConfig(makeDefaultSupabaseConfig());
     }
   }, [subscription?.provider_config, isSupabaseTrigger, draft?.initialSupabaseConfig]);
+
+  const handleCreateWorkflowInput = async () => {
+    if (!triggerMeta.handlers.updateWorkflowInputs) {
+      toast.error('Unable to edit workflow inputs');
+      return;
+    }
+    const trimmedName = inputDraft.name.trim();
+    if (!trimmedName) {
+      toast.error('Input name is required');
+      return;
+    }
+    if (!INPUT_NAME_REGEX.test(trimmedName)) {
+      toast.error('Use letters, numbers, or underscores (no spaces) for input names');
+      return;
+    }
+    if (workflowInputs && workflowInputs[trimmedName]) {
+      toast.error('An input with this name already exists');
+      return;
+    }
+    setIsSavingWorkflowInput(true);
+    const nextInputs: Record<string, InputDef> = {
+      ...(workflowInputs ?? {}),
+      [trimmedName]: {
+        type: inputDraft.type,
+        required: inputDraft.required,
+        description: inputDraft.description.trim() || undefined,
+      },
+    };
+    try {
+      await triggerMeta.handlers.updateWorkflowInputs(nextInputs);
+      toast.success('Workflow input added');
+      setBindingState((prev) => ({
+        ...prev,
+        [trimmedName]: { mode: 'event', value: `data.${trimmedName}` },
+      }));
+      setInputDraft({ name: '', type: 'string', description: '', required: true });
+    } catch (error) {
+      console.error('Failed to add workflow input', error);
+      toast.error('Failed to add workflow input');
+    } finally {
+      setIsSavingWorkflowInput(false);
+    }
+  };
+
+  const handleRemoveWorkflowInput = async (inputName: string) => {
+    if (!triggerMeta.handlers.updateWorkflowInputs) {
+      toast.error('Unable to edit workflow inputs');
+      return;
+    }
+    if (!workflowInputs || !(inputName in workflowInputs)) {
+      return;
+    }
+    setIsSavingWorkflowInput(true);
+    const nextInputs = Object.fromEntries(
+      Object.entries(workflowInputs).filter(([name]) => name !== inputName),
+    );
+    try {
+      await triggerMeta.handlers.updateWorkflowInputs(nextInputs);
+      toast.success('Workflow input removed');
+      setBindingState((prev) => {
+        if (!(inputName in prev)) {
+          return prev;
+        }
+        const nextState = { ...prev };
+        delete nextState[inputName];
+        return nextState;
+      });
+    } catch (error) {
+      console.error('Failed to remove workflow input', error);
+      toast.error('Failed to remove workflow input');
+    } finally {
+      setIsSavingWorkflowInput(false);
+    }
+  };
 
   const handleCopy = async (value: string | null | undefined, label: string) => {
     if (!value) {
@@ -364,23 +469,171 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     });
   };
 
-  const renderBindingSection = () => {
-    if (!hasInputs) {
-      return (
-        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground space-y-2">
-          <p className="font-medium">No workflow inputs defined</p>
-          <p className="text-xs">
-            {isCronTrigger
-              ? 'This cron trigger will run on schedule without input data.'
-              : 'This trigger will start the workflow without input data.'}
-          </p>
-        </div>
-      );
+  const renderWorkflowInputManager = () => {
+    if (!canManageInputs) {
+      return null;
     }
+    return (
+      <div className="rounded-lg border border-dashed bg-muted/40 p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Workflow inputs</p>
+            <p className="text-xs text-muted-foreground">
+              Add inputs for this trigger to populate before configuring bindings.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowInputsEditor((prev) => !prev)}
+          >
+            {showInputsEditor ? 'Hide form' : 'Add input'}
+          </Button>
+        </div>
 
+        {workflowInputEntries.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No workflow inputs yet. Add one to bind incoming event data.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {workflowInputEntries.map(([inputName, inputDef]) => (
+              <div
+                key={inputName}
+                className="flex items-center justify-between gap-3 rounded border bg-background px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium">{inputName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {inputDef.description || 'No description provided'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <Badge variant="secondary">{inputDef.type}</Badge>
+                  {inputDef.required && <Badge variant="outline">Required</Badge>}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveWorkflowInput(inputName)}
+                    disabled={isSavingWorkflowInput}
+                    title="Remove workflow input"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showInputsEditor && (
+          <div className="space-y-3 border-t border-border/50 pt-3">
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground">Name</Label>
+              <Input
+                value={inputDraft.name}
+                placeholder="customerEmail"
+                onChange={(event) =>
+                  setInputDraft((prev) => ({
+                    ...prev,
+                    name: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs uppercase text-muted-foreground">Type</Label>
+                <Select
+                  value={inputDraft.type}
+                  onValueChange={(value) =>
+                    setInputDraft((prev) => ({
+                      ...prev,
+                      type: value as InputDef['type'],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INPUT_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs uppercase text-muted-foreground">Required</Label>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={inputDraft.required}
+                    onCheckedChange={(value) =>
+                      setInputDraft((prev) => ({
+                        ...prev,
+                        required: value,
+                      }))
+                    }
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {inputDraft.required ? 'Required' : 'Optional'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase text-muted-foreground">Description</Label>
+              <Input
+                value={inputDraft.description}
+                placeholder="Shown in manual runs"
+                onChange={(event) =>
+                  setInputDraft((prev) => ({
+                    ...prev,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleCreateWorkflowInput}
+              disabled={isSavingWorkflowInput}
+            >
+              {isSavingWorkflowInput ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save input'
+              )}
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderBindingSection = () => {
     return (
       <div className="space-y-4">
-        {workflowInputEntries.map(([inputName, inputDef]) => {
+        {renderWorkflowInputManager()}
+        {!hasInputs ? (
+          <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground space-y-2">
+            <p className="font-medium">No workflow inputs defined</p>
+            <p className="text-xs">
+              {canManageInputs
+                ? 'Add a workflow input above to bind trigger data.'
+                : 'This trigger will start the workflow without input data.'}
+            </p>
+          </div>
+        ) : (
+          workflowInputEntries.map(([inputName, inputDef]) => {
           const config = bindingState[inputName] ?? { mode: 'event', value: `data.${inputName}` };
           const defaultEventPath = `data.${inputName}`;
           const quickOptions = isGmailTrigger
@@ -456,7 +709,8 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
               </div>
             </div>
           );
-        })}
+          })
+        )}
       </div>
     );
   };

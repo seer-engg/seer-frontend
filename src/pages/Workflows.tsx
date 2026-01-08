@@ -13,6 +13,7 @@ import { WorkflowNodeData, WorkflowEdge, FunctionBlockSchema, TriggerDraftMeta }
 import type { WorkflowProposalPreview } from '@/components/workflows/build-and-chat/types';
 import type { TriggerListOption } from '@/components/workflows/build-and-chat/build/TriggerSection';
 import type { TriggerSubscriptionUpdateRequest } from '@/types/triggers';
+import type { InputDef } from '@/types/workflow-spec';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { WorkflowLifecycleBar } from '@/components/workflows/WorkflowLifecycleBar';
@@ -27,7 +28,7 @@ import { Label } from '@/components/ui/label';
 import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
-import { BackendAPIError } from '@/lib/api-client';
+import { backendApiClient, BackendAPIError } from '@/lib/api-client';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import {
@@ -96,7 +97,12 @@ const normalizeNodes = (
   if (!Array.isArray(rawNodes)) {
     return [];
   }
-  return rawNodes.map((node) => {
+  return rawNodes
+    .filter((node) => {
+      const nodeType = (node?.data?.type ?? node?.type) as string | undefined;
+      return nodeType !== 'input';
+    })
+    .map((node) => {
     const data = node?.data ?? {};
     const position = node?.position ?? { x: 0, y: 0 };
     const resolvedType = (node?.type || data?.type || 'tool') as WorkflowNodeData['type'];
@@ -146,41 +152,10 @@ function withDefaultBlockConfig(
           array_literal: [],
           item_var: 'item',
         };
-      case 'input':
-        // Only provide defaults if config doesn't have fields OR all fields are empty (no user data)
-        // Check if fields have any actual data (non-empty name values)
-        const hasValidFields = Array.isArray(config.fields) && config.fields.length > 0 &&
-          config.fields.some((f: any) => f.name && f.name.trim() !== '');
-        
-        if (!hasValidFields) {
-          // No valid fields, provide defaults
-          return {
-            fields: [
-              { name: '', displayLabel: '', description: '', type: 'text', required: true, placeholder: '' }
-            ]
-          };
-        }
-        // Has valid fields, don't add defaults
-        return {};
       default:
         return {};
     }
   })();
-
-  // For input blocks, ALWAYS preserve existing fields array if it has valid data
-  if (blockType === 'input') {
-    const hasValidFields = Array.isArray(config.fields) && config.fields.length > 0 &&
-      config.fields.some((f: any) => f.name && f.name.trim() !== '');
-    
-    if (hasValidFields) {
-      // Explicitly preserve fields array - never overwrite user data
-      return {
-        ...defaults,
-        ...config,
-        fields: config.fields, // Explicitly preserve fields array
-      };
-    }
-  }
 
   return {
     ...defaults,
@@ -263,7 +238,7 @@ export default function Workflows() {
   } = useWorkflowTriggers(selectedWorkflowId);
 
   const availableBlocks = useMemo(() => {
-    // Always include built-in blocks (LLM, If/Else, For Loop, Input)
+    // Always include built-in blocks (LLM, If/Else, For Loop)
     const builtInBlocksMap = new Map(BUILT_IN_BLOCKS.map(block => [block.type, block]));
     
     // Merge with function blocks from backend, but don't override built-in blocks
@@ -287,9 +262,34 @@ export default function Workflows() {
   }, [functionBlockSchemas]);
 
   const workflowInputsDef = useMemo(() => loadedWorkflow?.spec?.inputs ?? {}, [loadedWorkflow?.spec?.inputs]);
-  const workflowHasInputs = useMemo(
-    () => Object.keys(workflowInputsDef).length > 0,
-    [workflowInputsDef],
+  const handleWorkflowInputsChange = useCallback(
+    async (nextInputs: Record<string, InputDef>) => {
+      if (!selectedWorkflowId || !loadedWorkflow) {
+        toast.error('Save the workflow before editing inputs');
+        return;
+      }
+      try {
+        await backendApiClient.request(`/api/v1/workflows/${selectedWorkflowId}/draft`, {
+          method: 'PATCH',
+          body: {
+            base_revision: loadedWorkflow.draft_revision,
+            spec: {
+              ...loadedWorkflow.spec,
+              inputs: nextInputs,
+            },
+          },
+        });
+        const refreshed = await getWorkflow(selectedWorkflowId);
+        setLoadedWorkflow(refreshed);
+        setNodes(normalizeNodes(refreshed.graph.nodes, functionBlocksMap));
+        setEdges(normalizeEdges(refreshed.graph.edges));
+      } catch (error) {
+        console.error('Failed to update workflow inputs', error);
+        toast.error('Unable to update workflow inputs');
+        throw error;
+      }
+    },
+    [selectedWorkflowId, loadedWorkflow, getWorkflow, functionBlocksMap, setNodes, setEdges],
   );
   const gmailToolNames = useMemo(() => {
     const normalized = Array.isArray(integrationTools) ? integrationTools : [];
@@ -673,8 +673,16 @@ export default function Workflows() {
       delete: (subscriptionId: number) => deleteSubscription(subscriptionId).then(() => undefined),
       saveDraft: handleSaveTriggerDraft,
       discardDraft: handleDiscardTriggerDraft,
+      updateWorkflowInputs: (inputs: Record<string, InputDef>) => handleWorkflowInputsChange(inputs),
     }),
-    [updateSubscription, toggleSubscription, deleteSubscription, handleSaveTriggerDraft, handleDiscardTriggerDraft],
+    [
+      updateSubscription,
+      toggleSubscription,
+      deleteSubscription,
+      handleSaveTriggerDraft,
+      handleDiscardTriggerDraft,
+      handleWorkflowInputsChange,
+    ],
   );
 
   const triggerNodes = useMemo(() => {
@@ -817,53 +825,21 @@ export default function Workflows() {
     }
   }, [editingNodeId, nodes]);
 
-  // Extract input blocks from current workflow
-  const inputBlocks = useMemo(() => {
-    return nodes.filter((node) => node.data?.type === 'input');
-  }, [nodes]);
-
-  // Generate input fields from input blocks
   const inputFields = useMemo(() => {
-    const fields: Array<{
-      id: string;
-      label: string;
-      type: string;
-      required: boolean;
-      variableName: string;
-    }> = [];
-
-    inputBlocks.forEach((block) => {
-      const config = block.data?.config || {};
-      
-      // New format: fields array
-      if (Array.isArray(config.fields)) {
-        config.fields.forEach((field: any) => {
-          const fieldName = field.name || '';
-          if (fieldName) {
-            fields.push({
-              id: `${block.id}-${fieldName}`,
-              label: fieldName,
-              type: field.type || 'text',
-              required: field.required !== false,
-              variableName: fieldName,
-            });
-          }
-        });
+    const resolveHtmlInputType = (inputType: InputDef['type']): string => {
+      if (inputType === 'number' || inputType === 'integer') {
+        return 'number';
       }
-      // Legacy format: single variable_name
-      else if (config.variable_name) {
-        fields.push({
-          id: block.id,
-          label: block.data?.label || config.variable_name || block.id,
-          type: config.type || 'text',
-          required: config.required !== false,
-          variableName: config.variable_name,
-        });
-      }
-    });
-
-    return fields;
-  }, [inputBlocks]);
+      return 'text';
+    };
+    return Object.entries(workflowInputsDef).map(([name, def]) => ({
+      id: name,
+      label: def.description || name,
+      type: resolveHtmlInputType(def.type),
+      required: def.required !== false,
+      variableName: name,
+    }));
+  }, [workflowInputsDef]);
 
   const triggerOptions = useMemo<TriggerListOption[]>(() => {
     const options: TriggerListOption[] = [];
@@ -1378,6 +1354,7 @@ export default function Workflows() {
         allEdges={edges}
         onOpenChange={handleConfigDialogOpenChange}
         onUpdate={handleNodeConfigUpdate}
+        workflowInputs={workflowInputsDef}
       />
 
       {/* Input Dialog */}

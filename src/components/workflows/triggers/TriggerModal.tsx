@@ -51,6 +51,7 @@ interface WorkflowTriggerModalProps {
   workflowId: string | null;
   workflowName?: string;
   workflowInputs?: Record<string, InputDef>;
+  onWorkflowInputsChange?: (inputs: Record<string, InputDef>) => Promise<void>;
 }
 
 const EVENT_PREFIX = 'event.';
@@ -79,6 +80,16 @@ const GMAIL_FIELD_OPTIONS: GmailFieldOption[] = [
   { label: 'From name', path: 'data.from.name' },
   { label: 'First recipient email', path: 'data.to.0.email' },
   { label: 'Internal date (ms)', path: 'data.internal_date_ms' },
+];
+
+const INPUT_NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const INPUT_TYPE_OPTIONS: Array<{ label: string; value: InputDef['type'] }> = [
+  { label: 'Text', value: 'string' },
+  { label: 'Number', value: 'number' },
+  { label: 'Integer', value: 'integer' },
+  { label: 'Boolean', value: 'boolean' },
+  { label: 'Object', value: 'object' },
+  { label: 'Array', value: 'array' },
 ];
 
 interface TriggerOption {
@@ -116,6 +127,7 @@ export function WorkflowTriggerModal({
   workflowId,
   workflowName,
   workflowInputs,
+  onWorkflowInputsChange,
 }: WorkflowTriggerModalProps) {
   const effectiveWorkflowId = open ? workflowId : null;
   const {
@@ -147,6 +159,19 @@ export function WorkflowTriggerModal({
   const [creatingTriggerKey, setCreatingTriggerKey] = useState<string | null>(null);
   const [pendingToggleId, setPendingToggleId] = useState<number | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [showInputEditor, setShowInputEditor] = useState(false);
+  const [isSavingWorkflowInput, setIsSavingWorkflowInput] = useState(false);
+  const [inputDraft, setInputDraft] = useState<{
+    name: string;
+    type: InputDef['type'];
+    description: string;
+    required: boolean;
+  }>({
+    name: '',
+    type: 'string',
+    description: '',
+    required: true,
+  });
 
   const genericTrigger = useMemo(
     () => triggers.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY),
@@ -190,6 +215,80 @@ export function WorkflowTriggerModal({
   }, [genericTrigger, gmailTrigger, cronTrigger]);
 
   const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
+  useEffect(() => {
+    if (workflowInputEntries.length === 0) {
+      setShowInputEditor(true);
+    }
+  }, [workflowInputEntries.length]);
+  const handleCreateWorkflowInput = useCallback(async () => {
+    if (!workflowId) {
+      toast.error('Save the workflow before adding inputs');
+      return;
+    }
+    if (!onWorkflowInputsChange) {
+      toast.error('Workflow inputs cannot be edited in this environment');
+      return;
+    }
+    const trimmedName = inputDraft.name.trim();
+    if (!trimmedName) {
+      toast.error('Input name is required');
+      return;
+    }
+    if (!INPUT_NAME_REGEX.test(trimmedName)) {
+      toast.error('Use letters, numbers, or underscores for input names');
+      return;
+    }
+    if (workflowInputs && workflowInputs[trimmedName]) {
+      toast.error('An input with this name already exists');
+      return;
+    }
+    setIsSavingWorkflowInput(true);
+    const nextInputs: Record<string, InputDef> = {
+      ...(workflowInputs ?? {}),
+      [trimmedName]: {
+        type: inputDraft.type,
+        required: inputDraft.required,
+        description: inputDraft.description.trim() || undefined,
+      },
+    };
+    try {
+      await onWorkflowInputsChange(nextInputs);
+      toast.success('Workflow input added');
+      setInputDraft({ name: '', type: 'string', description: '', required: true });
+    } catch (error) {
+      console.error('Failed to add workflow input', error);
+      toast.error('Failed to add workflow input');
+    } finally {
+      setIsSavingWorkflowInput(false);
+    }
+  }, [workflowId, onWorkflowInputsChange, inputDraft, workflowInputs]);
+
+  const handleRemoveWorkflowInput = useCallback(
+    async (inputName: string) => {
+      if (!workflowId) {
+        toast.error('Save the workflow before editing inputs');
+        return;
+      }
+      if (!onWorkflowInputsChange || !workflowInputs || !(inputName in workflowInputs)) {
+        return;
+      }
+      setIsSavingWorkflowInput(true);
+      const nextInputs = Object.fromEntries(
+        Object.entries(workflowInputs).filter(([name]) => name !== inputName),
+      );
+      try {
+        await onWorkflowInputsChange(nextInputs);
+        toast.success('Workflow input removed');
+      } catch (error) {
+        console.error('Failed to remove workflow input', error);
+        toast.error('Failed to remove workflow input');
+      } finally {
+        setIsSavingWorkflowInput(false);
+      }
+    },
+    [workflowId, onWorkflowInputsChange, workflowInputs],
+  );
+
 
   useEffect(() => {
     if (!open) return;
@@ -256,11 +355,9 @@ export function WorkflowTriggerModal({
       .map((tool) => tool.name);
     return names.length > 0 ? names : ['gmail_read_emails'];
   }, [tools]);
-  const canCreateWebhook = Boolean(workflowId && genericTrigger && workflowInputEntries.length);
-  const canCreateGmail = Boolean(
-    workflowId && gmailTrigger && gmailIntegrationReady && workflowInputEntries.length,
-  );
-  const canCreateCron = Boolean(workflowId && cronTrigger && workflowInputEntries.length);
+  const canCreateWebhook = Boolean(workflowId && genericTrigger);
+  const canCreateGmail = Boolean(workflowId && gmailTrigger && gmailIntegrationReady);
+  const canCreateCron = Boolean(workflowId && cronTrigger);
 
   const getBindingState = useCallback(
     (triggerKey: string): Record<string, BindingConfig> => bindingStateByTrigger[triggerKey] ?? {},
@@ -668,11 +765,155 @@ export function WorkflowTriggerModal({
       fieldOptions?: GmailFieldOption[];
     },
   ) => {
+    const renderWorkflowInputsPanel = () => {
+      if (!workflowId || !onWorkflowInputsChange) {
+        return null;
+      }
+      return (
+        <div className="rounded-lg border border-dashed bg-muted/40 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Workflow inputs</p>
+              <p className="text-xs text-muted-foreground">
+                Add fields that this trigger can populate before wiring bindings.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowInputEditor((prev) => !prev)}>
+              {showInputEditor ? 'Hide form' : 'Add input'}
+            </Button>
+          </div>
+          {workflowInputEntries.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No workflow inputs yet. Add one to map event payloads.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {workflowInputEntries.map(([name, def]) => (
+                <div
+                  key={name}
+                  className="flex items-center justify-between rounded border bg-background px-3 py-2 text-sm"
+                >
+                  <div>
+                    <p className="font-medium">{name}</p>
+                    <p className="text-xs text-muted-foreground">{def.description || 'No description'}</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <Badge variant="secondary">{def.type}</Badge>
+                    {def.required && <Badge variant="outline">Required</Badge>}
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleRemoveWorkflowInput(name)}
+                      disabled={isSavingWorkflowInput}
+                      title="Remove workflow input"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {showInputEditor && (
+            <div className="space-y-3 border-t border-border/50 pt-3">
+              <div className="space-y-1">
+                <Label className="text-xs uppercase text-muted-foreground">Name</Label>
+                <Input
+                  value={inputDraft.name}
+                  placeholder="customerEmail"
+                  onChange={(event) =>
+                    setInputDraft((prev) => ({
+                      ...prev,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase text-muted-foreground">Type</Label>
+                  <Select
+                    value={inputDraft.type}
+                    onValueChange={(value) =>
+                      setInputDraft((prev) => ({
+                        ...prev,
+                        type: value as InputDef['type'],
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INPUT_TYPE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase text-muted-foreground">Required</Label>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={inputDraft.required}
+                      onCheckedChange={(value) =>
+                        setInputDraft((prev) => ({
+                          ...prev,
+                          required: value,
+                        }))
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {inputDraft.required ? 'Required' : 'Optional'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs uppercase text-muted-foreground">Description</Label>
+                <Input
+                  value={inputDraft.description}
+                  placeholder="Shown in manual runs"
+                  onChange={(event) =>
+                    setInputDraft((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleCreateWorkflowInput}
+                disabled={isSavingWorkflowInput}
+              >
+                {isSavingWorkflowInput ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save input'
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     if (!workflowInputEntries.length) {
       return (
-        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground space-y-2">
-          <p>This workflow does not define any inputs.</p>
-          <p>Add an Input block to expose variables that triggers can populate.</p>
+        <div className="space-y-4">
+          {renderWorkflowInputsPanel()}
+          <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground space-y-2">
+            <p>This workflow does not define any inputs.</p>
+            <p>Use the trigger configuration panel to add workflow inputs before binding data.</p>
+          </div>
         </div>
       );
     }
@@ -682,6 +923,7 @@ export function WorkflowTriggerModal({
 
     return (
       <div className="space-y-4">
+        {renderWorkflowInputsPanel()}
         <div className="space-y-2">
           <h4 className="text-sm font-medium">Input bindings</h4>
           {options?.description ?? (

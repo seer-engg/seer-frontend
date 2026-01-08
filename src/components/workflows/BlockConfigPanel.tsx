@@ -19,11 +19,11 @@ import {
   LlmBlockSection,
   IfElseBlockSection,
   ForLoopBlockSection,
-  InputBlockSection,
   ToolMetadata,
 } from './block-config';
 import { WorkflowEdge, WorkflowNodeData } from './types';
 import { backendApiClient } from '@/lib/api-client';
+import type { InputDef } from '@/types/workflow-spec';
 
 interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;
@@ -34,6 +34,7 @@ interface BlockConfigPanelProps {
   variant?: 'panel' | 'inline';
   liveUpdate?: boolean;
   liveUpdateDelayMs?: number;
+  workflowInputs?: Record<string, InputDef>;
 }
 
 export function BlockConfigPanel({
@@ -45,6 +46,7 @@ export function BlockConfigPanel({
   variant = 'panel',
   liveUpdate = false,
   liveUpdateDelayMs = 350,
+  workflowInputs,
 }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
@@ -91,8 +93,8 @@ export function BlockConfigPanel({
   });
 
   const availableVariables = useMemo(
-    () => collectAvailableVariables(allNodes, allEdges, node),
-    [allNodes, allEdges, node]
+    () => collectAvailableVariables(allNodes, allEdges, node, workflowInputs),
+    [allNodes, allEdges, node, workflowInputs],
   );
   const templateAutocomplete = useTemplateAutocomplete(availableVariables);
 
@@ -368,8 +370,6 @@ export function BlockConfigPanel({
             templateAutocomplete={templateAutocomplete}
           />
         );
-      case 'input':
-        return <InputBlockSection config={config} setConfig={setConfig} />;
     }
   };
 

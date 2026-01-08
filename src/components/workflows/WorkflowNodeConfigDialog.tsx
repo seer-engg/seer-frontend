@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { BlockConfigPanel } from './BlockConfigPanel';
 import { WorkflowEdge, WorkflowNodeData } from './types';
+import type { InputDef } from '@/types/workflow-spec';
 
 interface WorkflowNodeConfigDialogProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface WorkflowNodeConfigDialogProps {
   allEdges: WorkflowEdge[];
   onOpenChange: (open: boolean) => void;
   onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
+  workflowInputs?: Record<string, InputDef>;
 }
 
 export function WorkflowNodeConfigDialog({
@@ -25,6 +27,7 @@ export function WorkflowNodeConfigDialog({
   allEdges,
   onOpenChange,
   onUpdate,
+  workflowInputs,
 }: WorkflowNodeConfigDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,6 +48,7 @@ export function WorkflowNodeConfigDialog({
               autoSave={false}
               variant="inline"
               liveUpdate
+              workflowInputs={workflowInputs}
             />
           ) : (
             <p className="text-sm text-muted-foreground">Select a block to configure.</p>

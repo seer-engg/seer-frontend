@@ -13,8 +13,7 @@ export type BlockType =
   | 'code'
   | 'llm'
   | 'if_else'
-  | 'for_loop'
-  | 'input';
+  | 'for_loop';
 
 export type CanvasNodeType = BlockType | 'trigger';
 
@@ -49,6 +48,7 @@ export interface TriggerNodeHandlers {
     },
   ) => Promise<void>;
   discardDraft?: (draftId: string) => void;
+  updateWorkflowInputs?: (nextInputs: Record<string, InputDef>) => Promise<void>;
 }
 
 export interface GmailIntegrationContext {
