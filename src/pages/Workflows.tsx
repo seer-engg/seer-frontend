@@ -30,12 +30,19 @@ import { toast } from '@/components/ui/sonner';
 import { BackendAPIError } from '@/lib/api-client';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import { WEBHOOK_TRIGGER_KEY, GMAIL_TRIGGER_KEY, CRON_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
+import {
+  WEBHOOK_TRIGGER_KEY,
+  GMAIL_TRIGGER_KEY,
+  CRON_TRIGGER_KEY,
+  GMAIL_TOOL_FALLBACK_NAMES,
+  SUPABASE_TRIGGER_KEY,
+  SUPABASE_TOOL_FALLBACK_NAMES,
+} from '@/components/workflows/triggers/constants';
 import {
   buildBindingsPayload,
   buildDefaultBindingState,
   makeDefaultGmailConfig,
-  serializeGmailConfig,
+  makeDefaultSupabaseConfig,
 } from '@/components/workflows/triggers/utils';
 import type { BindingState } from '@/components/workflows/triggers/utils';
 
@@ -207,6 +214,7 @@ export default function Workflows() {
   const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
   const [draftTriggers, setDraftTriggers] = useState<TriggerDraftMeta[]>([]);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
+  const [isConnectingSupabase, setIsConnectingSupabase] = useState(false);
   const [proposalPreview, setProposalPreview] = useState<WorkflowProposalPreview | null>(null);
   const [lastRunVersionId, setLastRunVersionId] = useState<number | null>(null);
   const resetSavedDataRef = useRef<(() => void) | null>(null);
@@ -296,12 +304,26 @@ export default function Workflows() {
       .map((tool) => tool.name);
     return names.length > 0 ? names : GMAIL_TOOL_FALLBACK_NAMES;
   }, [integrationTools]);
+  const supabaseToolNames = useMemo(() => {
+    const normalized = Array.isArray(integrationTools) ? integrationTools : [];
+    const names = normalized
+      .filter((tool) => {
+        const integration = tool.integration_type?.toLowerCase();
+        if (integration) {
+          return integration === 'supabase';
+        }
+        return tool.name.toLowerCase().includes('supabase');
+      })
+      .map((tool) => tool.name);
+    return names.length > 0 ? names : SUPABASE_TOOL_FALLBACK_NAMES;
+  }, [integrationTools]);
   const gmailConnectionIdRaw = getConnectionId('gmail');
   const gmailConnectionId = useMemo(
     () => parseProviderConnectionId(gmailConnectionIdRaw),
     [gmailConnectionIdRaw],
   );
   const gmailIntegrationReady = isIntegrationConnected('gmail') && typeof gmailConnectionId === 'number';
+  const supabaseIntegrationReady = isIntegrationConnected('supabase');
   const handleConnectGmail = useCallback(async () => {
     setIsConnectingGmail(true);
     try {
@@ -320,6 +342,24 @@ export default function Workflows() {
       setIsConnectingGmail(false);
     }
   }, [connectIntegration, gmailToolNames]);
+  const handleConnectSupabase = useCallback(async () => {
+    setIsConnectingSupabase(true);
+    try {
+      const redirectUrl = await connectIntegration('supabase', { toolNames: supabaseToolNames });
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+        return;
+      }
+      toast.error('Unable to start Supabase connection');
+    } catch (error) {
+      console.error('Failed to connect Supabase', error);
+      toast.error('Unable to start Supabase connection', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsConnectingSupabase(false);
+    }
+  }, [connectIntegration, supabaseToolNames]);
 
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
@@ -412,6 +452,7 @@ export default function Workflows() {
         triggerKey,
         initialBindings: buildDefaultBindingState(workflowInputsDef),
         initialGmailConfig: triggerKey === GMAIL_TRIGGER_KEY ? makeDefaultGmailConfig() : undefined,
+        initialSupabaseConfig: triggerKey === SUPABASE_TRIGGER_KEY ? makeDefaultSupabaseConfig() : undefined,
       };
       setDraftTriggers((prev) => [...prev, draft]);
     },
@@ -439,6 +480,11 @@ export default function Workflows() {
           throw new Error('Connect Gmail before saving this trigger');
         }
       }
+      if (payload.triggerKey === SUPABASE_TRIGGER_KEY) {
+        if (!supabaseIntegrationReady) {
+          throw new Error('Connect Supabase before saving this trigger');
+        }
+      }
       try {
         await createSubscription({
           workflow_id: selectedWorkflowId,
@@ -461,6 +507,7 @@ export default function Workflows() {
       triggerCatalog,
       gmailIntegrationReady,
       gmailConnectionId,
+      supabaseIntegrationReady,
       createSubscription,
     ],
   );
@@ -658,17 +705,25 @@ export default function Workflows() {
             descriptor,
             workflowInputs: workflowInputsDef,
             handlers: triggerHandlers,
-            integration:
-              triggerKey === GMAIL_TRIGGER_KEY
-                ? {
-                    gmail: {
-                      ready: gmailIntegrationReady,
-                      connectionId: gmailConnectionId,
-                      onConnect: gmailIntegrationReady ? undefined : handleConnectGmail,
-                      isConnecting: isConnectingGmail,
-                    },
-                  }
-                : undefined,
+            integration: (() => {
+              const integrationMeta: NonNullable<WorkflowNodeData['triggerMeta']>['integration'] = {};
+              if (triggerKey === GMAIL_TRIGGER_KEY) {
+                integrationMeta.gmail = {
+                  ready: gmailIntegrationReady,
+                  connectionId: gmailConnectionId,
+                  onConnect: gmailIntegrationReady ? undefined : handleConnectGmail,
+                  isConnecting: isConnectingGmail,
+                };
+              }
+              if (triggerKey === SUPABASE_TRIGGER_KEY) {
+                integrationMeta.supabase = {
+                  ready: supabaseIntegrationReady,
+                  onConnect: supabaseIntegrationReady ? undefined : handleConnectSupabase,
+                  isConnecting: isConnectingSupabase,
+                };
+              }
+              return Object.keys(integrationMeta).length ? integrationMeta : undefined;
+            })(),
             draft: entry.kind === 'draft' ? entry.draft : undefined,
           },
         },
@@ -685,6 +740,9 @@ export default function Workflows() {
     gmailConnectionId,
     handleConnectGmail,
     isConnectingGmail,
+    supabaseIntegrationReady,
+    handleConnectSupabase,
+    isConnectingSupabase,
   ]);
 
   const baseCanvasNodes = useMemo(
@@ -869,6 +927,27 @@ export default function Workflows() {
       });
     }
 
+    const supabaseTrigger = triggerCatalog.find((trigger) => trigger.key === SUPABASE_TRIGGER_KEY);
+    if (supabaseTrigger) {
+      const supabaseDisabled = !supabaseIntegrationReady;
+      options.push({
+        key: SUPABASE_TRIGGER_KEY,
+        title: supabaseTrigger.title ?? 'Supabase – Database Changes',
+        description:
+          supabaseTrigger.description ??
+          'Receive real-time webhooks when rows in your Supabase tables change.',
+        disabled: supabaseDisabled,
+        disabledReason: supabaseDisabled ? 'Connect Supabase to continue' : undefined,
+        onPrimaryAction: () => handleAddTriggerDraft(SUPABASE_TRIGGER_KEY),
+        actionLabel: 'Add to canvas',
+        badge: 'Supabase',
+        status: supabaseDisabled ? 'action-required' : 'ready',
+        secondaryActionLabel: supabaseDisabled ? 'Connect Supabase' : undefined,
+        onSecondaryAction: supabaseDisabled ? handleConnectSupabase : undefined,
+        isSecondaryActionLoading: supabaseDisabled ? isConnectingSupabase : false,
+      });
+    }
+
     return options;
   }, [
     triggerCatalog,
@@ -876,6 +955,9 @@ export default function Workflows() {
     gmailIntegrationReady,
     handleConnectGmail,
     isConnectingGmail,
+    supabaseIntegrationReady,
+    handleConnectSupabase,
+    isConnectingSupabase,
   ]);
   const triggerInfoMessage = undefined;
 

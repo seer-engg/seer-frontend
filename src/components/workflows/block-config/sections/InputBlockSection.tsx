@@ -39,13 +39,14 @@ const INPUT_TYPES = [
   { value: 'number', label: 'Number' },
   { value: 'email', label: 'Email' },
   { value: 'url', label: 'URL' },
+  { value: 'object', label: 'Object' },
 ];
 
 interface InputField {
   name: string; // Variable name (internal)
   displayLabel?: string; // Human-readable label
   description?: string; // Help text
-  type: 'text' | 'number' | 'email' | 'url';
+  type: 'text' | 'number' | 'email' | 'url' | 'object';
   required: boolean;
   placeholder?: string;
 }

@@ -2,31 +2,50 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import type { Node as FlowNode, NodeProps } from '@xyflow/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
-import { Calendar, Copy, Info, Link, Loader2, Mail, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Copy, Database, Info, Link, Loader2, Mail, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 import type { WorkflowNodeData } from '../types';
+import { ResourcePicker } from '../ResourcePicker';
 import {
   BindingState,
   buildBindingsPayload,
   buildDefaultBindingState,
   buildGmailConfigFromProviderConfig,
   buildCronConfigFromProviderConfig,
+  buildSupabaseConfigFromProviderConfig,
   deriveBindingStateFromSubscription,
   makeDefaultGmailConfig,
   makeDefaultCronConfig,
+  makeDefaultSupabaseConfig,
   serializeGmailConfig,
   serializeCronConfig,
+  serializeSupabaseConfig,
   validateCronExpression,
+  validateSupabaseConfig,
   type GmailConfigState,
   type CronConfigState,
+  type SupabaseConfigState,
+  type SupabaseEventType,
+  SUPABASE_EVENT_TYPES,
 } from '../triggers/utils';
-import { GMAIL_FIELD_OPTIONS, GMAIL_TRIGGER_KEY, WEBHOOK_TRIGGER_KEY, CRON_TRIGGER_KEY, CRON_FIELD_OPTIONS, CRON_PRESETS, TIMEZONE_OPTIONS } from '../triggers/constants';
+import {
+  GMAIL_FIELD_OPTIONS,
+  GMAIL_TRIGGER_KEY,
+  WEBHOOK_TRIGGER_KEY,
+  CRON_TRIGGER_KEY,
+  CRON_FIELD_OPTIONS,
+  CRON_PRESETS,
+  TIMEZONE_OPTIONS,
+  SUPABASE_TRIGGER_KEY,
+  SUPABASE_FIELD_OPTIONS,
+} from '../triggers/constants';
 
 type WorkflowNode = FlowNode<WorkflowNodeData>;
 
@@ -37,6 +56,20 @@ const formatTimestamp = (value?: string) => {
   } catch {
     return value;
   }
+};
+
+const SUPABASE_PROJECT_PICKER_CONFIG = {
+  resource_type: 'supabase_binding',
+  endpoint: '/api/integrations/supabase/resources/bindings',
+  display_field: 'display_name',
+  value_field: 'id',
+  search_enabled: true,
+} as const;
+
+const SUPABASE_EVENT_LABELS: Record<SupabaseEventType, string> = {
+  INSERT: 'INSERT – Row created',
+  UPDATE: 'UPDATE – Row modified',
+  DELETE: 'DELETE – Row removed',
 };
 
 export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected }: NodeProps<WorkflowNode>) {
@@ -68,6 +101,11 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       ? buildCronConfigFromProviderConfig(subscription.provider_config)
       : draft?.initialCronConfig ?? makeDefaultCronConfig(),
   );
+  const [supabaseConfig, setSupabaseConfig] = useState<SupabaseConfigState>(() =>
+    subscription
+      ? buildSupabaseConfigFromProviderConfig(subscription.provider_config)
+      : draft?.initialSupabaseConfig ?? makeDefaultSupabaseConfig(),
+  );
   const [isExpanded, setIsExpanded] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
@@ -76,9 +114,15 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
   const hasInputs = workflowInputEntries.length > 0;
 
-  const isWebhookTrigger = triggerKey === WEBHOOK_TRIGGER_KEY;
+  const isSupabaseTrigger = triggerKey === SUPABASE_TRIGGER_KEY;
+  const isWebhookTrigger = triggerKey === WEBHOOK_TRIGGER_KEY || isSupabaseTrigger;
   const isGmailTrigger = triggerKey === GMAIL_TRIGGER_KEY;
   const isCronTrigger = triggerKey === CRON_TRIGGER_KEY;
+  const supabaseIntegration = integration?.supabase;
+  const supabaseValidation = isSupabaseTrigger ? validateSupabaseConfig(supabaseConfig) : { valid: true, errors: {} };
+  const supabaseSelectedProjectLabel =
+    supabaseConfig.integrationResourceLabel ||
+    (supabaseConfig.integrationResourceId ? `Resource #${supabaseConfig.integrationResourceId}` : '');
 
   useEffect(() => {
     if (subscription) {
@@ -117,6 +161,20 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       setCronConfig(makeDefaultCronConfig());
     }
   }, [subscription?.provider_config, isCronTrigger, draft?.initialCronConfig]);
+
+  useEffect(() => {
+    if (!isSupabaseTrigger) {
+      setSupabaseConfig(makeDefaultSupabaseConfig());
+      return;
+    }
+    if (subscription) {
+      setSupabaseConfig(buildSupabaseConfigFromProviderConfig(subscription.provider_config));
+    } else if (draft?.initialSupabaseConfig) {
+      setSupabaseConfig(draft.initialSupabaseConfig);
+    } else {
+      setSupabaseConfig(makeDefaultSupabaseConfig());
+    }
+  }, [subscription?.provider_config, isSupabaseTrigger, draft?.initialSupabaseConfig]);
 
   const handleCopy = async (value: string | null | undefined, label: string) => {
     if (!value) {
@@ -173,6 +231,31 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   };
 
   const handleSave = async () => {
+    if (isSupabaseTrigger && !supabaseValidation.valid) {
+      const description =
+        supabaseValidation.errors.resource ||
+        supabaseValidation.errors.table ||
+        supabaseValidation.errors.events ||
+        'Complete the Supabase configuration before saving.';
+      toast.error('Supabase configuration incomplete', { description });
+      return;
+    }
+
+    const resolveProviderConfig = () => {
+      if (isGmailTrigger) {
+        return serializeGmailConfig(gmailConfig);
+      }
+      if (isCronTrigger) {
+        return serializeCronConfig(cronConfig);
+      }
+      if (isSupabaseTrigger) {
+        return serializeSupabaseConfig(supabaseConfig);
+      }
+      return undefined;
+    };
+
+    const providerConfig = resolveProviderConfig();
+
     if (isDraft) {
       if (!handlers?.saveDraft || !draft) {
         return;
@@ -182,11 +265,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
         await handlers.saveDraft(draft.id, {
           triggerKey,
           bindings: bindingState,
-          providerConfig: isGmailTrigger
-            ? serializeGmailConfig(gmailConfig)
-            : isCronTrigger
-            ? serializeCronConfig(cronConfig)
-            : undefined,
+          providerConfig,
         });
         toast.success('Trigger saved');
       } catch (error) {
@@ -207,10 +286,8 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       const payload: Parameters<NonNullable<typeof handlers.update>>[1] = {
         bindings: buildBindingsPayload(bindingState),
       };
-      if (isGmailTrigger) {
-        payload.provider_config = serializeGmailConfig(gmailConfig);
-      } else if (isCronTrigger) {
-        payload.provider_config = serializeCronConfig(cronConfig);
+      if (providerConfig) {
+        payload.provider_config = providerConfig;
       }
       await handlers.update(subscription.subscription_id, payload);
       toast.success('Trigger updated');
@@ -261,6 +338,32 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     }));
   };
 
+  const handleSupabaseResourceChange = (value: string, label?: string) => {
+    setSupabaseConfig((prev) => ({
+      ...prev,
+      integrationResourceId: value,
+      integrationResourceLabel: label ?? value,
+    }));
+  };
+
+  const handleSupabaseEventChange = (eventType: SupabaseEventType, nextChecked: boolean) => {
+    setSupabaseConfig((prev) => {
+      const exists = prev.events.includes(eventType);
+      let nextEvents: SupabaseEventType[];
+      if (nextChecked && !exists) {
+        nextEvents = [...prev.events, eventType];
+      } else if (!nextChecked && exists) {
+        nextEvents = prev.events.filter((event) => event !== eventType);
+      } else {
+        nextEvents = prev.events;
+      }
+      return {
+        ...prev,
+        events: nextEvents,
+      };
+    });
+  };
+
   const renderBindingSection = () => {
     if (!hasInputs) {
       return (
@@ -284,6 +387,8 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
             ? GMAIL_FIELD_OPTIONS
             : isCronTrigger
             ? CRON_FIELD_OPTIONS
+            : isSupabaseTrigger
+            ? SUPABASE_FIELD_OPTIONS
             : [];
           return (
             <div key={inputName} className="rounded-lg border p-4 space-y-3">
@@ -625,6 +730,119 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     );
   };
 
+  const renderSupabaseConfig = () => {
+    if (!isSupabaseTrigger) {
+      return null;
+    }
+    return (
+      <div className="space-y-4">
+        <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Database className="h-4 w-4" />
+              Supabase project
+            </div>
+            <Badge
+              variant="secondary"
+              className={cn(
+                'text-[11px] px-2',
+                supabaseIntegration?.ready
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+              )}
+            >
+              {supabaseIntegration?.ready ? 'Connected' : 'Action required'}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {supabaseIntegration?.ready
+              ? 'Choose a bound Supabase project and table to watch for database changes.'
+              : 'Connect Supabase Mgmt and bind a project before configuring this trigger.'}
+          </p>
+          {!supabaseIntegration?.ready && supabaseIntegration?.onConnect && (
+            <Button
+              size="sm"
+              onClick={() => supabaseIntegration.onConnect?.()}
+              disabled={supabaseIntegration?.isConnecting}
+            >
+              {supabaseIntegration?.isConnecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Connect Supabase
+            </Button>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs uppercase text-muted-foreground">Supabase project</Label>
+          <ResourcePicker
+            config={SUPABASE_PROJECT_PICKER_CONFIG}
+            value={supabaseConfig.integrationResourceId || undefined}
+            onChange={(value, label) => handleSupabaseResourceChange(String(value), label)}
+            placeholder="Select or bind a project"
+            disabled={!supabaseIntegration?.ready}
+            className="w-full"
+          />
+          {supabaseSelectedProjectLabel && (
+            <p className="text-[11px] text-muted-foreground">Selected: {supabaseSelectedProjectLabel}</p>
+          )}
+          {!supabaseValidation.valid && supabaseValidation.errors.resource && (
+            <p className="text-xs text-destructive">{supabaseValidation.errors.resource}</p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Schema</Label>
+            <Input
+              value={supabaseConfig.schema}
+              placeholder="public"
+              onChange={(event) =>
+                setSupabaseConfig((prev) => ({
+                  ...prev,
+                  schema: event.target.value,
+                }))
+              }
+            />
+            <p className="text-[11px] text-muted-foreground">Defaults to the public schema.</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground">Table</Label>
+            <Input
+              value={supabaseConfig.table}
+              placeholder="orders"
+              onChange={(event) =>
+                setSupabaseConfig((prev) => ({
+                  ...prev,
+                  table: event.target.value,
+                }))
+              }
+            />
+            {!supabaseValidation.valid && supabaseValidation.errors.table && (
+              <p className="text-xs text-destructive">{supabaseValidation.errors.table}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs uppercase text-muted-foreground">Events</Label>
+          <div className="flex flex-wrap gap-4">
+            {SUPABASE_EVENT_TYPES.map((eventType) => (
+              <label key={eventType} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={supabaseConfig.events.includes(eventType)}
+                  onCheckedChange={(checked) => handleSupabaseEventChange(eventType, checked === true)}
+                />
+                <span className="text-xs font-medium">{SUPABASE_EVENT_LABELS[eventType]}</span>
+              </label>
+            ))}
+          </div>
+          {!supabaseValidation.valid && supabaseValidation.errors.events && (
+            <p className="text-xs text-destructive">{supabaseValidation.errors.events}</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       className={cn(
@@ -639,6 +857,8 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
               <Calendar className="h-4 w-4 text-primary" />
             ) : isGmailTrigger ? (
               <Mail className="h-4 w-4 text-primary" />
+            ) : isSupabaseTrigger ? (
+              <Database className="h-4 w-4 text-primary" />
             ) : (
               <Link className="h-4 w-4 text-primary" />
             )}
@@ -692,6 +912,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
           <div className="space-y-4">
             {renderGmailConfig()}
             {renderCronConfig()}
+            {renderSupabaseConfig()}
             {renderBindingSection()}
           </div>
         )}

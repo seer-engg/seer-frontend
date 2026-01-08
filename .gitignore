@@ -25,3 +25,6 @@ dist-ssr
 
 # intentionally kept
 .env
+
+# MCP configuration (contains API keys)
+.mcp.json
