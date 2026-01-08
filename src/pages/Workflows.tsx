@@ -217,7 +217,6 @@ export default function Workflows() {
   const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
   const [draftTriggers, setDraftTriggers] = useState<TriggerDraftMeta[]>([]);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
-  const [isConnectingSupabase, setIsConnectingSupabase] = useState(false);
   const [proposalPreview, setProposalPreview] = useState<WorkflowProposalPreview | null>(null);
   const [lastRunVersionId, setLastRunVersionId] = useState<number | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -340,7 +339,6 @@ export default function Workflows() {
     [gmailConnectionIdRaw],
   );
   const gmailIntegrationReady = isIntegrationConnected('gmail') && typeof gmailConnectionId === 'number';
-  const supabaseIntegrationReady = isIntegrationConnected('supabase');
   const handleConnectGmail = useCallback(async () => {
     setIsConnectingGmail(true);
     try {
@@ -359,24 +357,6 @@ export default function Workflows() {
       setIsConnectingGmail(false);
     }
   }, [connectIntegration, gmailToolNames]);
-  const handleConnectSupabase = useCallback(async () => {
-    setIsConnectingSupabase(true);
-    try {
-      const redirectUrl = await connectIntegration('supabase', { toolNames: supabaseToolNames });
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
-        return;
-      }
-      toast.error('Unable to start Supabase connection');
-    } catch (error) {
-      console.error('Failed to connect Supabase', error);
-      toast.error('Unable to start Supabase connection', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
-    } finally {
-      setIsConnectingSupabase(false);
-    }
-  }, [connectIntegration, supabaseToolNames]);
 
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
@@ -497,11 +477,6 @@ export default function Workflows() {
           throw new Error('Connect Gmail before saving this trigger');
         }
       }
-      if (payload.triggerKey === SUPABASE_TRIGGER_KEY) {
-        if (!supabaseIntegrationReady) {
-          throw new Error('Connect Supabase before saving this trigger');
-        }
-      }
       try {
         await createSubscription({
           workflow_id: selectedWorkflowId,
@@ -524,7 +499,6 @@ export default function Workflows() {
       triggerCatalog,
       gmailIntegrationReady,
       gmailConnectionId,
-      supabaseIntegrationReady,
       createSubscription,
     ],
   );
@@ -732,13 +706,6 @@ export default function Workflows() {
                   isConnecting: isConnectingGmail,
                 };
               }
-              if (triggerKey === SUPABASE_TRIGGER_KEY) {
-                integrationMeta.supabase = {
-                  ready: supabaseIntegrationReady,
-                  onConnect: supabaseIntegrationReady ? undefined : handleConnectSupabase,
-                  isConnecting: isConnectingSupabase,
-                };
-              }
               return Object.keys(integrationMeta).length ? integrationMeta : undefined;
             })(),
             draft: entry.kind === 'draft' ? entry.draft : undefined,
@@ -757,9 +724,6 @@ export default function Workflows() {
     gmailConnectionId,
     handleConnectGmail,
     isConnectingGmail,
-    supabaseIntegrationReady,
-    handleConnectSupabase,
-    isConnectingSupabase,
   ]);
 
   const baseCanvasNodes = useMemo(
@@ -946,22 +910,17 @@ export default function Workflows() {
 
     const supabaseTrigger = triggerCatalog.find((trigger) => trigger.key === SUPABASE_TRIGGER_KEY);
     if (supabaseTrigger) {
-      const supabaseDisabled = !supabaseIntegrationReady;
       options.push({
         key: SUPABASE_TRIGGER_KEY,
         title: supabaseTrigger.title ?? 'Supabase – Database Changes',
         description:
           supabaseTrigger.description ??
           'Receive real-time webhooks when rows in your Supabase tables change.',
-        disabled: supabaseDisabled,
-        disabledReason: supabaseDisabled ? 'Connect Supabase to continue' : undefined,
+        disabled: false,
         onPrimaryAction: () => handleAddTriggerDraft(SUPABASE_TRIGGER_KEY),
         actionLabel: 'Add to canvas',
         badge: 'Supabase',
-        status: supabaseDisabled ? 'action-required' : 'ready',
-        secondaryActionLabel: supabaseDisabled ? 'Connect Supabase' : undefined,
-        onSecondaryAction: supabaseDisabled ? handleConnectSupabase : undefined,
-        isSecondaryActionLoading: supabaseDisabled ? isConnectingSupabase : false,
+        status: 'ready',
       });
     }
 
@@ -972,9 +931,6 @@ export default function Workflows() {
     gmailIntegrationReady,
     handleConnectGmail,
     isConnectingGmail,
-    supabaseIntegrationReady,
-    handleConnectSupabase,
-    isConnectingSupabase,
   ]);
   const triggerInfoMessage = undefined;
 

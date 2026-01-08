@@ -24,6 +24,7 @@ interface ToolBlockSectionProps {
   setConfig: Dispatch<SetStateAction<Record<string, unknown>>>;
   toolSchema?: ToolMetadata;
   templateAutocomplete: TemplateAutocompleteControls;
+  validationErrors?: Record<string, string>;
 }
 
 type ToolParamDefinition = {
@@ -39,6 +40,7 @@ export function ToolBlockSection({
   setConfig,
   toolSchema,
   templateAutocomplete,
+  validationErrors = {},
 }: ToolBlockSectionProps) {
   const toolParams = config.params || {};
   const paramSchema = toolSchema?.parameters?.properties || {};
@@ -174,7 +176,7 @@ export function ToolBlockSection({
     };
 
     return (
-      <div key={paramName} className="grid grid-cols-2 gap-1 items-start">
+      <div key={paramName} className="grid grid-cols-2 gap-2 items-start">
         <div className="space-y-1 text-left">
           <div className="flex items-center gap-1">
             <Label htmlFor={inputId} className="text-xs font-medium">
@@ -460,6 +462,6 @@ export function ToolBlockSection({
     );
   }
 
-  return <div className="space-y-4">{Object.entries(paramSchema).map(([name, def]) => renderParamField(name, def))}</div>;
+  return <div className="space-y-2">{Object.entries(paramSchema).map(([name, def]) => renderParamField(name, def))}</div>;
 }
 

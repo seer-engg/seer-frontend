@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Node } from '@xyflow/react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -20,11 +21,21 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
 import { BlockConfigPanel } from './BlockConfigPanel';
 import { WorkflowEdge, WorkflowNodeData } from './types';
+import { backendApiClient } from '@/lib/api-client';
+import { ToolMetadata } from './block-config';
+import {
+  validateToolConfig,
+  validateLlmConfig,
+  validateIfElseConfig,
+  validateForLoopConfig,
+  type ValidationResult,
+} from './block-config/validation';
 
 interface WorkflowNodeConfigDialogProps {
   open: boolean;
@@ -47,9 +58,26 @@ export function WorkflowNodeConfigDialog({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [pendingClose, setPendingClose] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // Track original node for comparison
   const originalNodeRef = useRef<Node<WorkflowNodeData> | null>(null);
+
+  // Fetch tool schema for tool blocks (for validation)
+  const toolName = node?.data.type === 'tool' ? (node.data.config?.tool_name || node.data.config?.toolName) : '';
+  const { data: toolSchema } = useQuery<ToolMetadata | undefined>({
+    queryKey: ['tool-schema', toolName],
+    queryFn: async () => {
+      if (!toolName || node?.data.type !== 'tool') return undefined;
+      const response = await backendApiClient.request<{ tools: ToolMetadata[] }>(
+        '/api/tools',
+        { method: 'GET' }
+      );
+      return response.tools.find(t => t.name === toolName);
+    },
+    enabled: !!toolName && node?.data.type === 'tool',
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Reset when node changes
   useEffect(() => {
@@ -74,9 +102,44 @@ export function WorkflowNodeConfigDialog({
     setHasUnsavedChanges(hasChanges);
   }, [node?.data.config, node?.data.oauth_scope]);
 
+  // Validate configuration when node changes
+  useEffect(() => {
+    if (!node) {
+      setValidationErrors({});
+      return;
+    }
+
+    let validation: ValidationResult;
+
+    switch (node.data.type) {
+      case 'tool':
+        const paramSchema = toolSchema?.parameters?.properties || {};
+        const requiredParams = toolSchema?.parameters?.required || [];
+        validation = validateToolConfig(node.data.config, paramSchema, requiredParams);
+        break;
+      case 'llm':
+        validation = validateLlmConfig(node.data.config);
+        break;
+      case 'if_else':
+        validation = validateIfElseConfig(node.data.config);
+        break;
+      case 'for_loop':
+        validation = validateForLoopConfig(node.data.config);
+        break;
+      default:
+        validation = { isValid: true, errors: {} };
+    }
+
+    setValidationErrors(validation.errors);
+  }, [node?.data.config, node?.data.type, toolSchema]);
+
+  // Compute validation state
+  const hasValidationErrors = Object.keys(validationErrors).length > 0;
+  const validationErrorCount = Object.keys(validationErrors).length;
+
   // Save handler
   const handleSave = useCallback(() => {
-    if (!node || !hasUnsavedChanges) return;
+    if (!node || !hasUnsavedChanges || hasValidationErrors) return;
 
     onUpdate(node.id, {
       config: node.data.config,
@@ -94,7 +157,7 @@ export function WorkflowNodeConfigDialog({
       setPendingClose(false);
       onOpenChange(false);
     }
-  }, [node, hasUnsavedChanges, onUpdate, onOpenChange, pendingClose]);
+  }, [node, hasUnsavedChanges, hasValidationErrors, onUpdate, onOpenChange, pendingClose]);
 
   // Handle dialog close attempt
   const handleOpenChange = useCallback(
@@ -122,6 +185,20 @@ export function WorkflowNodeConfigDialog({
     handleSave();
   }, [handleSave]);
 
+  // Handle local config changes from BlockConfigPanel
+  const handleConfigChange = useCallback(
+    (config: Record<string, any>, oauthScope?: string) => {
+      if (!node) return;
+
+      // Update the node immediately so change detection can work
+      onUpdate(node.id, {
+        config,
+        oauth_scope: oauthScope,
+      });
+    },
+    [node, onUpdate]
+  );
+
   // Register Ctrl+S shortcut
   useKeyboardShortcut({
     key: 's',
@@ -130,7 +207,7 @@ export function WorkflowNodeConfigDialog({
     category: 'Dialog Actions',
     description: 'Save configuration',
     scope: 'dialog',
-    enabled: open && hasUnsavedChanges,
+    enabled: open && hasUnsavedChanges && !hasValidationErrors,
   });
 
   return (
@@ -144,7 +221,7 @@ export function WorkflowNodeConfigDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[70vh] overflow-y-auto pr-1 scrollbar-thin">
+          <div className="max-h-[60vh] overflow-y-auto pr-2 scrollbar-thin">
             {node ? (
               <BlockConfigPanel
                 node={node}
@@ -155,6 +232,8 @@ export function WorkflowNodeConfigDialog({
                 variant="inline"
                 liveUpdate={false}
                 showSaveButton={false}
+                validationErrors={validationErrors}
+                onChange={handleConfigChange}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -167,10 +246,31 @@ export function WorkflowNodeConfigDialog({
             <Button variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel {!isMobile && <Kbd className="ml-1.5">Esc</Kbd>}
             </Button>
-            <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
-              Save Configuration{' '}
-              {!isMobile && <Kbd className="ml-1.5">⌘S</Kbd>}
-            </Button>
+            {hasValidationErrors ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      onClick={handleSave}
+                      disabled={!hasUnsavedChanges || hasValidationErrors}
+                    >
+                      Save {!isMobile && <Kbd className="ml-1.5">⌘S</Kbd>}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">
+                    {validationErrorCount} validation{' '}
+                    {validationErrorCount === 1 ? 'error' : 'errors'}. Fix errors
+                    before saving.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
+                Save {!isMobile && <Kbd className="ml-1.5">⌘S</Kbd>}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

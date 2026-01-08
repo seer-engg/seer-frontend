@@ -128,6 +128,19 @@ export function UnifiedBuildPanel({
     return 'space-y-1.5';
   };
 
+  const getTypeLabel = (type: ItemType): string => {
+    switch (type) {
+      case 'block':
+        return 'Blocks';
+      case 'trigger':
+        return 'Triggers';
+      case 'action':
+        return 'Actions';
+      default:
+        return '';
+    }
+  };
+
   const handleItemClick = (item: UnifiedItem) => {
     if (item.type === 'block') {
       onBlockSelect?.({
@@ -183,8 +196,10 @@ export function UnifiedBuildPanel({
 
           {!isLoading &&
             itemGroups.map((group, idx) => (
-              <div key={`${group.type}-${idx}`}>
-                {idx > 0 && <Separator className="my-2.5" />}
+                <div key={`${group.type}-${idx}`}>
+                <h3 className="text-xs text-left font-semibold text-muted-foreground mb-2 px-0.5">
+                  {getTypeLabel(group.type)}
+                </h3>
                 <div className={getLayoutClass(group.type)}>
                   {group.items.map((item) => (
                     <UnifiedBuildItem key={item.id} item={item} onItemClick={handleItemClick} />

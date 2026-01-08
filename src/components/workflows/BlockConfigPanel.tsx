@@ -35,6 +35,7 @@ interface BlockConfigPanelProps {
   liveUpdate?: boolean;
   liveUpdateDelayMs?: number;
   showSaveButton?: boolean; // Explicitly control save button visibility (default: auto-detect)
+  validationErrors?: Record<string, string>; // Validation errors from parent
 }
 
 export function BlockConfigPanel({
@@ -47,6 +48,7 @@ export function BlockConfigPanel({
   liveUpdate = false,
   liveUpdateDelayMs = 350,
   showSaveButton,
+  validationErrors = {},
 }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
@@ -74,6 +76,16 @@ export function BlockConfigPanel({
     inputRefsRef.current = inputRefs;
     oauthScopeRef.current = oauthScope;
   }, [config, inputRefs, oauthScope]);
+
+  // Notify parent of local state changes (for change detection in dialogs)
+  useEffect(() => {
+    if (onChange && node) {
+      // Only notify if we've synced the node already (avoid triggering on initial load)
+      if (lastSyncedNodeStateRef.current.nodeId === node.id) {
+        onChange(config, oauthScope);
+      }
+    }
+  }, [config, oauthScope, onChange, node]);
 
   const toolName = config.tool_name || config.toolName || '';
 
@@ -338,6 +350,7 @@ export function BlockConfigPanel({
             setConfig={setConfig}
             toolSchema={toolSchema}
             templateAutocomplete={templateAutocomplete}
+            validationErrors={validationErrors}
           />
         );
       case 'llm':
@@ -385,7 +398,7 @@ export function BlockConfigPanel({
 
   if (variant === 'inline') {
     return (
-      <div className="space-y-4 w-fit">
+      <div className="space-y-2 w-fit">
         {renderBlockSection()}
         {saveButton}
       </div>
@@ -394,7 +407,7 @@ export function BlockConfigPanel({
 
   return (
     <Card className="w-fit">
-      <CardContent className="p-6 space-y-4 w-fit">
+      <CardContent className="p-4 space-y-2 w-fit">
         {renderBlockSection()}
         {saveButton}
       </CardContent>

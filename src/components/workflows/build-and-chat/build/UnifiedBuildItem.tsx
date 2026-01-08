@@ -5,7 +5,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 
 import type { UnifiedItem } from '../types';
-import { CategoryBadge } from './CategoryBadge';
 
 interface UnifiedBuildItemProps {
   item: UnifiedItem;
@@ -82,7 +81,6 @@ export function UnifiedBuildItem({ item, onItemClick }: UnifiedBuildItemProps) {
         className="relative cursor-grab active:cursor-grabbing hover:bg-accent transition-colors"
         onClick={handleClick}
       >
-        <CategoryBadge type={item.type} />
         <CardContent className="p-1.5">
           <div className="flex items-center gap-1.5">
             <div className="w-4 h-4 flex-shrink-0">{item.icon}</div>
@@ -123,7 +121,6 @@ export function UnifiedBuildItem({ item, onItemClick }: UnifiedBuildItemProps) {
           : 'cursor-grab active:cursor-grabbing hover:border-primary/50'
       )}
     >
-      <CategoryBadge type="trigger" />
       <CardContent className="flex flex-col gap-1.5 p-1.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">

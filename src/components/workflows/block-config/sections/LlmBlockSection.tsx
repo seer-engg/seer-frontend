@@ -86,8 +86,8 @@ function CollapsibleSystemPrompt({
           onFocus={onFocus}
           onBlur={onBlur}
           placeholder="You are a helpful assistant..."
-          rows={isExpanded ? 6 : 2}
-          className={`resize-none transition-all duration-200 overflow-y-auto ${isExpanded ? 'max-h-[200px]' : 'max-h-[60px]'}`}
+          rows={isExpanded ? 4 : 2}
+          className={`resize-none transition-all duration-200 overflow-y-auto ${isExpanded ? 'max-h-[120px]' : 'max-h-[60px]'}`}
         />
         <VariableAutocompleteDropdown
           visible={dropdownVisible}
@@ -144,7 +144,7 @@ export function LlmBlockSection({
     showAutocomplete && autocompleteContext?.inputId === field;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="relative">
         <Label htmlFor="system-prompt">System Prompt</Label>
         <Textarea
@@ -172,8 +172,8 @@ export function LlmBlockSection({
             setTimeout(() => closeAutocomplete(), 200);
           }}
           placeholder="You are a helpful assistant..."
-          rows={6}
-          className="max-h-[200px] overflow-y-auto"
+          rows={4}
+          className="max-h-[120px] overflow-y-auto"
         />
         <VariableAutocompleteDropdown
           visible={promptDropdownVisible('system_prompt')}
@@ -212,8 +212,8 @@ export function LlmBlockSection({
             setTimeout(() => closeAutocomplete(), 200);
           }}
           placeholder="Enter your message or question..."
-          rows={6}
-          className="max-h-[200px] overflow-y-auto"
+          rows={4}
+          className="max-h-[120px] overflow-y-auto"
           required
         />
         <VariableAutocompleteDropdown
