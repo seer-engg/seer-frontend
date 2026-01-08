@@ -1,30 +1,19 @@
-import { useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
-
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Button } from '@/components/ui/button';
-import { Accordion, AccordionItem, AccordionContent, AccordionTrigger } from '@/components/ui/accordion';
-import { ChevronDown } from 'lucide-react';
 
 import { StructuredOutputEditor } from '@/components/workflows/StructuredOutputEditor';
 
-import { AutocompleteContext } from '../hooks/useTemplateAutocomplete';
-import { TemplateAutocompleteControls } from '../types';
-import { VariableAutocompleteDropdown } from '../widgets/VariableAutocompleteDropdown';
+import { LlmBlockConfig, BlockSectionProps } from '../types';
+import { AutocompleteTextarea } from '../widgets/AutocompleteTextarea';
+import { FormField } from '../widgets/FormField';
 
-interface LlmBlockSectionProps {
-  config: Record<string, any>;
-  setConfig: Dispatch<SetStateAction<Record<string, any>>>;
+interface LlmBlockSectionProps extends Omit<BlockSectionProps<LlmBlockConfig>, 'validationErrors'> {
   useStructuredOutput: boolean;
   setUseStructuredOutput: (value: boolean) => void;
-  structuredOutputSchema?: Record<string, any>;
-  onStructuredOutputSchemaChange: (schema?: Record<string, any>) => void;
-  systemPromptRef: RefObject<HTMLTextAreaElement>;
-  userPromptRef: RefObject<HTMLTextAreaElement>;
-  templateAutocomplete: TemplateAutocompleteControls;
+  structuredOutputSchema?: Record<string, unknown>;
+  onStructuredOutputSchemaChange: (schema?: Record<string, unknown>) => void;
 }
 
 const MODEL_OPTIONS = [
@@ -34,231 +23,19 @@ const MODEL_OPTIONS = [
   { value: 'gpt-4o', label: 'GPT-4o' },
 ];
 
-interface CollapsibleSystemPromptProps {
-  value: string;
-  promptRef: RefObject<HTMLTextAreaElement>;
-  onChange: (value: string, cursorPosition: number) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onFocus: () => void;
-  onBlur: () => void;
-  dropdownVisible: boolean;
-  filteredVariables: Array<{ name: string }>;
-  selectedIndex: number;
-  insertVariable: () => void;
-}
-
-function CollapsibleSystemPrompt({
-  value,
-  promptRef,
-  onChange,
-  onKeyDown,
-  onFocus,
-  onBlur,
-  dropdownVisible,
-  filteredVariables,
-  selectedIndex,
-  insertVariable,
-}: CollapsibleSystemPromptProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label htmlFor="system-prompt">System Prompt</Label>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="h-6 text-xs px-2"
-        >
-          <ChevronDown className={`h-3 w-3 mr-1 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
-          {isExpanded ? 'Collapse' : 'Expand'}
-        </Button>
-      </div>
-      <div className="relative">
-        <Textarea
-          ref={promptRef}
-          id="system-prompt"
-          value={value}
-          onChange={e => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
-          onKeyDown={onKeyDown}
-          onFocus={onFocus}
-          onBlur={onBlur}
-          placeholder="You are a helpful assistant..."
-          rows={isExpanded ? 4 : 2}
-          className={`resize-none transition-all duration-200 overflow-y-auto ${isExpanded ? 'max-h-[120px]' : 'max-h-[60px]'}`}
-        />
-        <VariableAutocompleteDropdown
-          visible={dropdownVisible}
-          variables={filteredVariables}
-          selectedIndex={selectedIndex}
-          onSelect={insertVariable}
-        />
-      </div>
-    </div>
-  );
-}
-
-export function LlmBlockSection({
-  config,
-  setConfig,
+function StructuredOutputToggle({
   useStructuredOutput,
   setUseStructuredOutput,
-  structuredOutputSchema,
   onStructuredOutputSchemaChange,
-  systemPromptRef,
-  userPromptRef,
-  templateAutocomplete,
-}: LlmBlockSectionProps) {
-  const outputSchema = structuredOutputSchema ?? config.output_schema;
-  const {
-    autocompleteContext,
-    checkForAutocomplete,
-    closeAutocomplete,
-    filteredVariables,
-    handleKeyDown,
-    insertVariable,
-    selectedIndex,
-    setAutocompleteContext,
-    showAutocomplete,
-  } = templateAutocomplete;
-
-  const handlePromptChange = (
-    field: 'system_prompt' | 'user_prompt',
-    value: string,
-    ref: RefObject<HTMLTextAreaElement>,
-    cursorPosition: number
-  ) => {
-    setConfig(prev => ({ ...prev, [field]: value }));
-    const context: AutocompleteContext = {
-      inputId: field,
-      ref,
-      value,
-      onChange: newValue => setConfig(prev => ({ ...prev, [field]: newValue })),
-    };
-    checkForAutocomplete(value, cursorPosition, context);
-  };
-
-  const promptDropdownVisible = (field: 'system_prompt' | 'user_prompt') =>
-    showAutocomplete && autocompleteContext?.inputId === field;
-
+  outputSchema,
+}: {
+  useStructuredOutput: boolean;
+  setUseStructuredOutput: (value: boolean) => void;
+  onStructuredOutputSchemaChange: (schema?: Record<string, unknown>) => void;
+  outputSchema?: Record<string, unknown>;
+}) {
   return (
-    <div className="space-y-2">
-      <div className="relative">
-        <Label htmlFor="system-prompt">System Prompt</Label>
-        <Textarea
-          ref={systemPromptRef}
-          id="system-prompt"
-          value={config.system_prompt || ''}
-          onChange={e =>
-            handlePromptChange(
-              'system_prompt',
-              e.target.value,
-              systemPromptRef,
-              e.target.selectionStart ?? e.target.value.length
-            )
-          }
-          onKeyDown={handleKeyDown}
-          onFocus={() => {
-            setAutocompleteContext({
-              inputId: 'system_prompt',
-              ref: systemPromptRef,
-              value: config.system_prompt || '',
-              onChange: newValue => setConfig(prev => ({ ...prev, system_prompt: newValue })),
-            });
-          }}
-          onBlur={() => {
-            setTimeout(() => closeAutocomplete(), 200);
-          }}
-          placeholder="You are a helpful assistant..."
-          rows={4}
-          className="max-h-[120px] overflow-y-auto"
-        />
-        <VariableAutocompleteDropdown
-          visible={promptDropdownVisible('system_prompt')}
-          variables={filteredVariables}
-          selectedIndex={selectedIndex}
-          onSelect={insertVariable}
-        />
-      </div>
-
-      <div className="relative">
-        <Label htmlFor="user-prompt">
-          User Prompt <span className="text-destructive">*</span>
-        </Label>
-        <Textarea
-          ref={userPromptRef}
-          id="user-prompt"
-          value={config.user_prompt || ''}
-          onChange={e =>
-            handlePromptChange(
-              'user_prompt',
-              e.target.value,
-              userPromptRef,
-              e.target.selectionStart ?? e.target.value.length
-            )
-          }
-          onKeyDown={handleKeyDown}
-          onFocus={() => {
-            setAutocompleteContext({
-              inputId: 'user_prompt',
-              ref: userPromptRef,
-              value: config.user_prompt || '',
-              onChange: newValue => setConfig(prev => ({ ...prev, user_prompt: newValue })),
-            });
-          }}
-          onBlur={() => {
-            setTimeout(() => closeAutocomplete(), 200);
-          }}
-          placeholder="Enter your message or question..."
-          rows={4}
-          className="max-h-[120px] overflow-y-auto"
-          required
-        />
-        <VariableAutocompleteDropdown
-          visible={promptDropdownVisible('user_prompt')}
-          variables={filteredVariables}
-          selectedIndex={selectedIndex}
-          onSelect={insertVariable}
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="model">Model</Label>
-        <Select
-          value={config.model || MODEL_OPTIONS[0].value}
-          onValueChange={value => setConfig(prev => ({ ...prev, model: value }))}
-        >
-          <SelectTrigger id="model">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MODEL_OPTIONS.map(option => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div>
-        <Label htmlFor="temperature">Temperature</Label>
-        <Input
-          id="temperature"
-          type="number"
-          min="0"
-          max="2"
-          step="0.1"
-          value={config.temperature ?? 0.2}
-          onChange={e => {
-            const value = parseFloat(e.target.value);
-            setConfig(prev => ({ ...prev, temperature: value }));
-          }}
-        />
-      </div>
-
+    <>
       <div className="flex items-center space-x-2 pt-2 border-t">
         <Checkbox
           id="structured-output"
@@ -287,6 +64,83 @@ export function LlmBlockSection({
           onChange={schema => onStructuredOutputSchemaChange(schema)}
         />
       )}
+    </>
+  );
+}
+
+export function LlmBlockSection({
+  config,
+  setConfig,
+  useStructuredOutput,
+  setUseStructuredOutput,
+  structuredOutputSchema,
+  onStructuredOutputSchemaChange,
+  templateAutocomplete,
+}: LlmBlockSectionProps) {
+  const outputSchema = structuredOutputSchema ?? config.output_schema;
+
+  return (
+    <div className="space-y-2">
+      <FormField
+        label="System Prompt"
+        description="Instructions that set the AI's behavior and context"
+        htmlFor="system-prompt"
+      >
+        <AutocompleteTextarea
+          id="system-prompt"
+          value={config.system_prompt || ''}
+          onChange={value => setConfig(prev => ({ ...prev, system_prompt: value }))}
+          placeholder="You are a helpful assistant..."
+          templateAutocomplete={templateAutocomplete}
+          rows={4}
+          className="max-h-[120px] overflow-y-auto"
+        />
+      </FormField>
+
+      <FormField
+        label="User Prompt"
+        description="The main prompt or question for the LLM"
+        required
+        htmlFor="user-prompt"
+      >
+        <AutocompleteTextarea
+          id="user-prompt"
+          value={config.user_prompt || ''}
+          onChange={value => setConfig(prev => ({ ...prev, user_prompt: value }))}
+          placeholder="Enter your message or question..."
+          templateAutocomplete={templateAutocomplete}
+          rows={4}
+          className="max-h-[120px] overflow-y-auto"
+        />
+      </FormField>
+
+      <FormField label="Model" description="Choose the AI model to use" defaultValue={MODEL_OPTIONS[0].label} htmlFor="model">
+        <Select value={config.model || MODEL_OPTIONS[0].value} onValueChange={value => setConfig(prev => ({ ...prev, model: value }))}>
+          <SelectTrigger id="model"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {MODEL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </FormField>
+
+      <FormField label="Temperature" description="Controls randomness (0=deterministic, 2=very creative)" defaultValue={0.2} htmlFor="temperature">
+        <Input
+          id="temperature"
+          type="number"
+          min="0"
+          max="2"
+          step="0.1"
+          value={config.temperature ?? 0.2}
+          onChange={e => setConfig(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+        />
+      </FormField>
+
+      <StructuredOutputToggle
+        useStructuredOutput={useStructuredOutput}
+        setUseStructuredOutput={setUseStructuredOutput}
+        onStructuredOutputSchemaChange={onStructuredOutputSchemaChange}
+        outputSchema={outputSchema}
+      />
     </div>
   );
 }

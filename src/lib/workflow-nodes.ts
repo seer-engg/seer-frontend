@@ -1,6 +1,8 @@
 import type { FunctionBlockSchema, GmailIntegrationContext, SupabaseIntegrationContext, WorkflowNodeData } from '@/components/workflows/types';
 import { GMAIL_TRIGGER_KEY, SUPABASE_TRIGGER_KEY } from '@/components/workflows/triggers/constants';
 
+const DEFAULT_LLM_USER_PROMPT = 'Enter your prompt here';
+
 /**
  * Generate unique node ID based on type
  */
@@ -13,34 +15,41 @@ export function generateNodeId(type: 'trigger' | 'block'): string {
  */
 export function withDefaultBlockConfig(
   blockType: string,
-  config: Record<string, unknown> | undefined,
-  functionBlocksMap: Map<string, FunctionBlockSchema>
+  config: Record<string, unknown> = {},
+  functionBlockMap?: Map<string, FunctionBlockSchema>,
 ): Record<string, unknown> {
-  const blockSchema = functionBlocksMap.get(blockType);
-
-  if (!blockSchema) {
-    return config || {};
-  }
-
-  const defaults: Record<string, unknown> = {};
-
-  // Apply defaults from schema properties
-  if (blockSchema.config_schema && typeof blockSchema.config_schema === 'object') {
-    const schema = blockSchema.config_schema as { properties?: Record<string, unknown> };
-    if (schema.properties) {
-      for (const [key, value] of Object.entries(schema.properties)) {
-        const propSchema = value as Record<string, unknown>;
-        if ('default' in propSchema) {
-          defaults[key] = propSchema.default;
-        }
-      }
+  const schemaDefaults = functionBlockMap?.get(blockType)?.defaults;
+  const defaults: Record<string, unknown> = schemaDefaults ?? (() => {
+    switch (blockType) {
+      case 'llm':
+        return {
+          system_prompt: '',
+          user_prompt: DEFAULT_LLM_USER_PROMPT,
+          model: 'gpt-5-mini',
+          temperature: 0.2,
+        };
+      case 'if_else':
+        return {
+          condition: '',
+        };
+      case 'for_loop':
+        return {
+          array_mode: 'variable',
+          array_variable: 'items',
+          array_literal: [],
+          item_var: 'item',
+        };
+      case 'trigger':
+        // Triggers have their config passed directly
+        return {};
+      default:
+        return {};
     }
-  }
+  })();
 
-  // Merge with provided config (config takes precedence)
   return {
     ...defaults,
-    ...(config || {}),
+    ...config,
   };
 }
 
