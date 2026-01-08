@@ -2,18 +2,15 @@
  * Structured Output Editor Component
  *
  * Simple table-based editor for defining LLM structured output schemas.
- * Includes AI-powered automatic generation of schema titles and descriptions.
+ * Backend automatically generates schema title and description from field definitions.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Sparkles, RefreshCw } from 'lucide-react';
-import { useSchemaMetadataGenerator } from '@/hooks/useSchemaMetadataGenerator';
+import { Plus, Trash2 } from 'lucide-react';
 
 interface FieldDefinition {
   name: string;
@@ -21,9 +18,19 @@ interface FieldDefinition {
   description?: string;
 }
 
+interface JsonSchema {
+  type: string;
+  properties: Record<string, {
+    type: string;
+    description?: string;
+  }>;
+  title?: string;
+  description?: string;
+}
+
 interface StructuredOutputEditorProps {
-  value?: any; // JSON schema object
-  onChange: (schema: any) => void;
+  value?: JsonSchema;
+  onChange: (schema: JsonSchema) => void;
 }
 
 const PYDANTIC_TYPES = [
@@ -63,7 +70,7 @@ function jsonSchemaTypeToPydanticType(jsonType: string): string {
   return typeMap[jsonType] || 'any';
 }
 
-const DEFAULT_SCHEMA = {
+const DEFAULT_SCHEMA: JsonSchema = {
   type: 'object',
   properties: {},
 };
@@ -75,12 +82,12 @@ const createEmptyField = (): FieldDefinition => ({
 });
 
 // Convert JSON schema to field definitions
-function schemaToFields(schema: any): FieldDefinition[] {
+function schemaToFields(schema: JsonSchema | undefined): FieldDefinition[] {
   if (!schema || !schema.properties) {
     return [];
   }
-  
-  return Object.entries(schema.properties).map(([name, prop]: [string, any]) => ({
+
+  return Object.entries(schema.properties).map(([name, prop]) => ({
     name,
     type: jsonSchemaTypeToPydanticType(prop.type || 'any'),
     description: prop.description || '',
@@ -88,15 +95,12 @@ function schemaToFields(schema: any): FieldDefinition[] {
 }
 
 // Convert field definitions to JSON schema
-function fieldsToSchema(
-  fields: FieldDefinition[],
-  options?: { title?: string; description?: string },
-): any {
-  const properties: Record<string, any> = {};
-  
+function fieldsToSchema(fields: FieldDefinition[]): JsonSchema {
+  const properties: Record<string, { type: string; description?: string }> = {};
+
   fields.forEach((field) => {
     if (field.name.trim()) {
-      const propDef: Record<string, any> = {
+      const propDef: { type: string; description?: string } = {
         type: pydanticTypeToJsonSchemaType(field.type),
       };
       // Include description if provided
@@ -106,57 +110,86 @@ function fieldsToSchema(
       properties[field.name.trim()] = propDef;
     }
   });
-  
-  const schema: Record<string, any> = {
+
+  return {
     type: 'object',
     properties,
   };
-  
-  if (options?.title && options.title.trim()) {
-    schema.title = options.title.trim();
-  }
-  
-  if (options?.description && options.description.trim()) {
-    schema.description = options.description.trim();
-  }
-  
-  return schema;
 }
 
+interface FieldRowProps {
+  field: FieldDefinition;
+  index: number;
+  onUpdate: (index: number, updates: Partial<FieldDefinition>) => void;
+  onRemove: (index: number) => void;
+  canRemove: boolean;
+}
+
+function FieldRow({ field, index, onUpdate, onRemove, canRemove }: FieldRowProps) {
+  return (
+    <TableRow>
+      <TableCell>
+        <Input
+          value={field.name}
+          onChange={(e) => onUpdate(index, { name: e.target.value })}
+          placeholder="field_name"
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell>
+        <Select
+          value={field.type}
+          onValueChange={(value) => onUpdate(index, { type: value })}
+        >
+          <SelectTrigger className="h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PYDANTIC_TYPES.map((type) => (
+              <SelectItem key={type.value} value={type.value}>
+                {type.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <Input
+          value={field.description || ''}
+          onChange={(e) => onUpdate(index, { description: e.target.value })}
+          placeholder="Describe this field..."
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onRemove(index)}
+          disabled={!canRemove}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// eslint-disable-next-line max-lines-per-function
 export function StructuredOutputEditor({ value, onChange }: StructuredOutputEditorProps) {
   const [fields, setFields] = useState<FieldDefinition[]>([createEmptyField()]);
-  const [schemaTitle, setSchemaTitle] = useState('');
-  const [schemaDescription, setSchemaDescription] = useState('');
   const lastEmittedSchemaRef = useRef<string>('');
 
   const syncSchema = useCallback(
-    (nextFields: FieldDefinition[], nextTitle: string, nextDescription: string) => {
-      const schema = fieldsToSchema(nextFields, {
-        title: nextTitle,
-        description: nextDescription,
-      });
+    (nextFields: FieldDefinition[]) => {
+      const schema = fieldsToSchema(nextFields);
       const serialized = JSON.stringify(schema);
       onChange(schema);
       lastEmittedSchemaRef.current = serialized;
     },
     [onChange],
   );
-
-  // Schema metadata generation
-  const {
-    isGenerating,
-    isAiGenerated,
-    regenerate,
-  } = useSchemaMetadataGenerator({
-    jsonSchema: fieldsToSchema(fields),
-    autoGenerate: true,
-    debounceMs: 1500,
-    onGenerated: (metadata) => {
-      setSchemaTitle(metadata.title);
-      setSchemaDescription(metadata.description);
-      syncSchema(fields, metadata.title, metadata.description);
-    },
-  });
 
   useEffect(() => {
     const hasValue = value && Object.keys(value).length > 0;
@@ -168,8 +201,6 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
       }
       const parsedFields = schemaToFields(value);
       setFields(parsedFields.length > 0 ? parsedFields : [createEmptyField()]);
-      setSchemaTitle(typeof value.title === 'string' ? value.title : '');
-      setSchemaDescription(typeof value.description === 'string' ? value.description : '');
       lastEmittedSchemaRef.current = serializedValue;
       return;
     }
@@ -180,8 +211,6 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
     }
 
     setFields([createEmptyField()]);
-    setSchemaTitle('');
-    setSchemaDescription('');
     onChange(DEFAULT_SCHEMA);
     lastEmittedSchemaRef.current = defaultSerialized;
   }, [value, onChange]);
@@ -190,22 +219,12 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
     (updater: (prev: FieldDefinition[]) => FieldDefinition[]) => {
       setFields(prevFields => {
         const nextFields = updater(prevFields);
-        syncSchema(nextFields, schemaTitle, schemaDescription);
+        syncSchema(nextFields);
         return nextFields.length > 0 ? nextFields : [createEmptyField()];
       });
     },
-    [schemaTitle, schemaDescription, syncSchema],
+    [syncSchema],
   );
-
-  const handleTitleChange = (value: string) => {
-    setSchemaTitle(value);
-    syncSchema(fields, value, schemaDescription);
-  };
-
-  const handleDescriptionChange = (value: string) => {
-    setSchemaDescription(value);
-    syncSchema(fields, schemaTitle, value);
-  };
 
   const addField = () => {
     handleFieldChange(prev => [...prev, createEmptyField()]);
@@ -225,61 +244,6 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="schema-title">Schema Title</Label>
-            {isAiGenerated && (
-              <div className="flex items-center gap-1">
-                <Badge
-                  variant="secondary"
-                  className="h-4 px-1.5 text-[9px] bg-seer/10 text-seer dark:text-seer border-seer/20"
-                >
-                  <Sparkles className="w-3 h-3 mr-0.5" />
-                  AI
-                </Badge>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={regenerate}
-                  disabled={isGenerating}
-                  title="Regenerate with AI"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isGenerating ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
-            )}
-          </div>
-          <Input
-            id="schema-title"
-            placeholder="TwoPeople"
-            value={schemaTitle}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            className="h-9"
-            disabled={isGenerating}
-          />
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="schema-description">Schema Description</Label>
-            {isGenerating && (
-              <span className="text-xs text-muted-foreground">Generating...</span>
-            )}
-          </div>
-          <Textarea
-            id="schema-description"
-            placeholder="Describe what this structured output should contain..."
-            value={schemaDescription}
-            onChange={(e) => handleDescriptionChange(e.target.value)}
-            rows={2}
-            className="min-h-[72px]"
-            disabled={isGenerating}
-          />
-        </div>
-      </div>
-
       <div className="flex items-center justify-between">
         <Label>Output Fields</Label>
         <Button
@@ -312,52 +276,14 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
               </TableRow>
             ) : (
               fields.map((field, index) => (
-                <TableRow key={index}>
-                  <TableCell>
-                    <Input
-                      value={field.name}
-                      onChange={(e) => updateField(index, { name: e.target.value })}
-                      placeholder="field_name"
-                      className="h-8"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={field.type}
-                      onValueChange={(value) => updateField(index, { type: value })}
-                    >
-                      <SelectTrigger className="h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PYDANTIC_TYPES.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={field.description || ''}
-                      onChange={(e) => updateField(index, { description: e.target.value })}
-                      placeholder="Describe this field..."
-                      className="h-8"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeField(index)}
-                      disabled={fields.length === 1}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
+                <FieldRow
+                  key={index}
+                  field={field}
+                  index={index}
+                  onUpdate={updateField}
+                  onRemove={removeField}
+                  canRemove={fields.length > 1}
+                />
               ))
             )}
           </TableBody>
@@ -371,4 +297,3 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
     </div>
   );
 }
-
