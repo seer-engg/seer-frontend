@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
+import { useShallow } from 'zustand/shallow';
 
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -26,48 +27,77 @@ import type {
   BuiltInBlock,
 } from './build-and-chat/types';
 import { filterSystemPrompt, getDisplayableAssistantMessage } from './build-and-chat/utils';
+import { useCanvasStore, useChatStore, useUIStore } from '@/stores';
 
 export function BuildAndChatPanel({
   onBlockSelect,
   workflowId,
-  nodes,
-  edges,
   onWorkflowGraphSync,
-  onProposalPreviewChange,
-  activePreviewProposalId,
-  collapsed: externalCollapsed,
-  onCollapseChange,
   functionBlocks,
   triggerOptions = [],
   isLoadingTriggers = false,
   triggerInfoMessage,
 }: BuildAndChatPanelProps) {
-  const [internalCollapsed, setInternalCollapsed] = useState(() => {
-    const saved = localStorage.getItem('buildChatPanelCollapsed');
-    return saved ? JSON.parse(saved) : false;
-  });
+  const { nodes, edges } = useCanvasStore(
+    useShallow((state) => ({
+      nodes: state.nodes,
+      edges: state.edges,
+    })),
+  );
+  const {
+    buildChatPanelCollapsed,
+    setBuildChatPanelCollapsed,
+    proposalPreview,
+    setProposalPreview,
+  } = useUIStore(
+    useShallow((state) => ({
+      buildChatPanelCollapsed: state.buildChatPanelCollapsed,
+      setBuildChatPanelCollapsed: state.setBuildChatPanelCollapsed,
+      proposalPreview: state.proposalPreview,
+      setProposalPreview: state.setProposalPreview,
+    })),
+  );
 
-  const collapsed = externalCollapsed !== undefined ? externalCollapsed : internalCollapsed;
-
-  const setCollapsed = (value: boolean) => {
-    if (externalCollapsed === undefined) {
-      setInternalCollapsed(value);
-      localStorage.setItem('buildChatPanelCollapsed', JSON.stringify(value));
-    }
-    onCollapseChange?.(value);
-  };
+  const collapsed = buildChatPanelCollapsed;
+  const activePreviewProposalId = proposalPreview?.proposal.id ?? null;
 
   const handleToggleCollapse = () => {
-    setCollapsed(!collapsed);
+    setBuildChatPanelCollapsed(!collapsed);
   };
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>('');
-  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
-  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
-  const [proposalActionLoading, setProposalActionLoading] = useState<number | null>(null);
+  const {
+    input,
+    isLoading,
+    selectedModel,
+    currentSessionId,
+    currentThreadId,
+    proposalActionLoading,
+    setMessages,
+    setInput,
+    setIsLoading,
+    setSelectedModel,
+    setCurrentSessionId,
+    setCurrentThreadId,
+    setProposalActionLoading,
+    clearMessages,
+  } = useChatStore(
+    useShallow((state) => ({
+      input: state.input,
+      isLoading: state.isLoading,
+      selectedModel: state.selectedModel,
+      currentSessionId: state.currentSessionId,
+      currentThreadId: state.currentThreadId,
+      proposalActionLoading: state.proposalActionLoading,
+      setMessages: state.setMessages,
+      setInput: state.setInput,
+      setIsLoading: state.setIsLoading,
+      setSelectedModel: state.setSelectedModel,
+      setCurrentSessionId: state.setCurrentSessionId,
+      setCurrentThreadId: state.setCurrentThreadId,
+      setProposalActionLoading: state.setProposalActionLoading,
+      clearMessages: state.clearMessages,
+    })),
+  );
   const queryClient = useQueryClient();
 
   const { data: toolsData, isLoading: isLoadingTools } = useQuery({
@@ -185,17 +215,17 @@ export function BuildAndChatPanel({
       if (response.proposal && response.proposal.spec && !response.proposal_error) {
         try {
           const previewGraph = workflowSpecToGraph(response.proposal.spec);
-          onProposalPreviewChange?.({
+          setProposalPreview({
             proposal: response.proposal,
             graph: previewGraph,
           });
         } catch (graphError) {
           console.error('Failed to build workflow preview from proposal:', graphError);
           toast.error('Failed to preview workflow proposal');
-          onProposalPreviewChange?.(null);
+          setProposalPreview(null);
         }
       } else {
-        onProposalPreviewChange?.(null);
+        setProposalPreview(null);
       }
 
       const displayContent = getDisplayableAssistantMessage(
@@ -234,7 +264,7 @@ export function BuildAndChatPanel({
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
-      onProposalPreviewChange?.(null);
+      setProposalPreview(null);
     } finally {
       setIsLoading(false);
     }
@@ -252,8 +282,8 @@ export function BuildAndChatPanel({
       );
       setCurrentSessionId(response.id);
       setCurrentThreadId(response.thread_id);
-      setMessages([]);
-      onProposalPreviewChange?.(null);
+      clearMessages();
+      setProposalPreview(null);
       queryClient.invalidateQueries({ queryKey: ['chat-sessions', workflowId] });
     } catch (error) {
       console.error('Failed to create session:', error);
@@ -266,7 +296,7 @@ export function BuildAndChatPanel({
     if (session) {
       setCurrentThreadId(session.thread_id);
     }
-    onProposalPreviewChange?.(null);
+    setProposalPreview(null);
   };
 
   const updateProposalInMessages = (updatedProposal: WorkflowProposal) => {
@@ -293,7 +323,7 @@ export function BuildAndChatPanel({
       } else if (response.workflow_graph) {
         onWorkflowGraphSync?.(response.workflow_graph);
       }
-      onProposalPreviewChange?.(null);
+      setProposalPreview(null);
       toast.success('Proposal accepted');
     } catch (error) {
       console.error('Failed to accept proposal:', error);
@@ -312,7 +342,7 @@ export function BuildAndChatPanel({
         { method: 'POST' },
       );
       updateProposalInMessages(response.proposal);
-      onProposalPreviewChange?.(null);
+      setProposalPreview(null);
       toast.success('Proposal rejected');
     } catch (error) {
       console.error('Failed to reject proposal:', error);
@@ -382,22 +412,14 @@ export function BuildAndChatPanel({
         <TabsContent value="chat" className="flex-1 mt-0 overflow-hidden">
           <ChatPanel
             workflowId={workflowId}
-            messages={messages}
-            isLoading={isLoading}
-            input={input}
-            onInputChange={(value) => setInput(value)}
             onSend={handleSend}
-            selectedModel={selectedModel}
-            onModelChange={(value) => setSelectedModel(value)}
             models={models}
             isLoadingModels={isLoadingModels}
             filterSystemPrompt={filterSystemPrompt}
             onNewSession={handleNewSession}
             sessions={sessions}
             sessionsStatus={sessionsStatus}
-            currentSessionId={currentSessionId}
             onSelectSession={handleSelectSession}
-            proposalActionLoading={proposalActionLoading}
             onAcceptProposal={handleAcceptProposal}
             onRejectProposal={handleRejectProposal}
             activePreviewProposalId={activePreviewProposalId}

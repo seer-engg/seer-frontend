@@ -13,8 +13,6 @@ import {
   Node,
   Connection,
   addEdge,
-  useNodesState,
-  useEdgesState,
   NodeMouseHandler,
   ConnectionMode,
   MarkerType,
@@ -42,6 +40,8 @@ import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
 import { InputBlockNode } from './blocks/InputBlockNode';
 import { TriggerBlockNode } from './blocks/TriggerBlockNode';
+import { useCanvasStore } from '@/stores';
+import { useShallow } from 'zustand/shallow';
 
 /**
  * Extract tool names from workflow nodes
@@ -66,202 +66,106 @@ const nodeTypes = {
 };
 
 interface WorkflowCanvasProps {
-  initialNodes?: Node<WorkflowNodeData>[];
-  initialEdges?: WorkflowEdge[];
-  onNodesChange?: (nodes: Node<WorkflowNodeData>[]) => void;
-  onEdgesChange?: (edges: WorkflowEdge[]) => void;
-  onNodeSelect?: (nodeId: string) => void;
+  triggerNodes?: Node<WorkflowNodeData>[];
+  previewGraph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] } | null;
   onNodeDoubleClick?: (node: Node<WorkflowNodeData>) => void;
-  onNodeDrop?: (blockData: { type: string; label: string; config?: any }, position: { x: number; y: number }) => void;
-  selectedNodeId?: string | null;
+  onNodeDrop?: (
+    blockData: { type: string; label: string; config?: any },
+    position: { x: number; y: number },
+  ) => void;
   className?: string;
   readOnly?: boolean;
 }
 
 export function WorkflowCanvas({
-  initialNodes = [],
-  initialEdges = [],
-  onNodesChange,
-  onEdgesChange,
-  onNodeSelect,
+  triggerNodes = [],
+  previewGraph = null,
   onNodeDoubleClick,
   onNodeDrop,
-  selectedNodeId,
   className,
   readOnly = false,
 }: WorkflowCanvasProps) {
-  const [nodes, setNodes] = useNodesState(initialNodes);
-  const [edges, setEdges] = useEdgesState(initialEdges);
+  const {
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    setSelectedNodeId,
+    selectedNodeId,
+    updateNode,
+  } = useCanvasStore(
+    useShallow((state) => ({
+      nodes: state.nodes,
+      edges: state.edges,
+      setNodes: state.setNodes,
+      setEdges: state.setEdges,
+      setSelectedNodeId: state.setSelectedNodeId,
+      selectedNodeId: state.selectedNodeId,
+      updateNode: state.updateNode,
+    })),
+  );
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
-  const updateNodeData = useCallback(
-    (nodeId: string, updates: Partial<WorkflowNodeData>) => {
-      setNodes((prevNodes) => {
-        // Check if node still exists before updating
-        const nodeExists = prevNodes.some(n => n.id === nodeId);
-        if (!nodeExists) {
-          console.warn(`Attempted to update non-existent node: ${nodeId}`);
-          return prevNodes; // Return unchanged to prevent unnecessary render
-        }
+  const workflowNodes = previewGraph?.nodes ?? nodes;
+  const workflowEdges = previewGraph?.edges ?? edges;
 
-        const updatedNodes = prevNodes.map((node) => {
-          if (node.id === nodeId) {
-            const mergedData = { ...node.data, ...updates };
-            if (updates.config) {
-              // Always preserve fields array if it exists in updates, even if empty
-              const mergedConfig = {
-                ...node.data.config,
-                ...updates.config,
-              };
-              // Explicitly preserve fields array if present in updates
-              if ('fields' in updates.config) {
-                mergedConfig.fields = updates.config.fields;
-              }
-              mergedData.config = mergedConfig;
-            }
-            return { ...node, data: mergedData };
-          }
-          return node;
-        });
-        // Remove onNodesChange call - useEffect will handle parent notification
-        return updatedNodes;
-      });
-    },
-    [setNodes],
-  );
-
-  // Sync with parent state changes using smart change detection
-  useEffect(() => {
-    setNodes(currentNodes => {
-      // Only sync if nodes truly changed (different count or IDs)
-      if (initialNodes.length !== currentNodes.length) {
-        return initialNodes;
-      }
-
-      // Check if node IDs differ (new nodes added or removed)
-      const currentIds = new Set(currentNodes.map(n => n.id));
-      const newIds = new Set(initialNodes.map(n => n.id));
-
-      const hasIdChanges =
-        currentIds.size !== newIds.size ||
-        [...newIds].some(id => !currentIds.has(id));
-
-      if (hasIdChanges) {
-        return initialNodes;
-      }
-
-      // Check for data changes in existing nodes
-      let hasDataChanges = false;
-      const updatedNodes = currentNodes.map(currentNode => {
-        const newNode = initialNodes.find(n => n.id === currentNode.id);
-        if (!newNode) return currentNode;
-
-        // Compare data objects (including config)
-        const currentData = JSON.stringify(currentNode.data);
-        const newData = JSON.stringify(newNode.data);
-        
-        if (currentData !== newData) {
-          hasDataChanges = true;
-          return {
-            ...currentNode,
-            data: newNode.data,
-          };
-        }
-        
-        return currentNode;
-      });
-
-      return hasDataChanges ? updatedNodes : currentNodes;
-    });
-  }, [initialNodes]);
-
-  useEffect(() => {
-    setEdges(currentEdges => {
-      // Only sync if edges truly changed
-      if (initialEdges.length !== currentEdges.length) {
-        return initialEdges;
-      }
-
-      const currentIds = new Set(currentEdges.map(e => e.id));
-      const newIds = new Set(initialEdges.map(e => e.id));
-
-      const hasIdChanges =
-        currentIds.size !== newIds.size ||
-        [...newIds].some(id => !currentIds.has(id));
-
-      if (hasIdChanges) {
-        return initialEdges;
-      }
-
-      // Check for data changes in existing edges
-      let hasDataChanges = false;
-      const updatedEdges = currentEdges.map(currentEdge => {
-        const newEdge = initialEdges.find(e => e.id === currentEdge.id);
-        if (!newEdge) return currentEdge;
-
-        // Compare edge objects
-        const currentData = JSON.stringify(currentEdge);
-        const newData = JSON.stringify(newEdge);
-        
-        if (currentData !== newData) {
-          hasDataChanges = true;
-          return newEdge;
-        }
-        
-        return currentEdge;
-      });
-
-      return hasDataChanges ? updatedEdges : currentEdges;
-    });
-  }, [initialEdges]);
-
-  // Update nodes when selectedNodeId changes
-  useEffect(() => {
-    setNodes((nds) =>
-      nds.map((node) => ({
+  const renderedNodes = useMemo(() => {
+    const workflowNodesWithSelection = workflowNodes.map((node) => {
+      const isSelected = selectedNodeId ? node.id === selectedNodeId : false;
+      return {
         ...node,
         data: {
           ...node.data,
-          selected: node.id === selectedNodeId,
+          selected: isSelected,
         },
-      }))
-    );
-  }, [selectedNodeId, setNodes]);
+      };
+    });
 
-  // Handle node changes
+    if (!triggerNodes.length) {
+      return workflowNodesWithSelection;
+    }
+
+    return [
+      ...workflowNodesWithSelection,
+      ...triggerNodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          selected: false,
+        },
+      })),
+    ];
+  }, [workflowNodes, triggerNodes, selectedNodeId]);
+
+  const updateNodeData = useCallback(
+    (nodeId: string, updates: Partial<WorkflowNodeData>) => {
+      updateNode(nodeId, updates);
+    },
+    [updateNode],
+  );
+
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<WorkflowNodeData>>[]) => {
-      setNodes((currentNodes) => {
-        return applyNodeChanges<Node<WorkflowNodeData>>(changes, currentNodes);
-      });
+      if (readOnly) {
+        return;
+      }
+      const updatedNodes = applyNodeChanges<Node<WorkflowNodeData>>(changes, renderedNodes);
+      const workflowOnly = updatedNodes.filter((node) => node.type !== 'trigger');
+      setNodes(workflowOnly);
     },
-    [setNodes]
+    [renderedNodes, readOnly, setNodes],
   );
 
-  // Handle edge changes
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<WorkflowEdge>[]) => {
-      setEdges((currentEdges) => {
-        return applyEdgeChanges<WorkflowEdge>(changes, currentEdges);
-      });
+      if (readOnly) {
+        return;
+      }
+      setEdges((currentEdges) => applyEdgeChanges<WorkflowEdge>(changes, currentEdges));
     },
-    [setEdges]
+    [readOnly, setEdges],
   );
-
-  // Notify parent of node changes after state update completes
-  useEffect(() => {
-    if (onNodesChange) {
-      onNodesChange(nodes);
-    }
-  }, [nodes, onNodesChange]);
-
-  // Notify parent of edge changes after state update completes
-  useEffect(() => {
-    if (onEdgesChange) {
-      onEdgesChange(edges);
-    }
-  }, [edges, onEdgesChange]);
 
   // Handle connections
   const onConnect = useCallback(
@@ -273,7 +177,7 @@ export function WorkflowCanvas({
         return;
       }
 
-      const wouldCreateCycle = edges.some(
+      const wouldCreateCycle = workflowEdges.some(
         (e) => e.target === params.source && e.source === params.target
       );
 
@@ -287,8 +191,9 @@ export function WorkflowCanvas({
         ['true', 'false', 'loop', 'exit'].includes(params.sourceHandle)
           ? (params.sourceHandle as 'true' | 'false' | 'loop' | 'exit')
           : undefined;
-      const branch = branchFromHandle ?? getNextBranchForSource(params.source, nodes, edges);
-      const sourceNode = nodes.find((node) => node.id === params.source);
+      const branch =
+        branchFromHandle ?? getNextBranchForSource(params.source, workflowNodes, workflowEdges);
+      const sourceNode = workflowNodes.find((node) => node.id === params.source);
 
       if (!branch && sourceNode && (sourceNode.type === 'if_else' || sourceNode.type === 'for_loop')) {
         console.warn(`All branch handles are already used for node ${sourceNode.id}`);
@@ -310,26 +215,28 @@ export function WorkflowCanvas({
       setEdges((eds) => addEdge(newEdge, eds));
       // Remove manual onEdgesChange call - useEffect will handle parent notification
     },
-    [edges, nodes, setEdges, readOnly]
+    [workflowEdges, workflowNodes, setEdges, readOnly]
   );
 
   // Handle node clicks
   const handleNodeClick: NodeMouseHandler = useCallback(
-    (event, node) => {
-      if (onNodeSelect) {
-        onNodeSelect(node.id);
+    (_, node) => {
+      if (readOnly) {
+        return;
       }
+      setSelectedNodeId(node.id);
     },
-    [onNodeSelect]
+    [readOnly, setSelectedNodeId],
   );
 
   const handleNodeDoubleClick: NodeMouseHandler = useCallback(
-    (event, node) => {
-      if (onNodeDoubleClick) {
-        onNodeDoubleClick(node as Node<WorkflowNodeData>);
+    (_, node) => {
+      if (readOnly) {
+        return;
       }
+      onNodeDoubleClick?.(node);
     },
-    [onNodeDoubleClick],
+    [readOnly, onNodeDoubleClick],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -427,11 +334,11 @@ export function WorkflowCanvas({
 
   const contextValue = useMemo(
     () => ({
-      nodes,
-      edges,
+      nodes: workflowNodes,
+      edges: workflowEdges,
       updateNodeData,
     }),
-    [nodes, edges, updateNodeData],
+    [workflowNodes, workflowEdges, updateNodeData],
   );
 
   return (
@@ -443,14 +350,14 @@ export function WorkflowCanvas({
         onDragOver={onDragOver}
       >
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={renderedNodes}
+          edges={workflowEdges}
           nodeTypes={nodeTypes as any}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={readOnly ? undefined : onConnect}
           onNodeClick={handleNodeClick}
-          onNodeDoubleClick={readOnly ? undefined : handleNodeDoubleClick}
+          onNodeDoubleClick={handleNodeDoubleClick}
           connectionMode={ConnectionMode.Loose}
           fitView
           fitViewOptions={{ padding: 0.2 }}

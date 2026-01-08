@@ -1,14 +1,7 @@
-import { useCallback } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect } from 'react';
+import { useShallow } from 'zustand/shallow';
 
-import {
-  createTriggerSubscription,
-  deleteTriggerSubscription,
-  listTriggerSubscriptions,
-  listTriggers,
-  testTriggerSubscription,
-  updateTriggerSubscription,
-} from '@/lib/workflow-triggers';
+import { useIntegrationStore } from '@/stores/integrationStore';
 import type {
   TriggerDescriptor,
   TriggerSubscriptionCreateRequest,
@@ -21,11 +14,6 @@ import type {
 interface TogglePayload {
   subscriptionId: number;
   enabled: boolean;
-}
-
-interface UpdatePayload {
-  subscriptionId: number;
-  payload: TriggerSubscriptionUpdateRequest;
 }
 
 interface TestPayload {
@@ -49,79 +37,78 @@ export interface UseWorkflowTriggersResult {
   testSubscription: (payload: TestPayload) => Promise<TriggerSubscriptionTestResponse>;
 }
 
-const catalogQueryKey = ['workflow-triggers', 'catalog'];
-const subscriptionQueryKey = (workflowId?: string | null) =>
-  ['workflow-triggers', 'subscriptions', workflowId ?? 'none'] as const;
-
 export function useWorkflowTriggers(workflowId?: string | null): UseWorkflowTriggersResult {
-  const queryClient = useQueryClient();
-
-  const { data: triggerCatalog, isLoading: isLoadingTriggers } = useQuery({
-    queryKey: catalogQueryKey,
-    queryFn: listTriggers,
-    staleTime: 5 * 60 * 1000,
-  });
-
   const {
-    data: subscriptions,
-    isLoading: isLoadingSubscriptions,
-    refetch: refetchSubscriptions,
-  } = useQuery({
-    queryKey: subscriptionQueryKey(workflowId ?? undefined),
-    queryFn: () => listTriggerSubscriptions(workflowId ?? undefined),
-    enabled: Boolean(workflowId),
-  });
+    triggerCatalog,
+    triggerCatalogLoading,
+    triggerSubscriptions,
+    triggerSubscriptionsLoading,
+    loadTriggerCatalog,
+    loadTriggerSubscriptions,
+    createTriggerSubscription,
+    updateTriggerSubscription,
+    deleteTriggerSubscription,
+    testTriggerSubscription,
+  } = useIntegrationStore(
+    useShallow((state) => ({
+      triggerCatalog: state.triggerCatalog,
+      triggerCatalogLoading: state.triggerCatalogLoading,
+      triggerSubscriptions: state.triggerSubscriptions,
+      triggerSubscriptionsLoading: state.triggerSubscriptionsLoading,
+      loadTriggerCatalog: state.loadTriggerCatalog,
+      loadTriggerSubscriptions: state.loadTriggerSubscriptions,
+      createTriggerSubscription: state.createTriggerSubscription,
+      updateTriggerSubscription: state.updateTriggerSubscription,
+      deleteTriggerSubscription: state.deleteTriggerSubscription,
+      testTriggerSubscription: state.testTriggerSubscription,
+    })),
+  );
 
-  const invalidateSubscriptions = useCallback(() => {
-    if (!workflowId) {
-      return Promise.resolve();
+  const subscriptions = workflowId ? triggerSubscriptions[workflowId] ?? [] : [];
+  const isLoadingSubscriptions = workflowId
+    ? Boolean(triggerSubscriptionsLoading[workflowId])
+    : false;
+
+  useEffect(() => {
+    if (!triggerCatalog.length && !triggerCatalogLoading) {
+      void loadTriggerCatalog().catch(() => undefined);
     }
-    return queryClient.invalidateQueries({ queryKey: subscriptionQueryKey(workflowId) });
-  }, [queryClient, workflowId]);
+  }, [triggerCatalog.length, triggerCatalogLoading, loadTriggerCatalog]);
 
-  const createMutation = useMutation({
-    mutationFn: (payload: TriggerSubscriptionCreateRequest) => createTriggerSubscription(payload),
-    onSuccess: () => {
-      void invalidateSubscriptions();
-    },
-  });
+  useEffect(() => {
+    if (!workflowId) {
+      return;
+    }
+    const hasData = Boolean(triggerSubscriptions[workflowId]);
+    const isFetching = Boolean(triggerSubscriptionsLoading[workflowId]);
+    if (!hasData && !isFetching) {
+      void loadTriggerSubscriptions(workflowId).catch(() => undefined);
+    }
+  }, [workflowId, triggerSubscriptions, triggerSubscriptionsLoading, loadTriggerSubscriptions]);
 
-  const updateMutation = useMutation({
-    mutationFn: ({ subscriptionId, payload }: UpdatePayload) =>
-      updateTriggerSubscription(subscriptionId, payload),
-    onSuccess: (updated) => {
-      queryClient.setQueryData<TriggerSubscriptionResponse[]>(
-        subscriptionQueryKey(workflowId ?? undefined),
-        (existing = []) => existing.map((sub) => (sub.subscription_id === updated.subscription_id ? updated : sub)),
-      );
-    },
-  });
+  const refetchSubscriptions = useCallback(() => {
+    if (!workflowId) {
+      return Promise.resolve(undefined);
+    }
+    return loadTriggerSubscriptions(workflowId);
+  }, [workflowId, loadTriggerSubscriptions]);
 
-  const deleteMutation = useMutation({
-    mutationFn: (subscriptionId: number) => deleteTriggerSubscription(subscriptionId),
-    onSuccess: () => {
-      void invalidateSubscriptions();
-    },
-  });
-
-  const testMutation = useMutation({
-    mutationFn: ({ subscriptionId, payload }: TestPayload) =>
-      testTriggerSubscription(subscriptionId, payload),
-  });
+  const toggleSubscription = useCallback(
+    ({ subscriptionId, enabled }: TogglePayload) =>
+      updateTriggerSubscription(subscriptionId, { enabled }),
+    [updateTriggerSubscription],
+  );
 
   return {
-    triggers: triggerCatalog ?? [],
-    subscriptions: subscriptions ?? [],
-    isLoadingTriggers,
+    triggers: triggerCatalog,
+    subscriptions,
+    isLoadingTriggers: triggerCatalogLoading,
     isLoadingSubscriptions,
-    refetchSubscriptions: () => refetchSubscriptions().then((res) => res.data),
-    createSubscription: (payload) => createMutation.mutateAsync(payload),
-    updateSubscription: (subscriptionId, payload) =>
-      updateMutation.mutateAsync({ subscriptionId, payload }),
-    toggleSubscription: ({ subscriptionId, enabled }) =>
-      updateMutation.mutateAsync({ subscriptionId, payload: { enabled } }),
-    deleteSubscription: (subscriptionId) => deleteMutation.mutateAsync(subscriptionId),
-    testSubscription: (payload) => testMutation.mutateAsync(payload),
+    refetchSubscriptions,
+    createSubscription: createTriggerSubscription,
+    updateSubscription: updateTriggerSubscription,
+    toggleSubscription,
+    deleteSubscription: deleteTriggerSubscription,
+    testSubscription: testTriggerSubscription,
   };
 }
-
