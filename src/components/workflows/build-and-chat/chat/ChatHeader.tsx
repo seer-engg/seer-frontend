@@ -1,6 +1,7 @@
 import { SessionPopover } from './SessionPopover';
 import type { ChatSession } from '../types';
 import type { SessionsStatus } from './types';
+import { useChatStore } from '@/stores';
 
 interface ChatHeaderProps {
   onNewSession: () => void;
@@ -8,7 +9,6 @@ interface ChatHeaderProps {
   onSessionPopoverOpenChange: (open: boolean) => void;
   sessions: ChatSession[];
   sessionsStatus: SessionsStatus;
-  currentSessionId: number | null;
   onSelectSession: (sessionId: number) => void;
 }
 
@@ -18,9 +18,10 @@ export function ChatHeader({
   onSessionPopoverOpenChange,
   sessions,
   sessionsStatus,
-  currentSessionId,
   onSelectSession,
 }: ChatHeaderProps) {
+  const currentSessionId = useChatStore((state) => state.currentSessionId);
+
   return (
     <div className="p-3 flex-shrink-0">
       <div className="flex items-center justify-between">

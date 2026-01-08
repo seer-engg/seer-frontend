@@ -5,15 +5,19 @@
  */
 
 // Integration tools
-export { 
-  useIntegrationTools, 
+export {
+  useIntegrationTools,
   useToolIntegration,
   type ToolMetadata,
   type ToolIntegrationStatus,
 } from './useIntegrationTools';
 
 // Workflow
-export { useWorkflowBuilder, type Workflow, type WorkflowExecution } from './useWorkflowBuilder';
+export {
+  useWorkflowBuilder,
+  type WorkflowListItem,
+  type WorkflowModel,
+} from './useWorkflowBuilder';
 
 
 // UI hooks

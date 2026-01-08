@@ -2,30 +2,32 @@ import { useMemo, useState } from 'react';
 import type { RefObject } from 'react';
 import { Bot, FileText } from 'lucide-react';
 
-import type { ChatMessage } from '../types';
 import { MessageBubble } from './MessageBubble';
+import { useChatStore } from '@/stores';
+import { useShallow } from 'zustand/shallow';
 
 interface MessagesListProps {
-  messages: ChatMessage[];
   filterSystemPrompt: (content: string) => string;
-  isLoading: boolean;
   listEndRef: RefObject<HTMLDivElement>;
-  proposalActionLoading: number | null;
   onAcceptProposal: (proposalId: number) => void;
   onRejectProposal: (proposalId: number) => void;
   activePreviewProposalId?: number | null;
 }
 
 export function MessagesList({
-  messages,
   filterSystemPrompt,
-  isLoading,
   listEndRef,
-  proposalActionLoading,
   onAcceptProposal,
   onRejectProposal,
   activePreviewProposalId,
 }: MessagesListProps) {
+  const { messages, isLoading, proposalActionLoading } = useChatStore(
+    useShallow((state) => ({
+      messages: state.messages,
+      isLoading: state.isLoading,
+      proposalActionLoading: state.proposalActionLoading,
+    })),
+  );
   const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set());
 
   const noMessages = useMemo(() => messages.length === 0, [messages.length]);

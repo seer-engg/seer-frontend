@@ -13,28 +13,29 @@ import { Textarea } from '@/components/ui/textarea';
 import { Send } from 'lucide-react';
 
 import type { ModelInfo } from '../types';
+import { useChatStore } from '@/stores';
+import { useShallow } from 'zustand/shallow';
 
 interface ChatInputProps {
-  value: string;
-  onChange: (value: string) => void;
   onSend: () => void;
-  isSending: boolean;
-  selectedModel: string;
-  onModelChange: (value: string) => void;
   models: ModelInfo[];
   isLoadingModels: boolean;
 }
 
 export function ChatInput({
-  value,
-  onChange,
   onSend,
-  isSending,
-  selectedModel,
-  onModelChange,
   models,
   isLoadingModels,
 }: ChatInputProps) {
+  const { input, isLoading, selectedModel, setInput, setSelectedModel } = useChatStore(
+    useShallow((state) => ({
+      input: state.input,
+      isLoading: state.isLoading,
+      selectedModel: state.selectedModel,
+      setInput: state.setInput,
+      setSelectedModel: state.setSelectedModel,
+    })),
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export function ChatInput({
       const scrollHeight = textareaRef.current.scrollHeight;
       textareaRef.current.style.height = `${Math.max(80, Math.min(scrollHeight, 300))}px`;
     }
-  }, [value]);
+  }, [input]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -56,19 +57,19 @@ export function ChatInput({
     <div className="p-4 flex-shrink-0 flex flex-col gap-2">
       <Textarea
         ref={textareaRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Ask about your workflow..."
-        disabled={isSending}
+        disabled={isLoading}
         className="min-h-[80px] resize-none w-full bg-background dark:bg-muted overflow-hidden"
         style={{ maxHeight: '300px' }}
       />
       <div className="flex items-center justify-end gap-2">
         <Select
           value={selectedModel}
-          onValueChange={onModelChange}
-          disabled={isLoadingModels || isSending}
+          onValueChange={setSelectedModel}
+          disabled={isLoadingModels || isLoading}
         >
           <SelectTrigger className="h-7 text-xs w-32">
             <SelectValue placeholder={isLoadingModels ? 'Loading...' : 'Select model'} />
@@ -83,7 +84,7 @@ export function ChatInput({
               ))}
           </SelectContent>
         </Select>
-        <Button onClick={onSend} disabled={isSending || !value.trim()} size="icon" className="h-8 w-8">
+        <Button onClick={onSend} disabled={isLoading || !input.trim()} size="icon" className="h-8 w-8">
           <Send className="w-4 h-4" />
         </Button>
       </div>

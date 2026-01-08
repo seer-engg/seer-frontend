@@ -1,45 +1,56 @@
-import { useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect } from 'react';
+import { useShallow } from 'zustand/shallow';
 
-import { backendApiClient } from '@/lib/api-client';
-import type { WorkflowVersionListResponse } from '@/types/workflow-spec';
+import { useWorkflowStore } from '@/stores/workflowStore';
 
 export function useWorkflowVersions(workflowId: string | null) {
-  const queryClient = useQueryClient();
-  const queryKey = useMemo(() => ['workflowVersions', workflowId] as const, [workflowId]);
+  const {
+    workflowVersions,
+    loadWorkflowVersions,
+    invalidateWorkflowVersions,
+  } = useWorkflowStore(
+    useShallow((state) => ({
+      workflowVersions: state.workflowVersions,
+      loadWorkflowVersions: state.loadWorkflowVersions,
+      invalidateWorkflowVersions: state.invalidateWorkflowVersions,
+    })),
+  );
 
-  const versionsQuery = useQuery({
-    queryKey,
-    queryFn: async () => {
-      if (!workflowId) {
-        throw new Error('workflowId is required to load versions');
-      }
-      return backendApiClient.request<WorkflowVersionListResponse>(
-        `/api/v1/workflows/${workflowId}/versions`,
-        { method: 'GET' },
-      );
-    },
-    enabled: Boolean(workflowId),
-  });
+  const versionState = workflowId ? workflowVersions[workflowId] : undefined;
+  const versionsResponse = versionState?.response ?? null;
+  const isLoading = Boolean(workflowId && versionState?.isLoading);
 
-  const invalidate = useCallback(() => {
+  useEffect(() => {
     if (!workflowId) {
       return;
     }
-    queryClient.invalidateQueries({ queryKey });
-  }, [queryClient, queryKey, workflowId]);
+    if (!versionState || (!versionState.response && !versionState.isLoading)) {
+      void loadWorkflowVersions(workflowId).catch(() => undefined);
+    }
+  }, [workflowId, versionState, loadWorkflowVersions]);
+
+  const refetch = useCallback(() => {
+    if (!workflowId) {
+      return Promise.resolve(undefined);
+    }
+    return loadWorkflowVersions(workflowId);
+  }, [workflowId, loadWorkflowVersions]);
+
+  const invalidate = useCallback(() => {
+    if (workflowId) {
+      invalidateWorkflowVersions(workflowId);
+    }
+  }, [workflowId, invalidateWorkflowVersions]);
 
   return {
-    versionsResponse: versionsQuery.data,
-    versions: versionsQuery.data?.versions ?? [],
-    draftRevision: versionsQuery.data?.draft_revision ?? null,
-    latestVersionId: versionsQuery.data?.latest_version_id ?? null,
-    publishedVersionId: versionsQuery.data?.published_version_id ?? null,
-    isLoading: versionsQuery.isLoading,
-    isFetching: versionsQuery.isFetching,
-    refetch: versionsQuery.refetch,
+    versionsResponse,
+    versions: versionsResponse?.versions ?? [],
+    draftRevision: versionsResponse?.draft_revision ?? null,
+    latestVersionId: versionsResponse?.latest_version_id ?? null,
+    publishedVersionId: versionsResponse?.published_version_id ?? null,
+    isLoading,
+    isFetching: isLoading,
+    refetch,
     invalidate,
   };
 }
-
-

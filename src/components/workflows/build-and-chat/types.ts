@@ -98,13 +98,7 @@ export interface ModelInfo {
 export interface BuildAndChatPanelProps {
   onBlockSelect?: (block: { type: string; label: string; config?: any }) => void;
   workflowId: string | null;
-  nodes: Node<WorkflowNodeData & Record<string, unknown>>[];
-  edges: WorkflowEdge[];
   onWorkflowGraphSync?: (graph?: WorkflowGraphPayload | null) => void;
-  onProposalPreviewChange?: (preview: WorkflowProposalPreview | null) => void;
-  activePreviewProposalId?: number | null;
-  collapsed?: boolean;
-  onCollapseChange?: (collapsed: boolean) => void;
   functionBlocks?: BuiltInBlock[];
   triggerOptions?: TriggerListOption[];
   isLoadingTriggers?: boolean;
