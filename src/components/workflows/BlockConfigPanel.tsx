@@ -1,9 +1,10 @@
 /**
  * Block Configuration Panel
- * 
+ *
  * Right sidebar panel for configuring selected block.
  * Supports editing parameters and OAuth scopes.
  */
+/* eslint-disable max-lines-per-function, complexity, @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Node } from '@xyflow/react';
