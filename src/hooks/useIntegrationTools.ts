@@ -10,19 +10,7 @@ import {
 
 export type { ToolMetadata, ToolIntegrationStatus };
 
-function useConditionalLoader(
-  shouldLoad: boolean,
-  loader: () => Promise<unknown>,
-  deps: unknown[],
-) {
-  useEffect(() => {
-    if (!shouldLoad) {
-      return;
-    }
-    void loader().catch(() => undefined);
-  }, [shouldLoad, ...deps]);
-}
-
+// eslint-disable-next-line complexity
 export function useIntegrationTools() {
   const { user, isLoaded } = useUser();
   const userEmail = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? null;
@@ -76,21 +64,25 @@ export function useIntegrationTools() {
     setUserContext({ email: userEmail, isAuthenticated });
   }, [setUserContext, userEmail, isAuthenticated]);
 
-  useConditionalLoader(
-    isAuthenticated && !toolsLoaded && !toolsLoading,
-    loadIntegrationTools,
-    [loadIntegrationTools],
-  );
-  useConditionalLoader(
-    isAuthenticated && !toolStatusLoaded && !toolStatusLoading,
-    loadToolStatus,
-    [loadToolStatus],
-  );
-  useConditionalLoader(
-    isAuthenticated && !connectionsLoaded && !connectionsLoading,
-    loadConnections,
-    [loadConnections],
-  );
+  // Initial data load - try bootstrap first, fall back to individual calls
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const needsLoad = !toolsLoaded && !toolsLoading &&
+                      !toolStatusLoaded && !toolStatusLoading &&
+                      !connectionsLoaded && !connectionsLoading;
+
+    if (needsLoad) {
+      // Use refreshIntegrationTools which tries bootstrap first
+      void refreshIntegrationTools().catch(() => undefined);
+    }
+  }, [
+    isAuthenticated,
+    toolsLoaded, toolsLoading,
+    toolStatusLoaded, toolStatusLoading,
+    connectionsLoaded, connectionsLoading,
+    refreshIntegrationTools
+  ]);
 
   const isLoading = toolsLoading || toolStatusLoading || connectionsLoading || !isLoaded;
 

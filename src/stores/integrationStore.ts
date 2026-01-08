@@ -8,6 +8,7 @@ import type {
 } from '@/lib/api-client';
 import {
   backendApiClient,
+  getBootstrapData,
   getToolsConnectionStatus,
   initiateConnection,
   listConnectedAccounts,
@@ -347,6 +348,7 @@ export interface IntegrationStore {
   loadIntegrationTools: () => Promise<ToolMetadata[]>;
   loadToolStatus: () => Promise<ToolConnectionStatus[] | null>;
   loadConnections: () => Promise<ConnectedAccount[]>;
+  loadFromBootstrap: () => Promise<unknown | null>;
   refreshIntegrationTools: () => Promise<void>;
   getToolIntegrationStatus: (toolName: string) => ToolIntegrationStatus | null;
   isIntegrationConnected: (type: IntegrationType) => boolean;
@@ -469,12 +471,71 @@ const createIntegrationStore: StateCreator<IntegrationStore> = (set, get) => {
         throw error;
       }
     },
+    async loadFromBootstrap() {
+      const USE_BOOTSTRAP = import.meta.env.VITE_USE_BOOTSTRAP === 'true';
+
+      if (!USE_BOOTSTRAP) {
+        // Feature flag disabled, use individual calls
+        return null;
+      }
+
+      if (!get().isAuthenticated) {
+        return null;
+      }
+
+      try {
+        set({
+          toolsLoading: true,
+          toolStatusLoading: true,
+          connectionsLoading: true,
+          toolsError: null
+        });
+
+        const bootstrapData = await getBootstrapData();
+
+        // Extract and set all data from bootstrap response
+        const tools = bootstrapData.tools as ToolMetadata[];
+        const toolStatus = bootstrapData.tools_status;
+        const connections = bootstrapData.connections;
+
+        set({
+          tools,
+          toolsLoaded: true,
+          toolsLoading: false,
+          toolStatus,
+          toolStatusLoaded: true,
+          toolStatusLoading: false,
+          connections,
+          connectionsLoaded: true,
+          connectionsLoading: false,
+        });
+
+        syncDerived();
+        console.log('✅ Loaded data from bootstrap endpoint');
+        return bootstrapData;
+      } catch (error) {
+        console.warn('⚠️ Bootstrap failed, falling back to individual calls:', error);
+        set({
+          toolsLoading: false,
+          toolStatusLoading: false,
+          connectionsLoading: false,
+        });
+        return null;
+      }
+    },
     async refreshIntegrationTools() {
-      await Promise.allSettled([
-        get().loadIntegrationTools(),
-        get().loadToolStatus(),
-        get().loadConnections(),
-      ]);
+      // Try bootstrap first, fall back to individual calls if it fails or is disabled
+      const bootstrapResult = await get().loadFromBootstrap();
+
+      if (!bootstrapResult) {
+        // Bootstrap failed or disabled, use individual calls
+        await Promise.allSettled([
+          get().loadIntegrationTools(),
+          get().loadToolStatus(),
+          get().loadConnections(),
+        ]);
+      }
+
       syncDerived();
     },
     getToolIntegrationStatus(toolName) {

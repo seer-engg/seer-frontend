@@ -389,6 +389,44 @@ export async function getIntegrationStatus(integrationType: string): Promise<Int
   return backendApiClient.request<IntegrationStatus>(endpoint);
 }
 
+// ============================================================================
+// Bootstrap Types and Functions
+// ============================================================================
+
+export interface BootstrapData {
+  tools: unknown[];
+  models: unknown[];
+  tools_status: ToolConnectionStatus[];
+  connections: ConnectedAccount[];
+  node_types: Record<string, unknown>;
+  workflows: {
+    items: unknown[];
+    next_cursor: string | null;
+  };
+  cached: boolean;
+  timestamp: string | null;
+}
+
+/**
+ * Get all bootstrap data in a single request.
+ *
+ * Consolidates these endpoints into one:
+ * - /api/tools (45 tools)
+ * - /api/models (LLM models)
+ * - /api/integrations/tools/status (connection status)
+ * - /api/integrations/ (connected accounts)
+ * - /api/v1/builder/node-types (workflow blocks)
+ * - /api/v1/workflows (user workflows)
+ *
+ * All data is fetched in parallel on the backend, so response time
+ * equals the slowest query (not the sum). Expected improvement:
+ * 16 seconds → 2-3 seconds.
+ */
+export async function getBootstrapData(): Promise<BootstrapData> {
+  const endpoint = `/api/bootstrap`;
+  return backendApiClient.request<BootstrapData>(endpoint);
+}
+
 /**
  * Initiate OAuth connection
  * CRITICAL: Frontend must always pass scope parameter
