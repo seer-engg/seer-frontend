@@ -27,7 +27,7 @@ import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
 import { BlockConfigPanel } from './BlockConfigPanel';
-import { WorkflowEdge, WorkflowNodeData } from './types';
+import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions } from './types';
 import type { InputDef } from '@/types/workflow-spec';
 import { backendApiClient } from '@/lib/api-client';
 import { ToolMetadata } from './block-config';
@@ -45,7 +45,11 @@ interface WorkflowNodeConfigDialogProps {
   allNodes: Node<WorkflowNodeData>[];
   allEdges: WorkflowEdge[];
   onOpenChange: (open: boolean) => void;
-  onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
+  onUpdate: (
+    nodeId: string,
+    updates: Partial<WorkflowNodeData>,
+    options?: WorkflowNodeUpdateOptions,
+  ) => Promise<void> | void;
   workflowInputs?: Record<string, InputDef>;
 }
 
@@ -156,18 +160,29 @@ export function WorkflowNodeConfigDialog({
   const validationErrorCount = Object.keys(validationErrors).length;
 
   // Save handler - uses LOCAL state, not node state
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!node || !hasUnsavedChanges || hasValidationErrors) return;
 
     // Use local state if available, otherwise fall back to node state
     const finalConfig = localConfig ?? node.data.config;
     const finalOauthScope = localOauthScope ?? node.data.oauth_scope;
 
-    // Update parent state - this triggers autosave which persists to backend
-    onUpdate(node.id, {
-      config: finalConfig,
-      oauth_scope: finalOauthScope,
-    });
+    try {
+      await onUpdate(
+        node.id,
+        {
+          config: finalConfig,
+          oauth_scope: finalOauthScope,
+        },
+        { persist: true },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save block configuration';
+      toast.error('Failed to save configuration', {
+        description: message,
+      });
+      return;
+    }
 
     // Reset local state after save
     setLocalConfig(null);
@@ -175,10 +190,14 @@ export function WorkflowNodeConfigDialog({
     setHasUnsavedChanges(false);
 
     // Update original ref with the saved state
-    originalNodeRef.current = node ? JSON.parse(JSON.stringify({
-      ...node,
-      data: { ...node.data, config: finalConfig, oauth_scope: finalOauthScope }
-    })) : null;
+    originalNodeRef.current = node
+      ? JSON.parse(
+          JSON.stringify({
+            ...node,
+            data: { ...node.data, config: finalConfig, oauth_scope: finalOauthScope },
+          }),
+        )
+      : null;
 
     toast.success('Configuration saved', {
       description: 'Block configuration has been saved successfully',
@@ -188,7 +207,16 @@ export function WorkflowNodeConfigDialog({
       setPendingClose(false);
       onOpenChange(false);
     }
-  }, [node, localConfig, localOauthScope, hasUnsavedChanges, hasValidationErrors, onUpdate, onOpenChange, pendingClose]);
+  }, [
+    node,
+    localConfig,
+    localOauthScope,
+    hasUnsavedChanges,
+    hasValidationErrors,
+    onUpdate,
+    onOpenChange,
+    pendingClose,
+  ]);
 
   // Handle dialog close attempt
   const handleOpenChange = useCallback(
@@ -213,7 +241,7 @@ export function WorkflowNodeConfigDialog({
   const handleSaveAndClose = useCallback(() => {
     setShowDiscardDialog(false);
     setPendingClose(true);
-    handleSave();
+    void handleSave();
   }, [handleSave]);
 
   // Handle local config changes from BlockConfigPanel (for change detection only, doesn't trigger parent update)
@@ -230,7 +258,9 @@ export function WorkflowNodeConfigDialog({
   useKeyboardShortcut({
     key: 's',
     modifiers: { ctrl: true, meta: true },
-    handler: handleSave,
+    handler: () => {
+      void handleSave();
+    },
     category: 'Dialog Actions',
     description: 'Save configuration',
     scope: 'dialog',
@@ -278,10 +308,10 @@ export function WorkflowNodeConfigDialog({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span>
-                    <Button
-                      onClick={handleSave}
-                      disabled={!hasUnsavedChanges || hasValidationErrors}
-                    >
+                  <Button
+                    onClick={() => void handleSave()}
+                    disabled={!hasUnsavedChanges || hasValidationErrors}
+                  >
                       Save {!isMobile && <Kbd className="ml-1.5">⌘S</Kbd>}
                     </Button>
                   </span>
@@ -295,7 +325,7 @@ export function WorkflowNodeConfigDialog({
                 </TooltipContent>
               </Tooltip>
             ) : (
-              <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
+              <Button onClick={() => void handleSave()} disabled={!hasUnsavedChanges}>
                 Save {!isMobile && <Kbd className="ml-1.5">⌘S</Kbd>}
               </Button>
             )}

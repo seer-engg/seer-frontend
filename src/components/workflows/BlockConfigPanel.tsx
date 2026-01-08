@@ -22,13 +22,17 @@ import {
   ForLoopBlockSection,
   ToolMetadata,
 } from './block-config';
-import { WorkflowEdge, WorkflowNodeData } from './types';
+import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions } from './types';
 import { backendApiClient } from '@/lib/api-client';
 import type { InputDef } from '@/types/workflow-spec';
 
 interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;
-  onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
+  onUpdate: (
+    nodeId: string,
+    updates: Partial<WorkflowNodeData>,
+    options?: WorkflowNodeUpdateOptions,
+  ) => Promise<void> | void;
   allNodes?: Node<WorkflowNodeData>[]; // All nodes in workflow for reference dropdown
   allEdges?: WorkflowEdge[];
   autoSave?: boolean; // Enable auto-save on unmount (default: true for backward compatibility)
@@ -220,7 +224,7 @@ export function BlockConfigPanel({
         oauth_scope: latestOauthScope,
       };
       
-      onUpdate(node.id, updatePayload);
+      void onUpdate(node.id, updatePayload);
       liveUpdateTimeoutRef.current = null;
     }, liveUpdateDelayMs);
 
@@ -275,7 +279,7 @@ export function BlockConfigPanel({
             mergedConfig.fields = configRef.current.fields;
           }
           
-          onUpdate(originalNode.id, {
+          void onUpdate(originalNode.id, {
             config: mergedConfig,
             oauth_scope: oauthScopeRef.current,
           });
@@ -296,7 +300,7 @@ export function BlockConfigPanel({
     );
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (node) {
       const requiresSupabaseBinding = toolSchema?.integration_type === 'supabase';
       if (
@@ -323,14 +327,26 @@ export function BlockConfigPanel({
         mergedConfig.fields = config.fields;
       }
       
-      onUpdate(node.id, {
-        config: mergedConfig,
-        oauth_scope: oauthScope,
-      });
-      toast.success('Configuration saved', {
-        description: 'Block configuration has been saved successfully',
-        duration: 2000,
-      });
+      try {
+        await onUpdate(
+          node.id,
+          {
+            config: mergedConfig,
+            oauth_scope: oauthScope,
+          },
+          { persist: true },
+        );
+        toast.success('Configuration saved', {
+          description: 'Block configuration has been saved successfully',
+          duration: 2000,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unable to save block configuration';
+        toast.error('Failed to save configuration', {
+          description: message,
+        });
+      }
     }
   };
 
@@ -393,7 +409,7 @@ export function BlockConfigPanel({
 
   const shouldShowSaveButton = showSaveButton ?? (!autoSave && !liveUpdate);
   const saveButton = shouldShowSaveButton ? (
-    <Button onClick={handleSave} className="w-full" size="sm">
+    <Button onClick={() => void handleSave()} className="w-full" size="sm">
       <Save className="w-4 h-4 mr-2" />
       Save Configuration
     </Button>

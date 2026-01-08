@@ -96,6 +96,14 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   triggerMeta?: TriggerNodeMeta;
 }
 
+export interface WorkflowNodeUpdateOptions {
+  /**
+   * When true, the caller expects the graph to be persisted immediately
+   * (instead of waiting for the debounced autosave cycle).
+   */
+  persist?: boolean;
+}
+
 export type WorkflowEdgeData = {
   branch?: 'true' | 'false' | 'loop' | 'exit';
 };

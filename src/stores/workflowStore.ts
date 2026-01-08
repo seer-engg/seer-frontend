@@ -152,6 +152,8 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
       const workflow = toWorkflowModel(response);
       set((state) => ({
         workflows: updateWorkflowList(state.workflows, workflow),
+        currentWorkflow: workflow,
+        currentWorkflowId: workflowId,
       }));
       return workflow;
     } catch (error) {
@@ -225,7 +227,7 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
         `/api/v1/workflows/${workflowId}/draft`,
         {
           method: 'PATCH',
-          body,
+          body: body as unknown as Record<string, unknown>,
         },
       );
       const workflow = toWorkflowModel(response);
@@ -290,7 +292,7 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
         `/api/v1/workflows/${workflowId}/versions/${versionId}/restore`,
         {
           method: 'POST',
-          body,
+          body: body as unknown as Record<string, unknown>,
         },
       );
       const workflow = toWorkflowModel(response);
@@ -331,7 +333,7 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
     }
   },
   async exportWorkflow(workflowId) {
-    const clientMeta = backendApiClient as BackendClientWithMeta;
+    const clientMeta = backendApiClient as unknown as BackendClientWithMeta;
     const baseUrl =
       typeof clientMeta.getBaseUrl === 'function'
         ? clientMeta.getBaseUrl()
