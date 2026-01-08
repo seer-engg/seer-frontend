@@ -1,6 +1,7 @@
 import { Node } from '@xyflow/react';
 
 import { WorkflowEdge, WorkflowNodeData } from '@/components/workflows/types';
+import type { InputDef } from '@/types/workflow-spec';
 
 import { getNodeAlias, sanitizeAlias } from './nodeAlias';
 
@@ -14,7 +15,8 @@ const INPUT_IDENTIFIER = 'inputs';
 export const collectAvailableVariables = (
   allNodes: Node<WorkflowNodeData>[] = [],
   allEdges: WorkflowEdge[] = [],
-  currentNode?: Node<WorkflowNodeData> | null
+  currentNode?: Node<WorkflowNodeData> | null,
+  workflowInputs?: Record<string, InputDef>,
 ): string[] => {
   if (!currentNode) {
     return [];
@@ -32,6 +34,8 @@ export const collectAvailableVariables = (
     const metadata = buildNodeOutputMetadata(node);
     addMetadataToSuggestions(metadata, suggestions);
   });
+
+  addWorkflowInputsToSuggestions(workflowInputs, suggestions);
 
   return Array.from(suggestions).sort();
 };
@@ -78,17 +82,6 @@ function buildNodeOutputMetadata(node: Node<WorkflowNodeData>): NodeOutputMetada
     return null;
   }
 
-  if (nodeType === 'input') {
-    const propertyNames = collectInputFieldNames(node);
-    if (propertyNames.length === 0) {
-      return null;
-    }
-    return {
-      identifier: INPUT_IDENTIFIER,
-      properties: propertyNames,
-    };
-  }
-
   const identifier = getOutputIdentifier(node);
   if (!identifier) {
     return null;
@@ -101,26 +94,6 @@ function buildNodeOutputMetadata(node: Node<WorkflowNodeData>): NodeOutputMetada
     identifier,
     properties,
   };
-}
-
-function collectInputFieldNames(node: Node<WorkflowNodeData>): string[] {
-  const config = node.data?.config || {};
-  const names = new Set<string>();
-
-  if (typeof config.variable_name === 'string' && config.variable_name.trim()) {
-    names.add(config.variable_name.trim());
-  }
-
-  if (Array.isArray(config.fields)) {
-    config.fields.forEach((field: any) => {
-      const fieldName = typeof field?.name === 'string' ? field.name.trim() : '';
-      if (fieldName) {
-        names.add(fieldName);
-      }
-    });
-  }
-
-  return Array.from(names).sort();
 }
 
 function getOutputIdentifier(node: Node<WorkflowNodeData>): string | null {
@@ -181,4 +154,21 @@ function addMetadataToSuggestions(
   metadata.properties.forEach((property) => {
     suggestions.add(`${metadata.identifier}.${property}`);
   });
+}
+
+function addWorkflowInputsToSuggestions(
+  workflowInputs: Record<string, InputDef> | undefined,
+  suggestions: Set<string>,
+) {
+  if (!workflowInputs || Object.keys(workflowInputs).length === 0) {
+    return;
+  }
+  const names = Object.keys(workflowInputs).sort();
+  addMetadataToSuggestions(
+    {
+      identifier: INPUT_IDENTIFIER,
+      properties: names,
+    },
+    suggestions,
+  );
 }

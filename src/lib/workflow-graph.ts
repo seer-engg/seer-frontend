@@ -2,13 +2,7 @@ import type { Node } from '@xyflow/react';
 
 import { getNodeAlias, sanitizeAlias } from '@/components/workflows/block-config/helpers/nodeAlias';
 import type { WorkflowEdge, WorkflowNodeData } from '@/components/workflows/types';
-import type {
-  InputDef,
-  JsonObject,
-  JsonValue,
-  WorkflowNode,
-  WorkflowSpec,
-} from '@/types/workflow-spec';
+import type { JsonObject, JsonValue, WorkflowNode, WorkflowSpec } from '@/types/workflow-spec';
 
 export interface WorkflowGraphData {
   nodes: Node<WorkflowNodeData>[];
@@ -37,13 +31,7 @@ export function graphToWorkflowSpec(
   existing?: WorkflowSpec,
 ): WorkflowSpec {
   const serialized = serializeGraph(graph);
-  const inputsFromGraph = buildInputsFromGraph(graph.nodes);
-  const inputs =
-    Object.keys(inputsFromGraph).length > 0
-      ? inputsFromGraph
-      : existing?.inputs
-        ? { ...existing.inputs }
-        : {};
+  const inputs = existing?.inputs ? { ...existing.inputs } : {};
 
   const nodes = buildWorkflowNodes(graph);
 
@@ -67,94 +55,15 @@ export function workflowSpecToGraph(spec: WorkflowSpec): WorkflowGraphData {
   
   if (serialized && typeof serialized === 'object') {
     const graph = deserializeGraph(serialized as JsonObject);
-    return graph;
+    return stripInputNodes(graph);
   }
-  return buildGraphFromSpec(spec);
-}
-
-function buildInputsFromGraph(nodes: FlowNode[]): Record<string, InputDef> {
-  const entries: Array<[string, InputDef]> = [];
-  
-  nodes
-    .filter((node) => node.data?.type === 'input')
-    .forEach((node) => {
-      const config = node.data?.config || {};
-      
-      // New format: fields array
-      if (Array.isArray(config.fields)) {
-        config.fields.forEach((field: any) => {
-          const fieldName = String(field.name || '').trim();
-          if (!fieldName) {
-            return;
-          }
-          const type = mapInputType(field.type);
-          const required = field.required !== false;
-          // Use displayLabel as description (user-friendly label), fallback to field description, then node label
-          const description = field.displayLabel || field.description || node.data?.label || undefined;
-          entries.push([
-            fieldName,
-            {
-              type,
-              required,
-              description,
-            },
-          ]);
-        });
-      }
-      // Legacy format: single variable_name
-      else {
-        const variableName = String(config.variable_name ?? '').trim();
-        if (!variableName) {
-          return;
-        }
-        const type = mapInputType(config.type);
-        const required = config.required !== false;
-        entries.push([
-          variableName,
-          {
-            type,
-            required,
-            description: node.data?.label || undefined,
-          },
-        ]);
-      }
-    });
-
-  return Object.fromEntries(entries);
-}
-
-function mapInputType(rawType: string | undefined): InputDef['type'] {
-  const normalized = (rawType || 'text').toLowerCase();
-  switch (normalized) {
-    case 'number':
-      return 'number';
-    case 'integer':
-      return 'integer';
-    case 'boolean':
-      return 'boolean';
-    case 'array':
-      return 'array';
-    case 'object':
-      return 'object';
-    case 'email':
-    case 'url':
-    case 'text':
-    default:
-      return 'string';
-  }
+  return stripInputNodes(buildGraphFromSpec(spec));
 }
 
 function buildWorkflowNodes(graph: WorkflowGraphData): WorkflowNode[] {
   const ctx = createGraphContext(graph);
   const visited = new Set<string>();
   const result: WorkflowNode[] = [];
-
-  // Mark input nodes as visited up front (handled via inputs map)
-  graph.nodes.forEach((node) => {
-    if (node.data?.type === 'input') {
-      visited.add(node.id);
-    }
-  });
 
   const rootIds = findRootNodeIds(graph.nodes, ctx);
   rootIds.forEach((rootId) => {
@@ -163,7 +72,7 @@ function buildWorkflowNodes(graph: WorkflowGraphData): WorkflowNode[] {
 
   // Catch any remaining nodes that might not be reachable from a root
   graph.nodes.forEach((node) => {
-    if (!visited.has(node.id) && node.data?.type !== 'input') {
+    if (!visited.has(node.id)) {
       result.push(...buildLinearChain(node.id, ctx, visited));
     }
   });
@@ -173,15 +82,9 @@ function buildWorkflowNodes(graph: WorkflowGraphData): WorkflowNode[] {
 
 function findRootNodeIds(nodes: FlowNode[], ctx: GraphContext): string[] {
   const roots = nodes.filter((node) => {
-    if (node.data?.type === 'input') {
-      return false;
-    }
     const incoming = ctx.incoming.get(node.id) ?? [];
-    const hasNonInputIncoming = incoming.some((edge) => {
-      const sourceNode = ctx.nodeById.get(edge.source);
-      return sourceNode && sourceNode.data?.type !== 'input';
-    });
-    return !hasNonInputIncoming;
+    const hasIncoming = incoming.some((edge) => ctx.nodeById.has(edge.source));
+    return !hasIncoming;
   });
 
   return roots.sort(compareNodes).map((node) => node.id);
@@ -197,7 +100,7 @@ function buildLinearChain(startId: string, ctx: GraphContext, visited: Set<strin
     }
 
     const node = ctx.nodeById.get(currentId);
-    if (!node || node.data?.type === 'input') {
+    if (!node) {
       visited.add(currentId);
       break;
     }
@@ -493,34 +396,19 @@ function sanitizeNodeData(data: WorkflowNodeData | undefined): JsonObject {
     return {};
   }
   const { onSelect, ...rest } = data;
-  
-  // Deep clone to ensure all nested structures (including fields arrays) are preserved
-  const sanitized = JSON.parse(JSON.stringify(rest));
-  
-  // Ensure fields array is preserved for input nodes (even if empty)
-  if (sanitized.type === 'input' && sanitized.config && Array.isArray(rest.config?.fields)) {
-    sanitized.config.fields = rest.config.fields;
-  }
-  
-  return sanitized;
+
+  // Deep clone to ensure all nested structures are preserved
+  return JSON.parse(JSON.stringify(rest));
 }
 
 function deserializeGraph(serialized: JsonObject): WorkflowGraphData {
   const nodes = Array.isArray(serialized.nodes)
     ? serialized.nodes.map((node: any) => {
-        const rawNodeData = node.data;
-        const nodeData = rawNodeData ?? {};
-        
-        // Ensure fields array is preserved for input nodes during deserialization
-        if (nodeData.type === 'input' && nodeData.config && Array.isArray(rawNodeData?.config?.fields)) {
-          nodeData.config.fields = rawNodeData.config.fields;
-        }
-        
         return {
           id: String(node.id),
           type: node.type,
           position: node.position ?? { x: 0, y: 0 },
-          data: nodeData,
+          data: node.data ?? {},
         };
       })
     : [];
@@ -543,38 +431,12 @@ function buildGraphFromSpec(spec: WorkflowSpec): WorkflowGraphData {
   const nodes: FlowNode[] = [];
   const edges: WorkflowEdge[] = [];
 
-  const inputEntries = Object.entries(spec.inputs ?? {});
-  
-  // Group inputs by creating a single input block with all fields
-  if (inputEntries.length > 0) {
-    const fields = inputEntries.map(([key, def]) => ({
-      name: key,
-      type: def.type === 'number' ? 'number' : def.type === 'integer' ? 'number' : 'text',
-      required: def.required !== false,
-    }));
-
-    nodes.push({
-      id: 'input-block',
-      type: 'input',
-      position: { x: 0, y: 0 },
-      data: {
-        type: 'input',
-        label: 'Input',
-        config: {
-          fields,
-        },
-      },
-    });
-  }
-
-  const baseX = inputEntries.length > 0 ? 320 : 0;
-
   spec.nodes.forEach((specNode, index) => {
     const nodeId = specNode.id || `node-${index}`;
     const flowNode: FlowNode = {
       id: nodeId,
       type: mapSpecNodeType(specNode.type),
-      position: { x: baseX + index * 280, y: index * 120 },
+      position: { x: index * 280, y: index * 120 },
       data: convertSpecNodeToData(specNode),
     };
     nodes.push(flowNode);
@@ -765,6 +627,26 @@ function getSpecNodeInputs(specNode: WorkflowNode): Record<string, JsonValue> | 
     return rawInputs as Record<string, JsonValue>;
   }
   return undefined;
+}
+
+function stripInputNodes(graph: WorkflowGraphData): WorkflowGraphData {
+  const removedIds = new Set(
+    graph.nodes
+      .filter((node) => {
+        const nodeType = (node.data?.type ?? node.type) as string | undefined;
+        return nodeType === 'input';
+      })
+      .map((node) => node.id),
+  );
+  if (removedIds.size === 0) {
+    return graph;
+  }
+  return {
+    nodes: graph.nodes.filter((node) => !removedIds.has(node.id)),
+    edges: graph.edges.filter(
+      (edge) => !removedIds.has(edge.source) && !removedIds.has(edge.target),
+    ),
+  };
 }
 
 

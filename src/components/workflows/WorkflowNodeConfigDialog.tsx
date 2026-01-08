@@ -28,6 +28,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
 import { BlockConfigPanel } from './BlockConfigPanel';
 import { WorkflowEdge, WorkflowNodeData } from './types';
+import type { InputDef } from '@/types/workflow-spec';
 import { backendApiClient } from '@/lib/api-client';
 import { ToolMetadata } from './block-config';
 import {
@@ -45,6 +46,7 @@ interface WorkflowNodeConfigDialogProps {
   allEdges: WorkflowEdge[];
   onOpenChange: (open: boolean) => void;
   onUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
+  workflowInputs?: Record<string, InputDef>;
 }
 
 export function WorkflowNodeConfigDialog({
@@ -54,6 +56,7 @@ export function WorkflowNodeConfigDialog({
   allEdges,
   onOpenChange,
   onUpdate,
+  workflowInputs,
 }: WorkflowNodeConfigDialogProps) {
   const isMobile = useIsMobile();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -258,6 +261,7 @@ export function WorkflowNodeConfigDialog({
                 showSaveButton={false}
                 validationErrors={validationErrors}
                 onChange={handleLocalConfigChange}
+              workflowInputs={workflowInputs}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
