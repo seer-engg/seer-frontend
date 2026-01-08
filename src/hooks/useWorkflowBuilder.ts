@@ -1,373 +1,74 @@
-/**
- * Workflow Builder Hook
- * 
- * Manages workflow state, CRUD operations, and execution.
- */
-import { useState, useCallback, useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useShallow } from 'zustand/shallow';
 
-import type { WorkflowGraphData } from '@/lib/workflow-graph';
-import { graphToWorkflowSpec, workflowSpecToGraph } from '@/lib/workflow-graph';
-import { backendApiClient } from '@/lib/api-client';
-import type {
-  RunFromWorkflowRequest,
-  RunResponse,
-  WorkflowListResponse,
-  WorkflowResponse,
-  WorkflowSummary,
-  WorkflowVersionRestoreRequest,
-} from '@/types/workflow-spec';
+import {
+  useWorkflowStore,
+  type WorkflowListItem,
+  type WorkflowModel,
+} from '@/stores/workflowStore';
 
-export type WorkflowListItem = WorkflowSummary;
-
-export interface WorkflowModel extends WorkflowResponse {
-  graph: WorkflowGraphData;
-}
-
-const toWorkflowModel = (response: WorkflowResponse): WorkflowModel => ({
-  ...response,
-  graph: workflowSpecToGraph(response.spec),
-});
+export type { WorkflowListItem, WorkflowModel };
 
 export function useWorkflowBuilder() {
-  const queryClient = useQueryClient();
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const workflowListQueryKey = useMemo(() => ['workflows'] as const, []);
-
-  const workflowsQuery = useQuery({
-    queryKey: workflowListQueryKey,
-    queryFn: async () => {
-      const response = await backendApiClient.request<WorkflowListResponse>('/api/v1/workflows', {
-        method: 'GET',
-      });
-      return response.items;
-    },
-  });
-
-  const getWorkflow = useCallback(
-    async (workflowId: string): Promise<WorkflowModel> => {
-      return queryClient.fetchQuery({
-        queryKey: ['workflow', workflowId],
-        queryFn: async () => {
-          const response = await backendApiClient.request<WorkflowResponse>(
-            `/api/v1/workflows/${workflowId}`,
-            { method: 'GET' },
-          );
-          return toWorkflowModel(response);
-        },
-      });
-    },
-    [queryClient],
+  const {
+    workflows,
+    isLoading,
+    isCreating,
+    isUpdating,
+    isSavingDraft,
+    isPublishing,
+    isDeleting,
+    isRestoringVersion,
+    isExecuting,
+    selectedNodeId,
+    loadWorkflows,
+    setSelectedNodeId,
+    createWorkflow,
+    updateWorkflowMetadata,
+    saveWorkflowDraft,
+    deleteWorkflow,
+    restoreWorkflowVersion,
+    executeWorkflow,
+    publishWorkflow,
+    getWorkflow,
+    exportWorkflow,
+    importWorkflow,
+  } = useWorkflowStore(
+    useShallow((state) => ({
+      workflows: state.workflows,
+      isLoading: state.isLoading,
+      isCreating: state.isCreating,
+      isUpdating: state.isUpdating,
+      isSavingDraft: state.isSavingDraft,
+      isPublishing: state.isPublishing,
+      isDeleting: state.isDeleting,
+      isRestoringVersion: state.isRestoringVersion,
+      isExecuting: state.isExecuting,
+      selectedNodeId: state.selectedNodeId,
+      loadWorkflows: state.loadWorkflows,
+      setSelectedNodeId: state.setSelectedNodeId,
+      createWorkflow: state.createWorkflow,
+      updateWorkflowMetadata: state.updateWorkflowMetadata,
+      saveWorkflowDraft: state.saveWorkflowDraft,
+      deleteWorkflow: state.deleteWorkflow,
+      restoreWorkflowVersion: state.restoreWorkflowVersion,
+      executeWorkflow: state.executeWorkflow,
+      publishWorkflow: state.publishWorkflow,
+      getWorkflow: state.getWorkflow,
+      exportWorkflow: state.exportWorkflow,
+      importWorkflow: state.importWorkflow,
+    })),
   );
 
-  const createMutation = useMutation({
-    mutationFn: async (payload: {
-      name: string;
-      description?: string;
-      graph: WorkflowGraphData;
-    }) => {
-      const spec = graphToWorkflowSpec(payload.graph);
-      const response = await backendApiClient.request<WorkflowResponse>('/api/v1/workflows', {
-        method: 'POST',
-        body: {
-          name: payload.name,
-          description: payload.description,
-          spec,
-        },
-      });
-      return toWorkflowModel(response);
-    },
-    onSuccess: (workflow) => {
-      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
-      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
-    },
-  });
-
-  const updateMetadataMutation = useMutation({
-    mutationFn: async ({
-      workflowId,
-      name,
-      description,
-      tags,
-    }: {
-      workflowId: string;
-      name?: string;
-      description?: string;
-      tags?: string[];
-    }) => {
-      const response = await backendApiClient.request<WorkflowResponse>(
-        `/api/v1/workflows/${workflowId}`,
-        {
-          method: 'PUT',
-          body: {
-            name,
-            description,
-            tags,
-          },
-        },
-      );
-      return toWorkflowModel(response);
-    },
-    onSuccess: (workflow) => {
-      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
-      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
-    },
-  });
-
-  const saveDraftMutation = useMutation({
-    mutationFn: async ({
-      workflowId,
-      graph,
-      baseRevision,
-    }: {
-      workflowId: string;
-      graph: WorkflowGraphData;
-      baseRevision: number;
-    }) => {
-      const existing = queryClient.getQueryData<WorkflowModel>(['workflow', workflowId]);
-      const spec = graphToWorkflowSpec(graph, existing?.spec);
-      const response = await backendApiClient.request<WorkflowResponse>(
-        `/api/v1/workflows/${workflowId}/draft`,
-        {
-          method: 'PATCH',
-          body: {
-            base_revision: baseRevision,
-            spec,
-          },
-        },
-      );
-      return toWorkflowModel(response);
-    },
-    onSuccess: (workflow) => {
-      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
-      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
-    },
-  });
-
-  const publishMutation = useMutation({
-    mutationFn: async ({ workflowId, versionId }: { workflowId: string; versionId: number }) => {
-      const response = await backendApiClient.request<WorkflowResponse>(
-        `/api/v1/workflows/${workflowId}/publish`,
-        {
-          method: 'POST',
-          body: {
-            version_id: versionId,
-          },
-        },
-      );
-      return toWorkflowModel(response);
-    },
-    onSuccess: (workflow) => {
-      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
-      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (workflowId: string) => {
-      await backendApiClient.request(`/api/v1/workflows/${workflowId}`, {
-        method: 'DELETE',
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
-    },
-  });
-
-  const restoreVersionMutation = useMutation({
-    mutationFn: async ({
-      workflowId,
-      versionId,
-      baseRevision,
-    }: {
-      workflowId: string;
-      versionId: number;
-      baseRevision?: number;
-    }) => {
-      const body: WorkflowVersionRestoreRequest = {};
-      if (typeof baseRevision === 'number') {
-        body.base_revision = baseRevision;
-      }
-      const response = await backendApiClient.request<WorkflowResponse>(
-        `/api/v1/workflows/${workflowId}/versions/${versionId}/restore`,
-        {
-          method: 'POST',
-          body,
-        },
-      );
-      return toWorkflowModel(response);
-    },
-    onSuccess: (workflow) => {
-      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
-      queryClient.setQueryData(['workflow', workflow.workflow_id], workflow);
-      queryClient.invalidateQueries({ queryKey: ['workflowVersions', workflow.workflow_id] });
-    },
-  });
-
-  const executeMutation = useMutation({
-    mutationFn: async ({
-      workflowId,
-      inputs,
-      config,
-    }: {
-      workflowId: string;
-      inputs?: Record<string, any>;
-      config?: Record<string, any>;
-    }) => {
-      const payload: RunFromWorkflowRequest = {
-        inputs: inputs ?? {},
-        config: config ?? {},
-      };
-      return backendApiClient.request<RunResponse>(`/api/v1/workflows/${workflowId}/runs`, {
-        method: 'POST',
-        body: payload,
-      });
-    },
-  });
-
-  const createWorkflow = useCallback(
-    async (name: string, description: string | undefined, graph: WorkflowGraphData) => {
-      return createMutation.mutateAsync({
-        name,
-        description,
-        graph,
-      });
-    },
-    [createMutation],
-  );
-
-  const updateWorkflowMetadata = useCallback(
-    async (workflowId: string, updates: { name?: string; description?: string; tags?: string[] }) => {
-      return updateMetadataMutation.mutateAsync({
-        workflowId,
-        ...updates,
-      });
-    },
-    [updateMetadataMutation],
-  );
-
-  const saveWorkflowDraft = useCallback(
-    async (workflowId: string, params: { graph: WorkflowGraphData; baseRevision: number }) => {
-      return saveDraftMutation.mutateAsync({
-        workflowId,
-        ...params,
-      });
-    },
-    [saveDraftMutation],
-  );
-
-  const publishWorkflow = useCallback(
-    async (workflowId: string, versionId: number) => {
-      return publishMutation.mutateAsync({
-        workflowId,
-        versionId,
-      });
-    },
-    [publishMutation],
-  );
-
-  const deleteWorkflow = useCallback(
-    async (workflowId: string) => {
-      return deleteMutation.mutateAsync(workflowId);
-    },
-    [deleteMutation],
-  );
-
-  const restoreWorkflowVersion = useCallback(
-    async (workflowId: string, params: { versionId: number; baseRevision?: number }) => {
-      return restoreVersionMutation.mutateAsync({
-        workflowId,
-        versionId: params.versionId,
-        baseRevision: params.baseRevision,
-      });
-    },
-    [restoreVersionMutation],
-  );
-
-  const executeWorkflow = useCallback(
-    async (workflowId: string, inputs?: Record<string, any>, config?: Record<string, any>) => {
-      return executeMutation.mutateAsync({
-        workflowId,
-        inputs,
-        config,
-      });
-    },
-    [executeMutation],
-  );
-
-  const exportWorkflow = useCallback(
-    async (workflowId: string) => {
-      // Build URL manually since we need to download a file, not get JSON
-      const baseUrl = typeof backendApiClient['getBaseUrl'] === 'function'
-        ? (backendApiClient as any).getBaseUrl()
-        : (backendApiClient as any).baseUrl;
-
-      const url = `${baseUrl}/api/v1/workflows/${workflowId}/export`;
-
-      // Get auth token
-      const token = await (backendApiClient as any).getToken();
-
-      const headers: HeadersInit = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      // Fetch the file
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to export workflow');
-      }
-
-      // Extract filename from Content-Disposition header
-      const contentDisposition = response.headers.get('Content-Disposition');
-      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
-      const filename = filenameMatch?.[1] || `workflow-${workflowId}.seer.json`;
-
-      // Get blob data
-      const blob = await response.blob();
-
-      // Trigger download
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(downloadUrl);
-    },
-    []
-  );
-
-  const importWorkflow = useCallback(
-    async (file: File, options: { name?: string; importTriggers: boolean }) => {
-      const text = await file.text();
-      const importData = JSON.parse(text);
-
-      const response = await backendApiClient.request<WorkflowResponse>('/api/v1/workflows/import', {
-        method: 'POST',
-        body: {
-          import_data: importData,
-          name: options.name,
-          import_triggers: options.importTriggers,
-        },
-      });
-
-      // Invalidate queries to refresh workflow list
-      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
-
-      return toWorkflowModel(response);
-    },
-    [queryClient, workflowListQueryKey]
-  );
+  useEffect(() => {
+    if (!workflows.length && !isLoading) {
+      void loadWorkflows();
+    }
+  }, [workflows.length, isLoading, loadWorkflows]);
 
   return {
-    workflows: workflowsQuery.data ?? [],
-    isLoading: workflowsQuery.isLoading,
+    workflows,
+    isLoading,
     selectedNodeId,
     setSelectedNodeId,
     createWorkflow,
@@ -379,13 +80,13 @@ export function useWorkflowBuilder() {
     executeWorkflow,
     publishWorkflow,
     getWorkflow,
-    isCreating: createMutation.isPending,
-    isUpdating: updateMetadataMutation.isPending,
-    isSavingDraft: saveDraftMutation.isPending,
-    isPublishing: publishMutation.isPending,
-    isDeleting: deleteMutation.isPending,
-    isExecuting: executeMutation.isPending,
-    isRestoringVersion: restoreVersionMutation.isPending,
+    isCreating,
+    isUpdating,
+    isSavingDraft,
+    isPublishing,
+    isDeleting,
+    isExecuting,
+    isRestoringVersion,
     exportWorkflow,
     importWorkflow,
   };
