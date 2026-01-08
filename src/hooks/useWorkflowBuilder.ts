@@ -64,7 +64,8 @@ export function useWorkflowBuilder() {
     if (!workflows.length && !isLoading) {
       void loadWorkflows();
     }
-  }, [workflows.length, isLoading, loadWorkflows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflows.length, isLoading]);
 
   return {
     workflows,

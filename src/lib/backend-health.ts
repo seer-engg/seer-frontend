@@ -39,20 +39,33 @@ export async function checkBackendHealth(): Promise<boolean> {
 export function useBackendHealth(intervalMs: number = 100000000) {
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
-  intervalMs = 100000000000;
 
   const checkHealth = async () => {
     setIsChecking(true);
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      
-      await backendApiClient.request('/api/v1/workflows', {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      setIsHealthy(true);
+
+      // Try /health endpoint first, then /api/health
+      // Do NOT fall back to /api/v1/workflows as that's a heavyweight endpoint
+      try {
+        await backendApiClient.request('/health', {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        setIsHealthy(true);
+        return;
+      } catch {
+        // Try /api/health as fallback
+        await backendApiClient.request('/api/health', {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        setIsHealthy(true);
+        return;
+      }
     } catch {
       setIsHealthy(false);
     } finally {
