@@ -97,6 +97,15 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   const { subscription, descriptor, workflowInputs, handlers, integration, draft } = triggerMeta;
   const isDraft = !subscription;
   const triggerKey = subscription?.trigger_key ?? draft?.triggerKey ?? '';
+  
+  // Handle case where handlers might not be provided yet
+  if (!handlers) {
+    return (
+      <div className="rounded-lg border-2 border-muted bg-card p-4 text-sm text-muted-foreground">
+        Loading trigger configuration...
+      </div>
+    );
+  }
   const [bindingState, setBindingState] = useState<BindingState>(() =>
     subscription
       ? deriveBindingStateFromSubscription(workflowInputs, subscription)
@@ -137,7 +146,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
 
   const workflowInputEntries = useMemo(() => Object.entries(workflowInputs ?? {}), [workflowInputs]);
   const hasInputs = workflowInputEntries.length > 0;
-  const canManageInputs = Boolean(triggerMeta.handlers.updateWorkflowInputs);
+  const canManageInputs = Boolean(triggerMeta.handlers?.updateWorkflowInputs);
 
   const isSupabaseTrigger = triggerKey === SUPABASE_TRIGGER_KEY;
   const isWebhookTrigger = triggerKey === WEBHOOK_TRIGGER_KEY || isSupabaseTrigger;
@@ -207,7 +216,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   }, [subscription?.provider_config, isSupabaseTrigger, draft?.initialSupabaseConfig]);
 
   const handleCreateWorkflowInput = async () => {
-    if (!triggerMeta.handlers.updateWorkflowInputs) {
+    if (!triggerMeta.handlers?.updateWorkflowInputs) {
       toast.error('Unable to edit workflow inputs');
       return;
     }
@@ -234,7 +243,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       },
     };
     try {
-      await triggerMeta.handlers.updateWorkflowInputs(nextInputs);
+      await triggerMeta.handlers?.updateWorkflowInputs(nextInputs);
       toast.success('Workflow input added');
       setBindingState((prev) => ({
         ...prev,
@@ -250,7 +259,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   };
 
   const handleRemoveWorkflowInput = async (inputName: string) => {
-    if (!triggerMeta.handlers.updateWorkflowInputs) {
+    if (!triggerMeta.handlers?.updateWorkflowInputs) {
       toast.error('Unable to edit workflow inputs');
       return;
     }
@@ -262,7 +271,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       Object.entries(workflowInputs).filter(([name]) => name !== inputName),
     );
     try {
-      await triggerMeta.handlers.updateWorkflowInputs(nextInputs);
+      await triggerMeta.handlers?.updateWorkflowInputs(nextInputs);
       toast.success('Workflow input removed');
       setBindingState((prev) => {
         if (!(inputName in prev)) {

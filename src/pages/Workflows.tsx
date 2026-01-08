@@ -163,6 +163,9 @@ function withDefaultBlockConfig(
           array_literal: [],
           item_var: 'item',
         };
+      case 'trigger':
+        // Triggers have their config passed directly
+        return {};
       default:
         return {};
     }
@@ -411,7 +414,62 @@ export default function Workflows() {
 
   const handleBlockSelect = useCallback(
     (block: { type: string; label: string; config?: any }) => {
-      // Set default config based on block type
+      console.log('[Workflows] handleBlockSelect called with:', block);
+      
+      // Handle trigger blocks specially
+      if (block.type === 'trigger' && block.config?.triggerKey) {
+        const triggerKey = block.config.triggerKey;
+        const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
+        
+        if (!descriptor) {
+          console.error('[Workflows] Trigger descriptor not found for key:', triggerKey);
+          toast.error('Trigger metadata unavailable');
+          return;
+        }
+        
+        const newNode: Node<WorkflowNodeData> = {
+          id: `trigger-${Date.now()}`,
+          type: 'trigger',
+          position: {
+            x: Math.random() * 400 + 100,
+            y: Math.random() * 400 + 100,
+          },
+          data: {
+            type: 'trigger',
+            label: descriptor.title || block.label,
+            config: {
+              triggerKey: triggerKey,
+            },
+            triggerMeta: {
+              descriptor,
+              workflowInputs: workflowInputsDef,
+              handlers: {} as any, // Will be populated when trigger nodes are created
+              integration: (() => {
+                const integrationMeta: NonNullable<WorkflowNodeData['triggerMeta']>['integration'] = {};
+                if (triggerKey === GMAIL_TRIGGER_KEY) {
+                  integrationMeta.gmail = {
+                    ready: gmailIntegrationReady,
+                    connectionId: gmailConnectionId,
+                    onConnect: gmailIntegrationReady ? undefined : handleConnectGmail,
+                    isConnecting: isConnectingGmail,
+                  };
+                }
+                return Object.keys(integrationMeta).length ? integrationMeta : undefined;
+              })(),
+            },
+          },
+        };
+        console.log('[Workflows] Adding trigger node:', newNode);
+        setNodes((nds) => {
+          console.log('[Workflows] Current nodes:', nds.length);
+          const updatedNodes = [...nds, newNode];
+          console.log('[Workflows] Updated nodes:', updatedNodes.length);
+          return updatedNodes;
+        });
+        return;
+      }
+      
+      // Handle regular blocks
       const defaultConfig = withDefaultBlockConfig(block.type, block.config, functionBlocksMap);
       
       const newNode: Node<WorkflowNodeData> = {
@@ -427,14 +485,62 @@ export default function Workflows() {
           config: defaultConfig,
         },
       };
+      console.log('[Workflows] Adding regular node:', newNode);
       setNodes((nds) => [...nds, newNode]);
     },
-    [functionBlocksMap, setNodes],
+    [functionBlocksMap, setNodes, triggerCatalog, workflowInputsDef, gmailIntegrationReady, gmailConnectionId, handleConnectGmail, isConnectingGmail],
   );
 
   const handleNodeDrop = useCallback(
     (block: { type: string; label: string; config?: any }, position: { x: number; y: number }) => {
-      // Set default config based on block type
+      console.log('[Workflows] handleNodeDrop called with:', block);
+      
+      // Handle trigger blocks specially
+      if (block.type === 'trigger' && block.config?.triggerKey) {
+        const triggerKey = block.config.triggerKey;
+        const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
+        
+        if (!descriptor) {
+          console.error('[Workflows] Trigger descriptor not found for key:', triggerKey);
+          toast.error('Trigger metadata unavailable');
+          return;
+        }
+        
+        const newNode: Node<WorkflowNodeData> = {
+          id: `trigger-${Date.now()}`,
+          type: 'trigger',
+          position,
+          data: {
+            type: 'trigger',
+            label: descriptor.title || block.label,
+            config: {
+              triggerKey: triggerKey,
+            },
+            triggerMeta: {
+              descriptor,
+              workflowInputs: workflowInputsDef,
+              handlers: {} as any, // Will be populated when trigger nodes are created
+              integration: (() => {
+                const integrationMeta: NonNullable<WorkflowNodeData['triggerMeta']>['integration'] = {};
+                if (triggerKey === GMAIL_TRIGGER_KEY) {
+                  integrationMeta.gmail = {
+                    ready: gmailIntegrationReady,
+                    connectionId: gmailConnectionId,
+                    onConnect: gmailIntegrationReady ? undefined : handleConnectGmail,
+                    isConnecting: isConnectingGmail,
+                  };
+                }
+                return Object.keys(integrationMeta).length ? integrationMeta : undefined;
+              })(),
+            },
+          },
+        };
+        console.log('[Workflows] Adding trigger node via drop:', newNode);
+        setNodes((nds) => [...nds, newNode]);
+        return;
+      }
+      
+      // Handle regular blocks
       const defaultConfig = withDefaultBlockConfig(block.type, block.config, functionBlocksMap);
       
       const newNode: Node<WorkflowNodeData> = {
@@ -447,14 +553,16 @@ export default function Workflows() {
           config: defaultConfig,
         },
       };
+      console.log('[Workflows] Adding regular node via drop:', newNode);
       setNodes((nds) => [...nds, newNode]);
     },
-    [functionBlocksMap, setNodes],
+    [functionBlocksMap, setNodes, triggerCatalog, workflowInputsDef, gmailIntegrationReady, gmailConnectionId, handleConnectGmail, isConnectingGmail],
   );
 
 
   const handleAddTriggerDraft = useCallback(
     (triggerKey: string) => {
+      console.log('[Workflows] handleAddTriggerDraft called with triggerKey:', triggerKey);
       const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
       if (!descriptor) {
         toast.error('Trigger metadata unavailable');
@@ -745,6 +853,7 @@ export default function Workflows() {
   }, [proposalPreview, functionBlocksMap]);
 
   const isPreviewActive = Boolean(previewGraph);
+  
   const triggerHandlers = useMemo(
     () => ({
       update: (subscriptionId: number, payload: TriggerSubscriptionUpdateRequest) =>
@@ -765,6 +874,32 @@ export default function Workflows() {
       handleWorkflowInputsChange,
     ],
   );
+
+  // Populate handlers for trigger nodes that don't have them
+  useEffect(() => {
+    const hasUnpopulatedTriggerNodes = nodes.some(
+      node => node.type === 'trigger' && node.data.triggerMeta && (!node.data.triggerMeta.handlers || Object.keys(node.data.triggerMeta.handlers).length === 0)
+    );
+    
+    if (hasUnpopulatedTriggerNodes) {
+      const updatedNodes = nodes.map(node => {
+        if (node.type === 'trigger' && node.data.triggerMeta && (!node.data.triggerMeta.handlers || Object.keys(node.data.triggerMeta.handlers).length === 0)) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              triggerMeta: {
+                ...node.data.triggerMeta,
+                handlers: triggerHandlers
+              }
+            }
+          };
+        }
+        return node;
+      });
+      setNodes(updatedNodes);
+    }
+  }, [nodes.length, triggerHandlers, setNodes]); // Only react to changes in number of nodes
 
   const triggerNodes = useMemo(() => {
     const entries = [
@@ -1318,7 +1453,7 @@ export default function Workflows() {
             <div className="flex-1 relative overflow-hidden">
               <WorkflowCanvas
               key={selectedWorkflowId ?? 'new'}
-                triggerNodes={triggerNodes}
+                triggerNodes={[]}
                 previewGraph={previewGraph}
               onNodeDoubleClick={isPreviewActive ? undefined : handleCanvasNodeDoubleClick}
               onNodeDrop={isPreviewActive ? undefined : handleNodeDrop}

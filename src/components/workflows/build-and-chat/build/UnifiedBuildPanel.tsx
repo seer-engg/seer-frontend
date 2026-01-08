@@ -53,6 +53,11 @@ export function UnifiedBuildPanel({
 
     // Add triggers
     triggerOptions.forEach((trigger) => {
+      console.log('[UnifiedBuildPanel] Processing trigger:', { 
+        key: trigger.key, 
+        title: trigger.title, 
+        hasPrimaryAction: !!trigger.onPrimaryAction 
+      });
       const Icon = TRIGGER_ICON_BY_KEY[trigger.key];
       items.push({
         id: `trigger-${trigger.key}`,
@@ -142,6 +147,7 @@ export function UnifiedBuildPanel({
   };
 
   const handleItemClick = (item: UnifiedItem) => {
+    console.log('[UnifiedBuildPanel] handleItemClick:', { type: item.type, label: item.label });
     if (item.type === 'block') {
       onBlockSelect?.({
         type: item.blockType,
@@ -157,6 +163,16 @@ export function UnifiedBuildPanel({
           integration_type: item.tool.integration_type,
           ...(item.tool.output_schema ? { output_schema: item.tool.output_schema } : {}),
           params: {},
+        },
+      });
+    } else if (item.type === 'trigger') {
+      // Handle triggers like blocks - add them to canvas
+      console.log('[UnifiedBuildPanel] Adding trigger to canvas:', item.triggerKey);
+      onBlockSelect?.({
+        type: 'trigger',
+        label: item.label,
+        config: {
+          triggerKey: item.triggerKey,
         },
       });
     }

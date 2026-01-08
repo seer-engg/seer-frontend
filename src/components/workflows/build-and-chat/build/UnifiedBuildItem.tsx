@@ -14,6 +14,7 @@ interface UnifiedBuildItemProps {
 export function UnifiedBuildItem({ item, onItemClick }: UnifiedBuildItemProps) {
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = 'move';
+    console.log('[UnifiedBuildItem] handleDragStart:', { type: item.type, label: item.label });
 
     if (item.type === 'block') {
       e.dataTransfer.setData(
@@ -26,16 +27,19 @@ export function UnifiedBuildItem({ item, onItemClick }: UnifiedBuildItemProps) {
       );
     } else if (item.type === 'trigger') {
       if (item.disabled) {
+        console.log('[UnifiedBuildItem] Trigger drag blocked - disabled');
         e.preventDefault();
         return;
       }
+      const triggerData = {
+        type: 'trigger',
+        triggerKey: item.triggerKey,
+        title: item.label,
+      };
+      console.log('[UnifiedBuildItem] Setting trigger drag data:', triggerData);
       e.dataTransfer.setData(
         'application/reactflow',
-        JSON.stringify({
-          type: 'trigger',
-          triggerKey: item.triggerKey,
-          title: item.label,
-        })
+        JSON.stringify(triggerData)
       );
     } else if (item.type === 'action') {
       e.dataTransfer.setData(
@@ -55,12 +59,17 @@ export function UnifiedBuildItem({ item, onItemClick }: UnifiedBuildItemProps) {
   };
 
   const handleClick = () => {
+    console.log('[UnifiedBuildItem] handleClick:', { type: item.type, label: item.label });
     if (item.type === 'trigger') {
       if (item.disabled || item.isPrimaryActionLoading) {
+        console.log('[UnifiedBuildItem] Trigger click blocked:', { disabled: item.disabled, loading: item.isPrimaryActionLoading });
         return;
       }
-      item.onPrimaryAction?.();
+      // Treat triggers like blocks/tools - add them to canvas
+      console.log('[UnifiedBuildItem] Calling onItemClick for trigger');
+      onItemClick?.(item);
     } else {
+      console.log('[UnifiedBuildItem] Calling onItemClick for:', item.type);
       onItemClick?.(item);
     }
   };
@@ -104,7 +113,7 @@ export function UnifiedBuildItem({ item, onItemClick }: UnifiedBuildItemProps) {
     return cardContent;
   }
 
-  // Render trigger (full-width card with action buttons)
+  // Render trigger (full-width card)
   const cardContent = (
     <Card
       draggable={!item.disabled}
@@ -115,10 +124,8 @@ export function UnifiedBuildItem({ item, onItemClick }: UnifiedBuildItemProps) {
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        'relative border border-border/70 bg-background transition-colors',
-        item.disabled
-          ? 'opacity-80 grayscale-[20%] cursor-not-allowed'
-          : 'cursor-grab active:cursor-grabbing hover:border-primary/50'
+        'relative cursor-grab active:cursor-grabbing hover:bg-accent transition-colors',
+        item.disabled && 'opacity-80 grayscale-[20%] cursor-not-allowed'
       )}
     >
       <CardContent className="flex flex-col gap-1.5 p-1.5">

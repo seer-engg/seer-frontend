@@ -122,20 +122,8 @@ export function WorkflowCanvas({
       };
     });
 
-    if (!triggerNodes.length) {
-      return workflowNodesWithSelection;
-    }
-
-    return [
-      ...workflowNodesWithSelection,
-      ...triggerNodes.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          selected: false,
-        },
-      })),
-    ];
+    // Don't include separate trigger nodes - triggers should be added like other nodes
+    return workflowNodesWithSelection;
   }, [workflowNodes, triggerNodes, selectedNodeId]);
 
   const updateNodeData = useCallback(
@@ -151,8 +139,8 @@ export function WorkflowCanvas({
         return;
       }
       const updatedNodes = applyNodeChanges<Node<WorkflowNodeData>>(changes, renderedNodes);
-      const workflowOnly = updatedNodes.filter((node) => node.type !== 'trigger');
-      setNodes(workflowOnly);
+      // Don't filter out trigger nodes - they should be part of the workflow
+      setNodes(updatedNodes);
     },
     [renderedNodes, readOnly, setNodes],
   );
@@ -320,10 +308,24 @@ export function WorkflowCanvas({
             setNodes((nds) => [...nds, newNode]);
           }
         } else if (dragData.type === 'trigger') {
-          // Triggers are handled differently - we don't add them directly
-          // They should be added through the proper trigger creation flow
-          console.log('Trigger dragged:', dragData.triggerKey);
-          return;
+          // Handle triggers like blocks - add them directly to canvas
+          console.log('[WorkflowCanvas] Trigger dropped:', dragData.triggerKey);
+          if (onNodeDrop) {
+            onNodeDrop(
+              {
+                type: 'trigger',
+                label: dragData.title || dragData.triggerKey,
+                config: {
+                  triggerKey: dragData.triggerKey,
+                },
+              },
+              position
+            );
+          } else {
+            // For triggers, we should not create them directly here
+            // They need proper metadata which is handled by the parent component
+            console.log('[WorkflowCanvas] Trigger dropped without onNodeDrop handler, ignoring');
+          }
         }
       } catch (error) {
         console.error('Error processing drop:', error);
