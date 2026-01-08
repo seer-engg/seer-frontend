@@ -940,7 +940,7 @@ export function WorkflowTriggerModal({
             const bindingValue =
               binding?.value ?? (bindingMode === 'event' ? defaultEventPath : '');
             return (
-              <div key={inputName} className="rounded-lg border p-4 space-y-3">
+              <div key={inputName} className="rounded-lg border p-3 space-y-2">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="font-medium">{inputName}</p>
@@ -1094,8 +1094,8 @@ export function WorkflowTriggerModal({
       fieldOptions: GMAIL_FIELD_OPTIONS,
     });
     return (
-      <div className="space-y-5">
-        <div className="rounded-lg border p-4 space-y-3">
+      <div className="space-y-2">
+        <div className="rounded-lg border p-3 space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="font-medium">Gmail connection</p>
@@ -1423,7 +1423,7 @@ export function WorkflowTriggerModal({
             <TabsTrigger value="create">Add trigger</TabsTrigger>
           </TabsList>
           <TabsContent value="subscriptions">
-            <ScrollArea className="mt-4 h-[420px] pr-4">
+            <ScrollArea className="mt-4 h-[360px] pr-4">
               <div className="space-y-4">
                 {isLoadingSubscriptions || isLoadingTriggers ? (
                   <div className="flex h-32 items-center justify-center text-muted-foreground">
@@ -1441,7 +1441,7 @@ export function WorkflowTriggerModal({
             </ScrollArea>
           </TabsContent>
           <TabsContent value="create">
-            <ScrollArea className="mt-4 h-[420px] pr-4">
+            <ScrollArea className="mt-4 h-[360px] pr-4">
               {renderCreateForm()}
             </ScrollArea>
           </TabsContent>

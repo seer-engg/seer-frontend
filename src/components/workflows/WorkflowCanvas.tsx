@@ -27,6 +27,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
 import { WorkflowCanvasContext } from './workflow-canvas-context';
+import { FloatingActions } from '@/components/FloatingActions';
 import {
   WorkflowNodeData,
   WorkflowEdge,
@@ -435,9 +436,9 @@ export function WorkflowCanvas({
 
   return (
     <WorkflowCanvasContext.Provider value={contextValue}>
-      <div 
+      <div
         ref={reactFlowWrapper}
-        className={cn('w-full h-full bg-[hsl(var(--canvas-bg))]', className)}
+        className={cn('relative w-full h-full bg-[hsl(var(--canvas-bg))]', className)}
         onDrop={onDrop}
         onDragOver={onDragOver}
       >
@@ -476,6 +477,9 @@ export function WorkflowCanvas({
             className="!bg-card !border-border !rounded-lg !shadow-lg"
           />
         </ReactFlow>
+
+        {/* Floating Actions for Settings & Theme */}
+        <FloatingActions />
       </div>
     </WorkflowCanvasContext.Provider>
   );

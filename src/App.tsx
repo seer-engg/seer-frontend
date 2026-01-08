@@ -9,13 +9,10 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
-import WorkflowTraces from "./pages/WorkflowTraces";
-import WorkflowTraceDetail from "./pages/WorkflowTraceDetail";
-import AgentTraces from "./pages/AgentTraces";
-import AgentTraceDetail from "./pages/AgentTraceDetail";
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { getStoredSignupSource } from "./utils/utm-tracker";
+import { KeyboardShortcutProvider } from "@/hooks/useKeyboardShortcuts";
 
 
 
@@ -33,9 +30,10 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+        <KeyboardShortcutProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
           <Routes>
             <Route path="/" element={<Navigate to="/workflows" replace />} />
 
@@ -80,26 +78,6 @@ const App = () => (
               }
             />
             <Route
-              path="/workflows/traces"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <WorkflowTraces />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/workflows/:workflowId/traces/:runId"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <WorkflowTraceDetail />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/workflows"
               element={
                 <ProtectedRoute>
@@ -109,29 +87,10 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/agents/traces"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <AgentTraces />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/agents/traces/:threadId"
-              element={
-                <ProtectedRoute>
-                  <SeerLayout>
-                    <AgentTraceDetail />
-                  </SeerLayout>
-                </ProtectedRoute>
-              }
-            />
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
+          </BrowserRouter>
+        </KeyboardShortcutProvider>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

@@ -1,9 +1,8 @@
 /**
  * Structured Output Editor Component
- * 
- * Dual-mode editor for LLM structured output:
- * - Simple mode: Table-based form for non-technical users
- * - Advanced mode: JSON editor for technical users
+ *
+ * Simple table-based editor for defining LLM structured output schemas.
+ * Includes AI-powered automatic generation of schema titles and descriptions.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -11,9 +10,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Code } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Trash2, Sparkles, RefreshCw } from 'lucide-react';
+import { useSchemaMetadataGenerator } from '@/hooks/useSchemaMetadataGenerator';
 
 interface FieldDefinition {
   name: string;
@@ -124,26 +124,39 @@ function fieldsToSchema(
 }
 
 export function StructuredOutputEditor({ value, onChange }: StructuredOutputEditorProps) {
-  const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
   const [fields, setFields] = useState<FieldDefinition[]>([createEmptyField()]);
-  const [jsonValue, setJsonValue] = useState(JSON.stringify(DEFAULT_SCHEMA, null, 2));
   const [schemaTitle, setSchemaTitle] = useState('');
   const [schemaDescription, setSchemaDescription] = useState('');
   const lastEmittedSchemaRef = useRef<string>('');
 
-  const syncSimpleSchema = useCallback(
+  const syncSchema = useCallback(
     (nextFields: FieldDefinition[], nextTitle: string, nextDescription: string) => {
       const schema = fieldsToSchema(nextFields, {
         title: nextTitle,
         description: nextDescription,
       });
       const serialized = JSON.stringify(schema);
-      setJsonValue(JSON.stringify(schema, null, 2));
       onChange(schema);
       lastEmittedSchemaRef.current = serialized;
     },
     [onChange],
   );
+
+  // Schema metadata generation
+  const {
+    isGenerating,
+    isAiGenerated,
+    regenerate,
+  } = useSchemaMetadataGenerator({
+    jsonSchema: fieldsToSchema(fields),
+    autoGenerate: true,
+    debounceMs: 1500,
+    onGenerated: (metadata) => {
+      setSchemaTitle(metadata.title);
+      setSchemaDescription(metadata.description);
+      syncSchema(fields, metadata.title, metadata.description);
+    },
+  });
 
   useEffect(() => {
     const hasValue = value && Object.keys(value).length > 0;
@@ -155,7 +168,6 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
       }
       const parsedFields = schemaToFields(value);
       setFields(parsedFields.length > 0 ? parsedFields : [createEmptyField()]);
-      setJsonValue(JSON.stringify(value, null, 2));
       setSchemaTitle(typeof value.title === 'string' ? value.title : '');
       setSchemaDescription(typeof value.description === 'string' ? value.description : '');
       lastEmittedSchemaRef.current = serializedValue;
@@ -170,56 +182,29 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
     setFields([createEmptyField()]);
     setSchemaTitle('');
     setSchemaDescription('');
-    setJsonValue(JSON.stringify(DEFAULT_SCHEMA, null, 2));
     onChange(DEFAULT_SCHEMA);
     lastEmittedSchemaRef.current = defaultSerialized;
   }, [value, onChange]);
-
-  // Update fields when JSON changes (advanced mode)
-  const handleJsonChange = (json: string) => {
-    setJsonValue(json);
-    try {
-      const parsed = JSON.parse(json);
-      if (parsed.type === 'object' && parsed.properties) {
-        const parsedFields = schemaToFields(parsed);
-        if (parsedFields.length > 0) {
-          setFields(parsedFields);
-        }
-        setSchemaTitle(typeof parsed.title === 'string' ? parsed.title : '');
-        setSchemaDescription(typeof parsed.description === 'string' ? parsed.description : '');
-        onChange(parsed);
-        lastEmittedSchemaRef.current = JSON.stringify(parsed);
-      }
-    } catch {
-      // Invalid JSON, don't update
-    }
-  };
 
   const handleFieldChange = useCallback(
     (updater: (prev: FieldDefinition[]) => FieldDefinition[]) => {
       setFields(prevFields => {
         const nextFields = updater(prevFields);
-        if (mode === 'simple') {
-          syncSimpleSchema(nextFields, schemaTitle, schemaDescription);
-        }
+        syncSchema(nextFields, schemaTitle, schemaDescription);
         return nextFields.length > 0 ? nextFields : [createEmptyField()];
       });
     },
-    [mode, schemaTitle, schemaDescription, syncSimpleSchema],
+    [schemaTitle, schemaDescription, syncSchema],
   );
 
   const handleTitleChange = (value: string) => {
     setSchemaTitle(value);
-    if (mode === 'simple') {
-      syncSimpleSchema(fields, value, schemaDescription);
-    }
+    syncSchema(fields, value, schemaDescription);
   };
 
   const handleDescriptionChange = (value: string) => {
     setSchemaDescription(value);
-    if (mode === 'simple') {
-      syncSimpleSchema(fields, schemaTitle, value);
-    }
+    syncSchema(fields, schemaTitle, value);
   };
 
   const addField = () => {
@@ -240,146 +225,149 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
 
   return (
     <div className="space-y-4">
-      <Tabs value={mode} onValueChange={(v) => setMode(v as 'simple' | 'advanced')}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="simple">Simple</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced (JSON)</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="simple" className="space-y-4">
-          <div className="space-y-2">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="schema-title">Schema Title</Label>
-                <Input
-                  id="schema-title"
-                  placeholder="TwoPeople"
-                  value={schemaTitle}
-                  onChange={(e) => handleTitleChange(e.target.value)}
-                  className="h-9"
-                />
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="schema-title">Schema Title</Label>
+            {isAiGenerated && (
+              <div className="flex items-center gap-1">
+                <Badge
+                  variant="secondary"
+                  className="h-4 px-1.5 text-[9px] bg-seer/10 text-seer dark:text-seer border-seer/20"
+                >
+                  <Sparkles className="w-3 h-3 mr-0.5" />
+                  AI
+                </Badge>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={regenerate}
+                  disabled={isGenerating}
+                  title="Regenerate with AI"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isGenerating ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="schema-description">Schema Description</Label>
-                <Textarea
-                  id="schema-description"
-                  placeholder="Describe what this structured output should contain..."
-                  value={schemaDescription}
-                  onChange={(e) => handleDescriptionChange(e.target.value)}
-                  rows={2}
-                  className="min-h-[72px]"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <Label>Output Fields</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addField}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Add Field
-              </Button>
-            </div>
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[25%]">Field Name</TableHead>
-                    <TableHead className="w-[20%]">Type</TableHead>
-                    <TableHead className="w-[40%]">Description</TableHead>
-                    <TableHead className="w-[15%]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {fields.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
-                        No fields. Click "Add Field" to get started.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    fields.map((field, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <Input
-                            value={field.name}
-                            onChange={(e) => updateField(index, { name: e.target.value })}
-                            placeholder="field_name"
-                            className="h-8"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={field.type}
-                            onValueChange={(value) => updateField(index, { type: value })}
-                          >
-                            <SelectTrigger className="h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {PYDANTIC_TYPES.map((type) => (
-                                <SelectItem key={type.value} value={type.value}>
-                                  {type.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={field.description || ''}
-                            onChange={(e) => updateField(index, { description: e.target.value })}
-                            placeholder="Describe this field..."
-                            className="h-8"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeField(index)}
-                            disabled={fields.length === 1}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Define the structure of the LLM output. Each field will be validated according to its type. 
-              Adding descriptions helps guide the LLM on what content to generate for each field.
-            </p>
+            )}
           </div>
-        </TabsContent>
+          <Input
+            id="schema-title"
+            placeholder="TwoPeople"
+            value={schemaTitle}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            className="h-9"
+            disabled={isGenerating}
+          />
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="schema-description">Schema Description</Label>
+            {isGenerating && (
+              <span className="text-xs text-muted-foreground">Generating...</span>
+            )}
+          </div>
+          <Textarea
+            id="schema-description"
+            placeholder="Describe what this structured output should contain..."
+            value={schemaDescription}
+            onChange={(e) => handleDescriptionChange(e.target.value)}
+            rows={2}
+            className="min-h-[72px]"
+            disabled={isGenerating}
+          />
+        </div>
+      </div>
 
-        <TabsContent value="advanced" className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="json-schema" className="flex items-center gap-2">
-              <Code className="w-4 h-4" />
-              JSON Schema
-            </Label>
-            <Textarea
-              id="json-schema"
-              value={jsonValue}
-              onChange={(e) => handleJsonChange(e.target.value)}
-              placeholder='{"type": "object", "properties": {"result": {"type": "string"}}}'
-              className="font-mono text-xs"
-              rows={10}
-            />
-            <p className="text-xs text-muted-foreground">
-              Edit the JSON schema directly. Changes will be reflected in Simple mode.
-            </p>
-          </div>
-        </TabsContent>
-      </Tabs>
+      <div className="flex items-center justify-between">
+        <Label>Output Fields</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addField}
+        >
+          <Plus className="w-4 h-4 mr-1" />
+          Add Field
+        </Button>
+      </div>
+
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[25%]">Field Name</TableHead>
+              <TableHead className="w-[20%]">Type</TableHead>
+              <TableHead className="w-[40%]">Description</TableHead>
+              <TableHead className="w-[15%]">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {fields.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                  No fields. Click "Add Field" to get started.
+                </TableCell>
+              </TableRow>
+            ) : (
+              fields.map((field, index) => (
+                <TableRow key={index}>
+                  <TableCell>
+                    <Input
+                      value={field.name}
+                      onChange={(e) => updateField(index, { name: e.target.value })}
+                      placeholder="field_name"
+                      className="h-8"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={field.type}
+                      onValueChange={(value) => updateField(index, { type: value })}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PYDANTIC_TYPES.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={field.description || ''}
+                      onChange={(e) => updateField(index, { description: e.target.value })}
+                      placeholder="Describe this field..."
+                      className="h-8"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeField(index)}
+                      disabled={fields.length === 1}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Define the structure of the LLM output. Each field will be validated according to its type.
+        Adding descriptions helps guide the LLM on what content to generate for each field.
+      </p>
     </div>
   );
 }

@@ -1,10 +1,13 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { Accordion, AccordionItem, AccordionContent, AccordionTrigger } from '@/components/ui/accordion';
+import { ChevronDown } from 'lucide-react';
 
 import { StructuredOutputEditor } from '@/components/workflows/StructuredOutputEditor';
 
@@ -30,6 +33,72 @@ const MODEL_OPTIONS = [
   { value: 'gpt-5', label: 'GPT-5' },
   { value: 'gpt-4o', label: 'GPT-4o' },
 ];
+
+interface CollapsibleSystemPromptProps {
+  value: string;
+  promptRef: RefObject<HTMLTextAreaElement>;
+  onChange: (value: string, cursorPosition: number) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+  dropdownVisible: boolean;
+  filteredVariables: Array<{ name: string }>;
+  selectedIndex: number;
+  insertVariable: () => void;
+}
+
+function CollapsibleSystemPrompt({
+  value,
+  promptRef,
+  onChange,
+  onKeyDown,
+  onFocus,
+  onBlur,
+  dropdownVisible,
+  filteredVariables,
+  selectedIndex,
+  insertVariable,
+}: CollapsibleSystemPromptProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="system-prompt">System Prompt</Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="h-6 text-xs px-2"
+        >
+          <ChevronDown className={`h-3 w-3 mr-1 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+          {isExpanded ? 'Collapse' : 'Expand'}
+        </Button>
+      </div>
+      <div className="relative">
+        <Textarea
+          ref={promptRef}
+          id="system-prompt"
+          value={value}
+          onChange={e => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+          onKeyDown={onKeyDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          placeholder="You are a helpful assistant..."
+          rows={isExpanded ? 4 : 2}
+          className={`resize-none transition-all duration-200 overflow-y-auto ${isExpanded ? 'max-h-[120px]' : 'max-h-[60px]'}`}
+        />
+        <VariableAutocompleteDropdown
+          visible={dropdownVisible}
+          variables={filteredVariables}
+          selectedIndex={selectedIndex}
+          onSelect={insertVariable}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function LlmBlockSection({
   config,
@@ -75,7 +144,7 @@ export function LlmBlockSection({
     showAutocomplete && autocompleteContext?.inputId === field;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="relative">
         <Label htmlFor="system-prompt">System Prompt</Label>
         <Textarea
@@ -103,8 +172,8 @@ export function LlmBlockSection({
             setTimeout(() => closeAutocomplete(), 200);
           }}
           placeholder="You are a helpful assistant..."
-          rows={6}
-          className="max-h-[200px] overflow-y-auto"
+          rows={4}
+          className="max-h-[120px] overflow-y-auto"
         />
         <VariableAutocompleteDropdown
           visible={promptDropdownVisible('system_prompt')}
@@ -143,8 +212,8 @@ export function LlmBlockSection({
             setTimeout(() => closeAutocomplete(), 200);
           }}
           placeholder="Enter your message or question..."
-          rows={6}
-          className="max-h-[200px] overflow-y-auto"
+          rows={4}
+          className="max-h-[120px] overflow-y-auto"
           required
         />
         <VariableAutocompleteDropdown

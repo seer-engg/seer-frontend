@@ -12,7 +12,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { Plus, FileEdit, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, FileEdit, Trash2, ChevronDown, ChevronUp, Upload, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface WorkflowListRow {
@@ -33,6 +33,8 @@ interface FloatingWorkflowsPanelProps {
   onNewWorkflow?: () => void;
   onCopyLink?: (workflowId: string) => void;
   onDuplicateWorkflow?: (workflowId: string) => void;
+  onExportWorkflow?: (workflowId: string) => void;
+  onImportWorkflow?: () => void;
 }
 
 export function FloatingWorkflowsPanel({
@@ -45,6 +47,8 @@ export function FloatingWorkflowsPanel({
   onNewWorkflow,
   onCopyLink,
   onDuplicateWorkflow,
+  onExportWorkflow,
+  onImportWorkflow,
 }: FloatingWorkflowsPanelProps) {
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
@@ -144,17 +148,30 @@ export function FloatingWorkflowsPanel({
             </CollapsibleTrigger>
             <h3 className="text-sm font-semibold">Workflows</h3>
           </div>
-          {onNewWorkflow && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onNewWorkflow}
-              className="h-6 w-6"
-              title="New workflow"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {onImportWorkflow && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onImportWorkflow}
+                className="h-6 w-6"
+                title="Import workflow"
+              >
+                <Upload className="w-4 h-4" />
+              </Button>
+            )}
+            {onNewWorkflow && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onNewWorkflow}
+                className="h-6 w-6"
+                title="New workflow"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Workflows List */}
@@ -209,6 +226,20 @@ export function FloatingWorkflowsPanel({
                 </div>
                 {editingWorkflowId !== workflow.workflow_id && (
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {onExportWorkflow && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onExportWorkflow(workflow.workflow_id);
+                        }}
+                        title="Export workflow"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    )}
                     {onRenameWorkflow && (
                       <Button
                         variant="ghost"

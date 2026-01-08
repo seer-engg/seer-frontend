@@ -554,3 +554,20 @@ export async function deleteIntegrationResource(resourceId: number): Promise<voi
     method: 'DELETE',
   });
 }
+
+/**
+ * Generate schema title and description using LLM analysis.
+ */
+export async function generateSchemaMetadata(params: {
+  jsonSchema: Record<string, any>;
+}): Promise<{ title: string; description: string }> {
+  return backendApiClient.request<{ title: string; description: string }>(
+    '/api/v1/workflows/schemas/generate-metadata',
+    {
+      method: 'POST',
+      body: {
+        json_schema: params.jsonSchema,
+      },
+    }
+  );
+}

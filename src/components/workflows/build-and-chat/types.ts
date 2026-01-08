@@ -111,3 +111,44 @@ export interface BuildAndChatPanelProps {
   triggerInfoMessage?: string;
 }
 
+// Unified item types for the Build Panel
+export type ItemType = 'block' | 'trigger' | 'action';
+
+export interface BaseItem {
+  id: string;
+  type: ItemType;
+  label: string;
+  description?: string;
+  icon: ReactNode;
+  searchTerms: string;
+}
+
+export interface BlockItem extends BaseItem {
+  type: 'block';
+  blockType: string;
+  builtInBlock: BuiltInBlock;
+}
+
+export interface TriggerItem extends BaseItem {
+  type: 'trigger';
+  triggerKey: string;
+  status?: 'ready' | 'action-required';
+  badge?: string;
+  actionLabel?: string;
+  secondaryActionLabel?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  onPrimaryAction?: () => void;
+  onSecondaryAction?: () => void;
+  isPrimaryActionLoading?: boolean;
+  isSecondaryActionLoading?: boolean;
+}
+
+export interface ActionItem extends BaseItem {
+  type: 'action';
+  tool: Tool;
+  integrationType: string;
+}
+
+export type UnifiedItem = BlockItem | TriggerItem | ActionItem;
+

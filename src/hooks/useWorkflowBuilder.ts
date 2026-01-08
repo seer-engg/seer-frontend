@@ -295,6 +295,76 @@ export function useWorkflowBuilder() {
     [executeMutation],
   );
 
+  const exportWorkflow = useCallback(
+    async (workflowId: string) => {
+      // Build URL manually since we need to download a file, not get JSON
+      const baseUrl = typeof backendApiClient['getBaseUrl'] === 'function'
+        ? (backendApiClient as any).getBaseUrl()
+        : (backendApiClient as any).baseUrl;
+
+      const url = `${baseUrl}/api/v1/workflows/${workflowId}/export`;
+
+      // Get auth token
+      const token = await (backendApiClient as any).getToken();
+
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // Fetch the file
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export workflow');
+      }
+
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+      const filename = filenameMatch?.[1] || `workflow-${workflowId}.seer.json`;
+
+      // Get blob data
+      const blob = await response.blob();
+
+      // Trigger download
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+    },
+    []
+  );
+
+  const importWorkflow = useCallback(
+    async (file: File, options: { name?: string; importTriggers: boolean }) => {
+      const text = await file.text();
+      const importData = JSON.parse(text);
+
+      const response = await backendApiClient.request<WorkflowResponse>('/api/v1/workflows/import', {
+        method: 'POST',
+        body: {
+          import_data: importData,
+          name: options.name,
+          import_triggers: options.importTriggers,
+        },
+      });
+
+      // Invalidate queries to refresh workflow list
+      queryClient.invalidateQueries({ queryKey: workflowListQueryKey });
+
+      return toWorkflowModel(response);
+    },
+    [queryClient, workflowListQueryKey]
+  );
+
   return {
     workflows: workflowsQuery.data ?? [],
     isLoading: workflowsQuery.isLoading,
@@ -316,5 +386,7 @@ export function useWorkflowBuilder() {
     isDeleting: deleteMutation.isPending,
     isExecuting: executeMutation.isPending,
     isRestoringVersion: restoreVersionMutation.isPending,
+    exportWorkflow,
+    importWorkflow,
   };
 }

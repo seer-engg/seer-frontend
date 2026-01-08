@@ -1,9 +1,10 @@
 /**
  * Block Configuration Panel
- * 
+ *
  * Right sidebar panel for configuring selected block.
  * Supports editing parameters and OAuth scopes.
  */
+/* eslint-disable max-lines-per-function, complexity, @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Node } from '@xyflow/react';
@@ -35,6 +36,9 @@ interface BlockConfigPanelProps {
   liveUpdate?: boolean;
   liveUpdateDelayMs?: number;
   workflowInputs?: Record<string, InputDef>;
+  showSaveButton?: boolean; // Explicitly control save button visibility (default: auto-detect)
+  validationErrors?: Record<string, string>; // Validation errors from parent
+  onChange?: (config: Record<string, any>, oauthScope?: string) => void; // Notify parent of local changes (for button enable, not for parent state update)
 }
 
 export function BlockConfigPanel({
@@ -47,6 +51,9 @@ export function BlockConfigPanel({
   liveUpdate = false,
   liveUpdateDelayMs = 350,
   workflowInputs,
+  showSaveButton,
+  validationErrors = {},
+  onChange,
 }: BlockConfigPanelProps) {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
@@ -74,6 +81,16 @@ export function BlockConfigPanel({
     inputRefsRef.current = inputRefs;
     oauthScopeRef.current = oauthScope;
   }, [config, inputRefs, oauthScope]);
+
+  // Notify parent of local state changes (for change detection only, doesn't trigger parent state update)
+  useEffect(() => {
+    if (onChange && node) {
+      // Only notify if we've synced the node already (avoid triggering on initial load)
+      if (lastSyncedNodeStateRef.current.nodeId === node.id) {
+        onChange(config, oauthScope);
+      }
+    }
+  }, [config, oauthScope, onChange, node]);
 
   const toolName = config.tool_name || config.toolName || '';
 
@@ -338,6 +355,7 @@ export function BlockConfigPanel({
             setConfig={setConfig}
             toolSchema={toolSchema}
             templateAutocomplete={templateAutocomplete}
+            validationErrors={validationErrors}
           />
         );
       case 'llm':
@@ -373,7 +391,7 @@ export function BlockConfigPanel({
     }
   };
 
-  const shouldShowSaveButton = !autoSave && !liveUpdate;
+  const shouldShowSaveButton = showSaveButton ?? (!autoSave && !liveUpdate);
   const saveButton = shouldShowSaveButton ? (
     <Button onClick={handleSave} className="w-full" size="sm">
       <Save className="w-4 h-4 mr-2" />
@@ -383,7 +401,7 @@ export function BlockConfigPanel({
 
   if (variant === 'inline') {
     return (
-      <div className="space-y-4 w-fit">
+      <div className="space-y-2 w-fit">
         {renderBlockSection()}
         {saveButton}
       </div>
@@ -392,7 +410,7 @@ export function BlockConfigPanel({
 
   return (
     <Card className="w-fit">
-      <CardContent className="p-6 space-y-4 w-fit">
+      <CardContent className="p-4 space-y-2 w-fit">
         {renderBlockSection()}
         {saveButton}
       </CardContent>

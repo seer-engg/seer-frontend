@@ -143,7 +143,6 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   const isWebhookTrigger = triggerKey === WEBHOOK_TRIGGER_KEY || isSupabaseTrigger;
   const isGmailTrigger = triggerKey === GMAIL_TRIGGER_KEY;
   const isCronTrigger = triggerKey === CRON_TRIGGER_KEY;
-  const supabaseIntegration = integration?.supabase;
   const supabaseValidation = isSupabaseTrigger ? validateSupabaseConfig(supabaseConfig) : { valid: true, errors: {} };
   const supabaseSelectedProjectLabel =
     supabaseConfig.integrationResourceLabel ||
@@ -990,41 +989,6 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     }
     return (
       <div className="space-y-4">
-        <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Database className="h-4 w-4" />
-              Supabase project
-            </div>
-            <Badge
-              variant="secondary"
-              className={cn(
-                'text-[11px] px-2',
-                supabaseIntegration?.ready
-                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-              )}
-            >
-              {supabaseIntegration?.ready ? 'Connected' : 'Action required'}
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {supabaseIntegration?.ready
-              ? 'Choose a bound Supabase project and table to watch for database changes.'
-              : 'Connect Supabase Mgmt and bind a project before configuring this trigger.'}
-          </p>
-          {!supabaseIntegration?.ready && supabaseIntegration?.onConnect && (
-            <Button
-              size="sm"
-              onClick={() => supabaseIntegration.onConnect?.()}
-              disabled={supabaseIntegration?.isConnecting}
-            >
-              {supabaseIntegration?.isConnecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Connect Supabase
-            </Button>
-          )}
-        </div>
-
         <div className="space-y-2">
           <Label className="text-xs uppercase text-muted-foreground">Supabase project</Label>
           <ResourcePicker
@@ -1032,7 +996,6 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
             value={supabaseConfig.integrationResourceId || undefined}
             onChange={(value, label) => handleSupabaseResourceChange(String(value), label)}
             placeholder="Select or bind a project"
-            disabled={!supabaseIntegration?.ready}
             className="w-full"
           />
           {supabaseSelectedProjectLabel && (
