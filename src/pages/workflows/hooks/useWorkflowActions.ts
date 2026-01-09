@@ -2,8 +2,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Node } from '@xyflow/react';
 import type { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
-import type { WorkflowModel, WorkflowListItem } from '@/stores/workflowStore';
-import type { InputDef } from '@/types/workflow-spec';
+import type { WorkflowListItem } from '@/stores/workflowStore';
 import { toast } from '@/components/ui/sonner';
 import { BackendAPIError } from '@/lib/api-client';
 import { useWorkflowStore } from '@/stores/workflowStore';
@@ -12,15 +11,6 @@ import { handleDraftConflict } from '../utils/conflictHandler';
 import { normalizeNodes, normalizeEdges } from '@/lib/workflow-normalization';
 import { useToolsStore } from '@/stores/toolsStore';
 
-/**
- * Consolidated workflow actions hook that combines:
- * - useWorkflowLifecycle (save, execute, publish, restore)
- * - useWorkflowManagement (create, delete, rename, import/export)
- * - useWorkflowAutosave (autosave callback)
- *
- * Phase 3 refactoring: All state is fetched directly from stores,
- * eliminating the need for extensive prop passing.
- */
 export function useWorkflowActions() {
   const navigate = useNavigate();
 
@@ -30,7 +20,6 @@ export function useWorkflowActions() {
   const workflowName = useWorkflowStore((state) => state.workflowName);
   const setWorkflowName = useWorkflowStore((state) => state.setWorkflowName);
   const setSelectedWorkflowId = useWorkflowStore((state) => state.setSelectedWorkflowId);
-  const isLoadingWorkflow = useWorkflowStore((state) => state.isLoadingWorkflow);
   const createWorkflow = useWorkflowStore((state) => state.createWorkflow);
   const saveWorkflowDraft = useWorkflowStore((state) => state.saveWorkflowDraft);
   const executeWorkflow = useWorkflowStore((state) => state.executeWorkflow);
