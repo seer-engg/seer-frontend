@@ -21,7 +21,7 @@ Use this pattern for labels, counts, and non-critical indicators:
 - Fixed heights: `h-4` or `h-5`
 - Use `variant="outline"` or `variant="secondary"`
 
-**Reference:** `src/components/workflows/ToolSelector.tsx:264-277`
+**Reference:** `src/components/workflows/build-and-chat/build/CategoryBadge.tsx:10-32`
 
 **Examples:**
 

@@ -17,7 +17,7 @@ The main canvas component that orchestrates React Flow.
 **Key patterns:**
 - Uses Zustand `canvasStore` for state management
 - Supports both editable and read-only modes
-- Integrates custom node types (tool, llm, if_else, for_loop, input, trigger)
+- Integrates custom node types (tool, llm, if_else, for_loop, trigger)
 - Handles node/edge changes with `applyNodeChanges` and `applyEdgeChanges`
 
 **Node type registration:**
@@ -27,7 +27,6 @@ const nodeTypes = {
   llm: LLMBlockNode,
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
-  input: InputBlockNode,
   trigger: TriggerBlockNode,
 };
 ```
@@ -194,7 +193,6 @@ const nodeTypes = {
   llm: LLMBlockNode,
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
-  input: InputBlockNode,
   trigger: TriggerBlockNode,
   my_block: MyBlockNode, // Add your new block here
 };
@@ -364,7 +362,6 @@ Use semantic colors for different block types:
 - **LLM blocks**: `seer` (purple) - AI-powered operations
 - **Tool blocks**: `success` (emerald) - External integrations
 - **Logic blocks** (if/else, for loop): `primary` (default) - Control flow
-- **Input blocks**: `secondary` (gray) - Data input
 - **Trigger blocks**: `warning` (amber) - Event triggers
 
 ### Handle Placement Rules

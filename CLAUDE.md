@@ -74,13 +74,18 @@ All UI components follow consistent patterns documented in `.claude/rules/`:
    - Export conventions
    - Type safety requirements
 
+4. **State Management** (`.claude/rules/state-management.md`):
+   - Zustand store vs local state decisions
+   - Existing stores reference
+   - Refactoring patterns
+
 ### Key Component Patterns
 
 **Badge Components:**
 - Prefer minimal design without icons for labels and counts
 - Use subtle backgrounds: `bg-emerald-500/10 text-emerald-600 border-emerald-500/20`
 - Reserve icon-based badges for critical status indicators only
-- Reference: `src/components/workflows/ToolSelector.tsx`
+- Reference: `src/components/workflows/build-and-chat/build/CategoryBadge.tsx`
 
 **Button Components:**
 - Use CVA-based variants: default, destructive, outline, secondary, ghost, link, brand
@@ -121,8 +126,9 @@ All components MUST support both light and dark modes:
 
 The workflow builder uses React Flow for visual workflow creation:
 
-- Block nodes: LLM, If/Else, For Loop, Input
+- Block nodes: LLM, If/Else, For Loop, Trigger
 - Tool integrations: GitHub, Gmail, webhooks, custom tools
+- State management: Zustand stores (canvas, workflow, tools, triggers)
 - Reference: `src/components/workflows/`
 
 ## Code Style
@@ -147,4 +153,5 @@ When working on this project:
 - Component patterns: See `.claude/rules/component-design.md`
 - Color system: See `.claude/rules/color-theming.md`
 - TypeScript patterns: See `.claude/rules/typescript-patterns.md`
+- State management: See `.claude/rules/state-management.md`
 - Auto-applied patterns: See `.claude/skills/seer-ui-components/SKILL.md`
