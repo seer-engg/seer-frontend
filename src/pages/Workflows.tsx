@@ -22,12 +22,12 @@ import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
-import { backendApiClient, BackendAPIError } from '@/lib/api-client';
+import { backendApiClient } from '@/lib/api-client';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
 import { KeymapDialog } from '@/components/KeymapDialog';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import { GMAIL_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES, SUPABASE_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
+import { GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
 import { useCanvasStore, useUIStore } from '@/stores';
 import { normalizeEdges, normalizeNodes } from '@/lib/workflow-normalization';
 import { useTriggerOptions } from './workflows/hooks/useTriggerOptions';
@@ -53,7 +53,6 @@ export default function Workflows() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { workflowId: urlWorkflowId } = useParams<{ workflowId?: string }>();
-  const buildChatSupported = true;
   const {
     refresh: refreshIntegrationTools,
     tools: integrationTools,
@@ -241,19 +240,6 @@ export default function Workflows() {
       })
       .map((tool) => tool.name);
     return names.length > 0 ? names : GMAIL_TOOL_FALLBACK_NAMES;
-  }, [integrationTools]);
-  const supabaseToolNames = useMemo(() => {
-    const normalized = Array.isArray(integrationTools) ? integrationTools : [];
-    const names = normalized
-      .filter((tool) => {
-        const integration = tool.integration_type?.toLowerCase();
-        if (integration) {
-          return integration === 'supabase';
-        }
-        return tool.name.toLowerCase().includes('supabase');
-      })
-      .map((tool) => tool.name);
-    return names.length > 0 ? names : SUPABASE_TOOL_FALLBACK_NAMES;
   }, [integrationTools]);
   const gmailConnectionIdRaw = getConnectionId('gmail');
   const gmailConnectionId = useMemo(
@@ -490,63 +476,6 @@ export default function Workflows() {
     onConnectGmail: handleConnectGmail,
   });
 
-  const triggerNodes = useMemo(() => {
-    const entries = [
-      ...triggerSubscriptions.map((subscription) => ({ kind: 'subscription' as const, subscription })),
-      ...draftTriggers.map((draft) => ({ kind: 'draft' as const, draft })),
-    ];
-    return entries.map((entry, index) => {
-      const triggerKey =
-        entry.kind === 'subscription' ? entry.subscription.trigger_key : entry.draft.triggerKey;
-      const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
-      const id =
-        entry.kind === 'subscription'
-          ? `trigger-${entry.subscription.subscription_id}`
-          : entry.draft.id;
-      return {
-        id,
-        type: 'trigger',
-        position: {
-          x: -360,
-          y: index * 220 + 40,
-        },
-        data: {
-          type: 'trigger',
-          label: descriptor?.title ?? triggerKey,
-          triggerMeta: {
-            subscription: entry.kind === 'subscription' ? entry.subscription : undefined,
-            descriptor,
-            workflowInputs: workflowInputsDef,
-            handlers: triggerHandlers,
-            integration: (() => {
-              const integrationMeta: NonNullable<WorkflowNodeData['triggerMeta']>['integration'] = {};
-              if (triggerKey === GMAIL_TRIGGER_KEY) {
-                integrationMeta.gmail = {
-                  ready: gmailIntegrationReady,
-                  connectionId: gmailConnectionId,
-                  onConnect: gmailIntegrationReady ? undefined : handleConnectGmail,
-                  isConnecting: isConnectingGmail,
-                };
-              }
-              return Object.keys(integrationMeta).length ? integrationMeta : undefined;
-            })(),
-            draft: entry.kind === 'draft' ? entry.draft : undefined,
-          },
-        },
-      } as Node<WorkflowNodeData>;
-    });
-  }, [
-    triggerSubscriptions,
-    draftTriggers,
-    triggerCatalog,
-    workflowInputsDef,
-    triggerHandlers,
-    gmailIntegrationReady,
-    gmailConnectionId,
-    handleConnectGmail,
-    isConnectingGmail,
-  ]);
-
   useEffect(() => {
     if (isPreviewActive) {
       setSelectedNodeId(null);
@@ -555,10 +484,10 @@ export default function Workflows() {
 
   // Load trigger catalog when Build panel is expanded
   useEffect(() => {
-    if (!buildChatPanelCollapsed && buildChatSupported) {
+    if (!buildChatPanelCollapsed) {
       loadTriggerCatalogIfNeeded();
     }
-  }, [buildChatPanelCollapsed, buildChatSupported, loadTriggerCatalogIfNeeded]);
+  }, [buildChatPanelCollapsed, loadTriggerCatalogIfNeeded]);
 
   useEffect(() => {
     if (!editingNodeId) {
@@ -699,7 +628,7 @@ export default function Workflows() {
         </ResizablePanel>
         
         {/* Build & Chat Panel - Always render with collapsible behavior */}
-        {buildChatSupported && (
+
           <>
             <ResizableHandle withHandle />
             <ResizablePanel 
@@ -721,7 +650,6 @@ export default function Workflows() {
               />
             </ResizablePanel>
           </>
-        )}
       </ResizablePanelGroup>
 
       <WorkflowNodeConfigDialog
