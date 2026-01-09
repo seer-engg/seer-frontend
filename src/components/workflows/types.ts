@@ -22,17 +22,17 @@ export interface FunctionBlockSchema {
   label: string;
   category: string;
   description: string;
-  defaults: Record<string, any>;
-  config_schema: Record<string, any>;
+  defaults: Record<string, unknown>;
+  config_schema: Record<string, unknown>;
   tags?: string[] | null;
 }
 
-export interface ToolBlockConfig extends Record<string, any> {
+export interface ToolBlockConfig extends Record<string, unknown> {
   tool_name?: string;
   toolName?: string; // Legacy support
   connection_id?: string;
-  arguments?: Record<string, any>;
-  params?: Record<string, any>;
+  arguments?: Record<string, unknown>;
+  params?: Record<string, unknown>;
 }
 
 export interface TriggerNodeHandlers {
@@ -44,7 +44,7 @@ export interface TriggerNodeHandlers {
     payload: {
       triggerKey: string;
       bindings: BindingState;
-      providerConfig?: Record<string, any>;
+      providerConfig?: Record<string, unknown>;
     },
   ) => Promise<void>;
   discardDraft?: (draftId: string) => void;
@@ -68,7 +68,7 @@ export interface TriggerDraftMeta {
   id: string;
   triggerKey: string;
   initialBindings: BindingState;
-  initialProviderConfig?: Record<string, any>;
+  initialProviderConfig?: Record<string, unknown>;
   initialGmailConfig?: GmailConfigState;
   initialCronConfig?: CronConfigState;
   initialSupabaseConfig?: SupabaseConfigState;

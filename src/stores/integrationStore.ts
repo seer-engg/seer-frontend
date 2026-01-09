@@ -483,6 +483,19 @@ const createIntegrationStore: StateCreator<IntegrationStore> = (set, get) => {
         return null;
       }
 
+      // Prevent duplicate concurrent calls - if already loading, return null
+      const state = get();
+      if (state.toolsLoading || state.toolStatusLoading || state.connectionsLoading) {
+        console.log('⏭️  Bootstrap already loading, skipping duplicate call');
+        return null;
+      }
+
+      // If already loaded, don't fetch again
+      if (state.toolsLoaded && state.toolStatusLoaded && state.connectionsLoaded) {
+        console.log('✅ Bootstrap data already loaded, skipping duplicate call');
+        return null;
+      }
+
       try {
         set({
           toolsLoading: true,
@@ -524,6 +537,15 @@ const createIntegrationStore: StateCreator<IntegrationStore> = (set, get) => {
       }
     },
     async refreshIntegrationTools() {
+      const state = get();
+
+      // Prevent concurrent refreshes
+      const isAlreadyLoading = state.toolsLoading || state.toolStatusLoading || state.connectionsLoading;
+      if (isAlreadyLoading) {
+        console.log('⏭️  Integration refresh already in progress, skipping');
+        return;
+      }
+
       // Try bootstrap first, fall back to individual calls if it fails or is disabled
       const bootstrapResult = await get().loadFromBootstrap();
 

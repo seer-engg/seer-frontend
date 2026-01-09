@@ -27,6 +27,7 @@ export interface UseWorkflowTriggersResult {
   isLoadingTriggers: boolean;
   isLoadingSubscriptions: boolean;
   refetchSubscriptions: () => Promise<TriggerSubscriptionResponse[] | undefined>;
+  loadTriggerCatalogIfNeeded: () => Promise<TriggerDescriptor[]>;
   createSubscription: (payload: TriggerSubscriptionCreateRequest) => Promise<TriggerSubscriptionResponse>;
   updateSubscription: (
     subscriptionId: number,
@@ -69,11 +70,8 @@ export function useWorkflowTriggers(workflowId?: string | null): UseWorkflowTrig
     ? Boolean(triggerSubscriptionsLoading[workflowId])
     : false;
 
-  useEffect(() => {
-    if (!triggerCatalog.length && !triggerCatalogLoading) {
-      void loadTriggerCatalog().catch(() => undefined);
-    }
-  }, [triggerCatalog.length, triggerCatalogLoading, loadTriggerCatalog]);
+  // Removed auto-load effect - trigger catalog now loads on-demand
+  // Components should call loadTriggerCatalogIfNeeded() explicitly
 
   useEffect(() => {
     if (!workflowId) {
@@ -93,6 +91,13 @@ export function useWorkflowTriggers(workflowId?: string | null): UseWorkflowTrig
     return loadTriggerSubscriptions(workflowId);
   }, [workflowId, loadTriggerSubscriptions]);
 
+  const loadTriggerCatalogIfNeeded = useCallback(() => {
+    if (!triggerCatalog.length && !triggerCatalogLoading) {
+      return loadTriggerCatalog();
+    }
+    return Promise.resolve(triggerCatalog);
+  }, [triggerCatalog, triggerCatalogLoading, loadTriggerCatalog]);
+
   const toggleSubscription = useCallback(
     ({ subscriptionId, enabled }: TogglePayload) =>
       updateTriggerSubscription(subscriptionId, { enabled }),
@@ -105,6 +110,7 @@ export function useWorkflowTriggers(workflowId?: string | null): UseWorkflowTrig
     isLoadingTriggers: triggerCatalogLoading,
     isLoadingSubscriptions,
     refetchSubscriptions,
+    loadTriggerCatalogIfNeeded,
     createSubscription: createTriggerSubscription,
     updateSubscription: updateTriggerSubscription,
     toggleSubscription,

@@ -91,10 +91,35 @@ export function BlockConfigPanel({
     if (onChange && node) {
       // Only notify if we've synced the node already (avoid triggering on initial load)
       if (lastSyncedNodeStateRef.current.nodeId === node.id) {
-        onChange(config, oauthScope);
+        // Include inputRefs in the config so dialog can detect changes to template variables
+        const mergedConfig = {
+          ...config,
+          input_refs: inputRefs,
+        };
+        onChange(mergedConfig, oauthScope);
       }
     }
-  }, [config, oauthScope, onChange, node]);
+  }, [config, inputRefs, oauthScope, onChange, node]);
+
+  // Initialize lastSyncedNodeStateRef.nodeId immediately when node changes
+  // This ensures onChange can fire even if user edits before sync completes
+  useEffect(() => {
+    if (node) {
+      // Only set nodeId if it's a different node
+      if (lastSyncedNodeStateRef.current.nodeId !== node.id) {
+        lastSyncedNodeStateRef.current.nodeId = node.id;
+        // Keep existing signature to trigger sync effect
+        // (signature will be updated by the main sync effect)
+      }
+    } else {
+      // Reset when no node
+      lastSyncedNodeStateRef.current = {
+        nodeId: null,
+        signature: '',
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node?.id]); // Only run when node ID changes, not on every node property change
 
   const toolName = config.tool_name || config.toolName || '';
 

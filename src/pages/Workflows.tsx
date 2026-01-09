@@ -1,37 +1,24 @@
-/**
- * Workflows Page
- * 
- * Main page for visual workflow builder.
- * Supports connecting to self-hosted backend via ?backend= URL parameter.
- */
+/* eslint-disable max-lines */
+/* eslint-disable max-lines-per-function */
+/* eslint-disable complexity */
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { Node, ReactFlowProvider } from '@xyflow/react';
 import { useShallow } from 'zustand/shallow';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeConfigDialog } from '@/components/workflows/WorkflowNodeConfigDialog';
-import {
-  WorkflowNodeData,
-  WorkflowEdge,
-  FunctionBlockSchema,
-  TriggerDraftMeta,
-  WorkflowNodeUpdateOptions,
-} from '@/components/workflows/types';
-import type { TriggerListOption } from '@/components/workflows/build-and-chat/build/TriggerSection';
+import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
 import type { TriggerSubscriptionUpdateRequest } from '@/types/triggers';
 import type { InputDef } from '@/types/workflow-spec';
 import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { WorkflowImportDialog } from '@/components/workflows/WorkflowImportDialog';
 import { WorkflowLifecycleBar } from '@/components/workflows/WorkflowLifecycleBar';
-import { useWorkflowBuilder, WorkflowListItem, WorkflowModel } from '@/hooks/useWorkflowBuilder';
+import { useWorkflowBuilder, WorkflowModel } from '@/hooks/useWorkflowBuilder';
 import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
-import { Input } from '@/components/ui/input';
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
-import { Label } from '@/components/ui/label';
 import { useBackendHealth } from '@/lib/backend-health';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
@@ -40,57 +27,18 @@ import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/bui
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
 import { KeymapDialog } from '@/components/KeymapDialog';
 import { useIntegrationTools } from '@/hooks/useIntegrationTools';
-import {
-  WEBHOOK_TRIGGER_KEY,
-  GMAIL_TRIGGER_KEY,
-  CRON_TRIGGER_KEY,
-  GMAIL_TOOL_FALLBACK_NAMES,
-  SUPABASE_TRIGGER_KEY,
-  SUPABASE_TOOL_FALLBACK_NAMES,
-  FORM_TRIGGER_KEY,
-} from '@/components/workflows/triggers/constants';
-import {
-  buildBindingsPayload,
-  buildDefaultBindingState,
-  makeDefaultGmailConfig,
-  makeDefaultSupabaseConfig,
-} from '@/components/workflows/triggers/utils';
-import type { BindingState } from '@/components/workflows/triggers/utils';
+import { GMAIL_TRIGGER_KEY, GMAIL_TOOL_FALLBACK_NAMES, SUPABASE_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
 import { useCanvasStore, useUIStore } from '@/stores';
-
-const isBranchValue = (value: unknown): value is 'true' | 'false' =>
-  value === 'true' || value === 'false';
-
-const normalizeEdge = (edge: any): WorkflowEdge => {
-  const legacyBranch = edge?.data?.branch ?? edge?.branch;
-  const legacyHandle = edge?.targetHandle || edge?.data?.targetHandle;
-  const branchCandidate = legacyBranch ?? legacyHandle;
-  const branch = isBranchValue(branchCandidate) ? branchCandidate : undefined;
-
-  let normalizedData = edge?.data ? { ...edge.data } : undefined;
-  if (branch) {
-    normalizedData = { ...(normalizedData || {}), branch };
-  }
-  if (normalizedData && Object.keys(normalizedData).length === 0) {
-    normalizedData = undefined;
-  }
-
-  const { sourceHandle: _sourceHandle, targetHandle: _targetHandle, ...rest } = edge || {};
-
-  return {
-    ...rest,
-    data: normalizedData,
-  } as WorkflowEdge;
-};
-
-const normalizeEdges = (rawEdges?: any[]): WorkflowEdge[] => {
-  if (!Array.isArray(rawEdges)) {
-    return [];
-  }
-  return rawEdges.map((edge) => normalizeEdge(edge));
-};
-
-const DEFAULT_LLM_USER_PROMPT = 'Enter your prompt here';
+import { normalizeEdges, normalizeNodes } from '@/lib/workflow-normalization';
+import { useTriggerOptions } from './workflows/hooks/useTriggerOptions';
+import { useWorkflowSync } from './workflows/hooks/useWorkflowSync';
+import { WorkflowInputDialog } from './workflows/components/WorkflowInputDialog';
+import { useNodeConfigUpdate } from './workflows/hooks/useNodeConfigUpdate';
+import { useNodeHandlers } from './workflows/hooks/useNodeHandlers';
+import { useWorkflowLifecycle } from './workflows/hooks/useWorkflowLifecycle';
+import { useWorkflowManagement } from './workflows/hooks/useWorkflowManagement';
+import { useTriggerHandlers } from './workflows/hooks/useTriggerHandlers';
+import { useWorkflowAutosave } from './workflows/hooks/useWorkflowAutosave';
 
 const parseProviderConnectionId = (raw?: string | null): number | null => {
   if (!raw) {
@@ -100,82 +48,6 @@ const parseProviderConnectionId = (raw?: string | null): number | null => {
   const numeric = Number(segments[segments.length - 1]);
   return Number.isNaN(numeric) ? null : numeric;
 };
-
-const normalizeNodes = (
-  rawNodes?: any[],
-  functionBlockMap?: Map<string, FunctionBlockSchema>,
-): Node<WorkflowNodeData>[] => {
-  if (!Array.isArray(rawNodes)) {
-    return [];
-  }
-  return rawNodes
-    .filter((node) => {
-      const nodeType = (node?.data?.type ?? node?.type) as string | undefined;
-      return nodeType !== 'input';
-    })
-    .map((node) => {
-    const data = node?.data ?? {};
-    const position = node?.position ?? { x: 0, y: 0 };
-    const resolvedType = (node?.type || data?.type || 'tool') as WorkflowNodeData['type'];
-    const configWithDefaults = withDefaultBlockConfig(
-      resolvedType,
-      data?.config ?? {},
-      functionBlockMap,
-    );
-
-    return {
-      ...node,
-      type: resolvedType,
-      position,
-      data: {
-        ...data,
-        type: data?.type || resolvedType,
-        label: data?.label ?? node?.id ?? '',
-        config: configWithDefaults,
-      },
-    } as Node<WorkflowNodeData>;
-  });
-};
-
-function withDefaultBlockConfig(
-  blockType: string,
-  config: Record<string, any> = {},
-  functionBlockMap?: Map<string, FunctionBlockSchema>,
-): Record<string, any> {
-  const schemaDefaults = functionBlockMap?.get(blockType)?.defaults;
-  const defaults: Record<string, any> = schemaDefaults ?? (() => {
-    switch (blockType) {
-      case 'llm':
-        return {
-          system_prompt: '',
-          user_prompt: DEFAULT_LLM_USER_PROMPT,
-          model: 'gpt-5-mini',
-          temperature: 0.2,
-        };
-      case 'if_else':
-        return {
-          condition: '',
-        };
-      case 'for_loop':
-        return {
-          array_mode: 'variable',
-          array_variable: 'items',
-          array_literal: [],
-          item_var: 'item',
-        };
-      case 'trigger':
-        // Triggers have their config passed directly
-        return {};
-      default:
-        return {};
-    }
-  })();
-
-  return {
-    ...defaults,
-    ...config,
-  };
-}
 
 export default function Workflows() {
   const navigate = useNavigate();
@@ -243,14 +115,9 @@ export default function Workflows() {
   );
   const [workflowName, setWorkflowName] = useState('My Workflow');
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
-  const [inputData, setInputData] = useState<Record<string, any>>({});
+  const [inputData, setInputData] = useState<Record<string, unknown>>({});
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
   const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
-  const [draftTriggers, setDraftTriggers] = useState<TriggerDraftMeta[]>([]);
-  const [isConnectingGmail, setIsConnectingGmail] = useState(false);
-  const [lastRunVersionId, setLastRunVersionId] = useState<number | null>(null);
-  const resetSavedDataRef = useRef<(() => void) | null>(null);
-  const skipNextAutosaveRef = useRef(false);
   const editingNode = useMemo(
     () => nodes.find((node) => node.id === editingNodeId) ?? null,
     [nodes, editingNodeId],
@@ -301,6 +168,7 @@ export default function Workflows() {
     subscriptions: triggerSubscriptions,
     isLoadingTriggers,
     isLoadingSubscriptions,
+    loadTriggerCatalogIfNeeded,
     createSubscription,
     updateSubscription,
     toggleSubscription,
@@ -393,350 +261,80 @@ export default function Workflows() {
     [gmailConnectionIdRaw],
   );
   const gmailIntegrationReady = isIntegrationConnected('gmail') && typeof gmailConnectionId === 'number';
-  const handleConnectGmail = useCallback(async () => {
-    setIsConnectingGmail(true);
-    try {
-      const redirectUrl = await connectIntegration('gmail', { toolNames: gmailToolNames });
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
-        return;
-      }
-      toast.error('Unable to start Gmail connection');
-    } catch (error) {
-      console.error('Failed to connect Gmail', error);
-      toast.error('Unable to start Gmail connection', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
-    } finally {
-      setIsConnectingGmail(false);
-    }
-  }, [connectIntegration, gmailToolNames]);
 
-  const handleBlockSelect = useCallback(
-    (block: { type: string; label: string; config?: any }) => {
-      console.log('[Workflows] handleBlockSelect called with:', block);
-      
-      // Handle trigger blocks specially
-      if (block.type === 'trigger' && block.config?.triggerKey) {
-        const triggerKey = block.config.triggerKey;
-        const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
-        
-        if (!descriptor) {
-          console.error('[Workflows] Trigger descriptor not found for key:', triggerKey);
-          toast.error('Trigger metadata unavailable');
-          return;
-        }
-        
-        const newNode: Node<WorkflowNodeData> = {
-          id: `trigger-${Date.now()}`,
-          type: 'trigger',
-          position: {
-            x: Math.random() * 400 + 100,
-            y: Math.random() * 400 + 100,
-          },
-          data: {
-            type: 'trigger',
-            label: descriptor.title || block.label,
-            config: {
-              triggerKey: triggerKey,
-            },
-            triggerMeta: {
-              descriptor,
-              workflowInputs: workflowInputsDef,
-              handlers: {} as any, // Will be populated when trigger nodes are created
-              integration: (() => {
-                const integrationMeta: NonNullable<WorkflowNodeData['triggerMeta']>['integration'] = {};
-                if (triggerKey === GMAIL_TRIGGER_KEY) {
-                  integrationMeta.gmail = {
-                    ready: gmailIntegrationReady,
-                    connectionId: gmailConnectionId,
-                    onConnect: gmailIntegrationReady ? undefined : handleConnectGmail,
-                    isConnecting: isConnectingGmail,
-                  };
-                }
-                return Object.keys(integrationMeta).length ? integrationMeta : undefined;
-              })(),
-            },
-          },
-        };
-        console.log('[Workflows] Adding trigger node:', newNode);
-        setNodes((nds) => {
-          console.log('[Workflows] Current nodes:', nds.length);
-          const updatedNodes = [...nds, newNode];
-          console.log('[Workflows] Updated nodes:', updatedNodes.length);
-          return updatedNodes;
-        });
-        return;
-      }
-      
-      // Handle regular blocks
-      const defaultConfig = withDefaultBlockConfig(block.type, block.config, functionBlocksMap);
-      
-      const newNode: Node<WorkflowNodeData> = {
-        id: `node-${Date.now()}`,
-        type: block.type as any,
-        position: {
-          x: Math.random() * 400 + 100,
-          y: Math.random() * 400 + 100,
-        },
-        data: {
-          type: block.type as any,
-          label: block.label,
-          config: defaultConfig,
-        },
-      };
-      console.log('[Workflows] Adding regular node:', newNode);
-      setNodes((nds) => [...nds, newNode]);
-    },
-    [functionBlocksMap, setNodes, triggerCatalog, workflowInputsDef, gmailIntegrationReady, gmailConnectionId, handleConnectGmail, isConnectingGmail],
-  );
+  // Trigger handlers hook
+  const triggerHandlersHook = useTriggerHandlers({
+    selectedWorkflowId,
+    triggerCatalog,
+    workflowInputsDef,
+    gmailIntegrationReady,
+    gmailConnectionId,
+    createSubscription,
+    connectIntegration,
+    gmailToolNames,
+  });
+  const { draftTriggers, isConnectingGmail, handleAddTriggerDraft, handleSaveTriggerDraft, handleDiscardTriggerDraft, handleConnectGmail } = triggerHandlersHook;
 
-  const handleNodeDrop = useCallback(
-    (block: { type: string; label: string; config?: any }, position: { x: number; y: number }) => {
-      console.log('[Workflows] handleNodeDrop called with:', block);
-      
-      // Handle trigger blocks specially
-      if (block.type === 'trigger' && block.config?.triggerKey) {
-        const triggerKey = block.config.triggerKey;
-        const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
-        
-        if (!descriptor) {
-          console.error('[Workflows] Trigger descriptor not found for key:', triggerKey);
-          toast.error('Trigger metadata unavailable');
-          return;
-        }
-        
-        const newNode: Node<WorkflowNodeData> = {
-          id: `trigger-${Date.now()}`,
-          type: 'trigger',
-          position,
-          data: {
-            type: 'trigger',
-            label: descriptor.title || block.label,
-            config: {
-              triggerKey: triggerKey,
-            },
-            triggerMeta: {
-              descriptor,
-              workflowInputs: workflowInputsDef,
-              handlers: {} as any, // Will be populated when trigger nodes are created
-              integration: (() => {
-                const integrationMeta: NonNullable<WorkflowNodeData['triggerMeta']>['integration'] = {};
-                if (triggerKey === GMAIL_TRIGGER_KEY) {
-                  integrationMeta.gmail = {
-                    ready: gmailIntegrationReady,
-                    connectionId: gmailConnectionId,
-                    onConnect: gmailIntegrationReady ? undefined : handleConnectGmail,
-                    isConnecting: isConnectingGmail,
-                  };
-                }
-                return Object.keys(integrationMeta).length ? integrationMeta : undefined;
-              })(),
-            },
-          },
-        };
-        console.log('[Workflows] Adding trigger node via drop:', newNode);
-        setNodes((nds) => [...nds, newNode]);
-        return;
+  // Input fields for workflow execution
+  const inputFields = useMemo(() => {
+    const resolveHtmlInputType = (inputType: InputDef['type']): string => {
+      if (inputType === 'number' || inputType === 'integer') {
+        return 'number';
       }
-      
-      // Handle regular blocks
-      const defaultConfig = withDefaultBlockConfig(block.type, block.config, functionBlocksMap);
-      
-      const newNode: Node<WorkflowNodeData> = {
-        id: `node-${Date.now()}`,
-        type: block.type as any,
-        position,
-        data: {
-          type: block.type as any,
-          label: block.label,
-          config: defaultConfig,
-        },
-      };
-      console.log('[Workflows] Adding regular node via drop:', newNode);
-      setNodes((nds) => [...nds, newNode]);
-    },
-    [functionBlocksMap, setNodes, triggerCatalog, workflowInputsDef, gmailIntegrationReady, gmailConnectionId, handleConnectGmail, isConnectingGmail],
-  );
+      return 'text';
+    };
+    return Object.entries(workflowInputsDef).map(([name, def]) => ({
+      id: name,
+      label: def.description || name,
+      type: resolveHtmlInputType(def.type),
+      required: def.required !== false,
+      variableName: name,
+    }));
+  }, [workflowInputsDef]);
 
-
-  const handleAddTriggerDraft = useCallback(
-    (triggerKey: string) => {
-      console.log('[Workflows] handleAddTriggerDraft called with triggerKey:', triggerKey);
-      const descriptor = triggerCatalog.find((trigger) => trigger.key === triggerKey);
-      if (!descriptor) {
-        toast.error('Trigger metadata unavailable');
-        return;
-      }
-      const draft: TriggerDraftMeta = {
-        id: `trigger-draft-${Date.now()}`,
-        triggerKey,
-        initialBindings: buildDefaultBindingState(workflowInputsDef),
-        initialGmailConfig: triggerKey === GMAIL_TRIGGER_KEY ? makeDefaultGmailConfig() : undefined,
-        initialSupabaseConfig: triggerKey === SUPABASE_TRIGGER_KEY ? makeDefaultSupabaseConfig() : undefined,
-      };
-      setDraftTriggers((prev) => [...prev, draft]);
-    },
-    [triggerCatalog, workflowInputsDef],
-  );
-
-  const handleDiscardTriggerDraft = useCallback((draftId: string) => {
-    setDraftTriggers((prev) => prev.filter((draft) => draft.id !== draftId));
-  }, []);
-
-  const handleSaveTriggerDraft = useCallback(
-    async (
-      draftId: string,
-      payload: { triggerKey: string; bindings: BindingState; providerConfig?: Record<string, any> },
-    ) => {
-      if (!selectedWorkflowId) {
-        throw new Error('Save the workflow before saving triggers');
-      }
-      const descriptor = triggerCatalog.find((trigger) => trigger.key === payload.triggerKey);
-      if (!descriptor) {
-        throw new Error('Trigger metadata unavailable');
-      }
-      if (payload.triggerKey === GMAIL_TRIGGER_KEY) {
-        if (!gmailIntegrationReady || !gmailConnectionId) {
-          throw new Error('Connect Gmail before saving this trigger');
-        }
-      }
-      try {
-        await createSubscription({
-          workflow_id: selectedWorkflowId,
-          trigger_key: payload.triggerKey,
-          bindings: buildBindingsPayload(payload.bindings),
-          ...(payload.providerConfig ? { provider_config: payload.providerConfig } : {}),
-          ...(payload.triggerKey === GMAIL_TRIGGER_KEY
-            ? { provider_connection_id: gmailConnectionId ?? undefined }
-            : {}),
-          enabled: true,
-        });
-        setDraftTriggers((prev) => prev.filter((draft) => draft.id !== draftId));
-      } catch (error) {
-        console.error('Failed to save trigger draft', error);
-        throw error;
-      }
-    },
-    [
-      selectedWorkflowId,
-      triggerCatalog,
-      gmailIntegrationReady,
-      gmailConnectionId,
-      createSubscription,
-    ],
-  );
-
-  const handleDraftConflict = useCallback(async () => {
-    if (!selectedWorkflowId) {
-      return;
-    }
-    try {
-      const latest = await getWorkflow(selectedWorkflowId);
-      setLoadedWorkflow(latest);
-      setNodes(normalizeNodes(latest.graph.nodes, functionBlocksMap));
-      setEdges(normalizeEdges(latest.graph.edges));
-      setLastRunVersionId(null);
-      resetSavedDataRef.current?.();
-      invalidateWorkflowVersions();
-      toast.error('Draft conflict detected', {
-        description: 'Reloaded the latest draft from the server. Please retry your change.',
-      });
-    } catch (error) {
-      console.error('Failed to refresh workflow after conflict:', error);
-      toast.error('Draft conflict detected', {
-        description: 'Reload failed. Please refresh the page to continue.',
-      });
-    }
-  }, [selectedWorkflowId, getWorkflow, functionBlocksMap, invalidateWorkflowVersions, setNodes, setEdges]);
-
-  const handleSave = useCallback(async () => {
-    const graphData = { nodes, edges };
-
-    try {
-      if (selectedWorkflowId) {
-        if (!loadedWorkflow) {
-          toast.error('Workflow is still loading. Please try again in a moment.');
-          return;
-        }
-        const baseRevision = loadedWorkflow.draft_revision;
-        if (typeof baseRevision !== 'number') {
-          toast.error('Missing draft revision for this workflow.');
-          return;
-        }
-        const updated = await saveWorkflowDraft(selectedWorkflowId, {
-          graph: graphData,
-          baseRevision,
-        });
-        setLoadedWorkflow(updated);
-        if (updated.draft_revision !== baseRevision) {
-          setLastRunVersionId(null);
-        }
-        toast.success('Draft saved successfully!');
-      } else {
-        const workflow = await createWorkflow(workflowName || 'Untitled', undefined, graphData);
-        setSelectedWorkflowId(workflow.workflow_id);
-        setLoadedWorkflow(workflow);
-        setWorkflowName(workflow.name);
-        setLastRunVersionId(null);
-        toast.success('Workflow created and saved!');
-      }
-    } catch (error) {
-      if (error instanceof BackendAPIError && error.status === 409) {
-        await handleDraftConflict();
-        return;
-      }
-      console.error('Failed to save workflow:', error);
-      toast.error('Failed to save workflow');
-    }
-  }, [
+  // Workflow lifecycle hook
+  const resetSavedDataRef = useRef<(() => void) | undefined>();
+  const lifecycle = useWorkflowLifecycle({
+    selectedWorkflowId,
+    loadedWorkflow,
     nodes,
     edges,
     workflowName,
-    selectedWorkflowId,
+    workflowInputsDef,
+    inputFields,
+    inputData,
+    functionBlocksMap,
     createWorkflow,
     saveWorkflowDraft,
+    executeWorkflow,
+    publishWorkflow,
+    restoreWorkflowVersion,
+    getWorkflow,
+    setSelectedWorkflowId,
+    setLoadedWorkflow,
+    setWorkflowName,
+    setNodes,
+    setEdges,
+    setInputDialogOpen,
+    setInputData,
+    invalidateWorkflowVersions,
+    resetSavedDataRef,
+  });
+
+  const { autosaveCallback } = useWorkflowAutosave({
+    selectedWorkflowId,
     loadedWorkflow,
-    handleDraftConflict,
-  ]);
-
-  // Autosave callback - only saves if workflow already exists
-  const autosaveCallback = useCallback(
-    async (data: { nodes: Node<WorkflowNodeData>[]; edges: WorkflowEdge[] }) => {
-      if (!selectedWorkflowId || !loadedWorkflow) {
-        return; // Don't autosave unsaved workflows or unloaded drafts
-      }
-
-      const baseRevision = loadedWorkflow.draft_revision;
-      if (typeof baseRevision !== 'number') {
-        return;
-      }
-
-      setAutosaveStatus('saving');
-      try {
-        const updated = await saveWorkflowDraft(selectedWorkflowId, {
-          graph: { nodes: data.nodes, edges: data.edges },
-          baseRevision,
-        });
-        setLoadedWorkflow(updated);
-        if (updated.draft_revision !== baseRevision) {
-          setLastRunVersionId(null);
-        }
-        setAutosaveStatus('saved');
-        // Reset status after 2 seconds
-        setTimeout(() => setAutosaveStatus('idle'), 2000);
-      } catch (error) {
-        if (error instanceof BackendAPIError && error.status === 409) {
-          await handleDraftConflict();
-        } else {
-          console.error('Autosave failed:', error);
-        }
-        setAutosaveStatus('error');
-        throw error;
-      }
-    },
-    [selectedWorkflowId, loadedWorkflow, saveWorkflowDraft, handleDraftConflict, setAutosaveStatus],
-  );
+    functionBlocksMap,
+    saveWorkflowDraft,
+    getWorkflow,
+    setLoadedWorkflow,
+    setNodes,
+    setEdges,
+    setAutosaveStatus,
+    setLastRunVersionId: lifecycle.setLastRunVersionId,
+    invalidateWorkflowVersions,
+    resetSavedDataRef,
+  });
 
   // Setup autosave hook
   const { triggerSave, resetSavedData } = useDebouncedAutosave({
@@ -748,74 +346,30 @@ export default function Workflows() {
     },
   });
 
-  const handleNodeConfigUpdate = useCallback(
-    async (
-      nodeId: string,
-      updates: Partial<WorkflowNodeData>,
-      options?: WorkflowNodeUpdateOptions,
-    ) => {
-      const canPersistNow =
-        Boolean(
-          options?.persist &&
-            selectedWorkflowId &&
-            loadedWorkflow &&
-            typeof loadedWorkflow.draft_revision === 'number',
-        );
+  // Node config update hook
+  const nodeConfigUpdate = useNodeConfigUpdate({
+    selectedWorkflowId,
+    loadedWorkflow,
+    setNodes,
+    autosaveCallback,
+    triggerSave,
+  });
+  const { handleNodeConfigUpdate, skipNextAutosaveRef } = nodeConfigUpdate;
 
-      if (canPersistNow) {
-        skipNextAutosaveRef.current = true;
-      }
-
-      setNodes((prevNodes) =>
-        prevNodes.map((node) => {
-          if (node.id !== nodeId) {
-            return node;
-          }
-
-          const mergedData: WorkflowNodeData = {
-            ...node.data,
-            ...updates,
-          };
-
-          if (updates.config) {
-            const mergedConfig = {
-              ...(node.data?.config || {}),
-              ...updates.config,
-            };
-
-            if ('fields' in updates.config) {
-              mergedConfig.fields = updates.config.fields;
-            }
-
-            mergedData.config = mergedConfig;
-          }
-
-          return {
-            ...node,
-            data: mergedData,
-          };
-        }),
-      );
-
-      if (!canPersistNow) {
-        return;
-      }
-
-      const graph = {
-        nodes: useCanvasStore.getState().nodes,
-        edges: useCanvasStore.getState().edges,
-      };
-
-      try {
-        await autosaveCallback(graph);
-      } catch (error) {
-        skipNextAutosaveRef.current = false;
-        triggerSave();
-        throw error;
-      }
-    },
-    [autosaveCallback, loadedWorkflow, selectedWorkflowId, setNodes, triggerSave],
-  );
+  // Node handlers hook
+  const nodeHandlers = useNodeHandlers({
+    setNodes,
+    setSelectedNodeId,
+    setEditingNodeId,
+    setConfigDialogOpen,
+    functionBlocksMap,
+    triggerCatalog,
+    workflowInputsDef,
+    gmailIntegrationReady,
+    gmailConnectionId,
+    handleConnectGmail,
+    isConnectingGmail,
+  });
 
   useEffect(() => {
     resetSavedDataRef.current = resetSavedData;
@@ -831,6 +385,7 @@ export default function Workflows() {
       return;
     }
     triggerSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, edges, selectedWorkflowId, triggerSave, isLoadingWorkflow]);
 
   // Handle autosave errors
@@ -899,7 +454,41 @@ export default function Workflows() {
       });
       setNodes(updatedNodes);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.length, triggerHandlers, setNodes]); // Only react to changes in number of nodes
+
+  // Workflow management hook
+  const management = useWorkflowManagement({
+    selectedWorkflowId,
+    loadedWorkflow,
+    deleteWorkflow,
+    updateWorkflowMetadata,
+    exportWorkflow,
+    importWorkflow,
+    createWorkflow,
+    navigate,
+    setWorkflowName,
+    setLoadedWorkflow,
+  });
+
+  const handleWorkflowGraphSync = useCallback(
+    (graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
+      if (!graph) return;
+      setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
+      setEdges(normalizeEdges(graph.edges));
+      setProposalPreview(null);
+      lifecycle.setLastRunVersionId(null);
+    },
+    [functionBlocksMap, setNodes, setEdges, setProposalPreview, lifecycle],
+  );
+
+  const triggerOptions = useTriggerOptions({
+    triggerCatalog,
+    gmailIntegrationReady,
+    isConnectingGmail,
+    onAddTriggerDraft: handleAddTriggerDraft,
+    onConnectGmail: handleConnectGmail,
+  });
 
   const triggerNodes = useMemo(() => {
     const entries = [
@@ -944,7 +533,6 @@ export default function Workflows() {
             draft: entry.kind === 'draft' ? entry.draft : undefined,
           },
         },
-        // draggable: false,
       } as Node<WorkflowNodeData>;
     });
   }, [
@@ -959,34 +547,18 @@ export default function Workflows() {
     isConnectingGmail,
   ]);
 
-  const handleCanvasNodeDoubleClick = useCallback(
-    (node: Node<WorkflowNodeData>) => {
-      if (node.type === 'trigger') {
-        return;
-      }
-      setEditingNodeId(node.id);
-      setConfigDialogOpen(true);
-      setSelectedNodeId(node.id);
-    },
-    [setSelectedNodeId, setConfigDialogOpen],
-  );
-
-  const handleConfigDialogOpenChange = useCallback((open: boolean) => {
-    setConfigDialogOpen(open);
-    if (!open) {
-      setEditingNodeId(null);
-    }
-  }, [setConfigDialogOpen, setEditingNodeId]);
-
   useEffect(() => {
     if (isPreviewActive) {
       setSelectedNodeId(null);
     }
   }, [isPreviewActive, setSelectedNodeId]);
 
+  // Load trigger catalog when Build panel is expanded
   useEffect(() => {
-    setDraftTriggers([]);
-  }, [selectedWorkflowId]);
+    if (!buildChatPanelCollapsed && buildChatSupported) {
+      loadTriggerCatalogIfNeeded();
+    }
+  }, [buildChatPanelCollapsed, buildChatSupported, loadTriggerCatalogIfNeeded]);
 
   useEffect(() => {
     if (!editingNodeId) {
@@ -999,370 +571,21 @@ export default function Workflows() {
     }
   }, [editingNodeId, nodes, setConfigDialogOpen, setEditingNodeId]);
 
-  const inputFields = useMemo(() => {
-    const resolveHtmlInputType = (inputType: InputDef['type']): string => {
-      if (inputType === 'number' || inputType === 'integer') {
-        return 'number';
-      }
-      return 'text';
-    };
-    return Object.entries(workflowInputsDef).map(([name, def]) => ({
-      id: name,
-      label: def.description || name,
-      type: resolveHtmlInputType(def.type),
-      required: def.required !== false,
-      variableName: name,
-    }));
-  }, [workflowInputsDef]);
-
-  const triggerOptions = useMemo<TriggerListOption[]>(() => {
-    const options: TriggerListOption[] = [];
-
-    const formTrigger = triggerCatalog.find((trigger) => trigger.key === FORM_TRIGGER_KEY);
-    if (formTrigger) {
-      options.push({
-        key: FORM_TRIGGER_KEY,
-        title: formTrigger.title ?? 'Hosted Form',
-        description:
-          formTrigger.description ?? 'Create a public form with custom URL that triggers this workflow',
-        disabled: false,
-        onPrimaryAction: () => handleAddTriggerDraft(FORM_TRIGGER_KEY),
-        actionLabel: 'Add to canvas',
-        badge: 'Form',
-        status: 'ready',
-      });
-    }
-
-    const webhookTrigger = triggerCatalog.find((trigger) => trigger.key === WEBHOOK_TRIGGER_KEY);
-    if (webhookTrigger) {
-      options.push({
-        key: WEBHOOK_TRIGGER_KEY,
-        title: webhookTrigger.title ?? 'Generic Webhook',
-        description:
-          webhookTrigger.description ?? 'Accept HTTP POST requests from any service.',
-        disabled: false,
-        onPrimaryAction: () => handleAddTriggerDraft(WEBHOOK_TRIGGER_KEY),
-        actionLabel: 'Add to canvas',
-        badge: 'Webhook',
-        status: 'ready',
-      });
-    }
-
-    const gmailTrigger = triggerCatalog.find((trigger) => trigger.key === GMAIL_TRIGGER_KEY);
-    if (gmailTrigger) {
-      let disabledReason: string | undefined;
-      let disabled = false;
-      let secondaryActionLabel: string | undefined;
-      let onSecondaryAction: (() => void) | undefined;
-      if (!gmailIntegrationReady) {
-        disabledReason = 'Connect Gmail to continue';
-        disabled = true;
-        secondaryActionLabel = 'Connect Gmail';
-        onSecondaryAction = handleConnectGmail;
-      }
-
-      options.push({
-        key: GMAIL_TRIGGER_KEY,
-        title: gmailTrigger.title ?? 'Gmail – New Email',
-        description:
-          gmailTrigger.description ?? 'Poll a Gmail inbox for newly received emails.',
-        disabled,
-        disabledReason,
-        onPrimaryAction: () => handleAddTriggerDraft(GMAIL_TRIGGER_KEY),
-        actionLabel: 'Add to canvas',
-        badge: gmailIntegrationReady ? 'Connected' : 'Action required',
-        status: gmailIntegrationReady ? 'ready' : 'action-required',
-        secondaryActionLabel,
-        onSecondaryAction,
-        isSecondaryActionLoading: secondaryActionLabel ? isConnectingGmail : false,
-      });
-    }
-
-    const cronTrigger = triggerCatalog.find((trigger) => trigger.key === CRON_TRIGGER_KEY);
-    if (cronTrigger) {
-      options.push({
-        key: CRON_TRIGGER_KEY,
-        title: cronTrigger.title ?? 'Cron Schedule',
-        description: cronTrigger.description ?? 'Schedule workflows with cron expressions',
-        disabled: false,
-        onPrimaryAction: () => handleAddTriggerDraft(CRON_TRIGGER_KEY),
-        actionLabel: 'Add to canvas',
-        badge: 'Scheduler',
-        status: 'ready',
-      });
-    }
-
-    const supabaseTrigger = triggerCatalog.find((trigger) => trigger.key === SUPABASE_TRIGGER_KEY);
-    if (supabaseTrigger) {
-      options.push({
-        key: SUPABASE_TRIGGER_KEY,
-        title: supabaseTrigger.title ?? 'Supabase – Database Changes',
-        description:
-          supabaseTrigger.description ??
-          'Receive real-time webhooks when rows in your Supabase tables change.',
-        disabled: false,
-        onPrimaryAction: () => handleAddTriggerDraft(SUPABASE_TRIGGER_KEY),
-        actionLabel: 'Add to canvas',
-        badge: 'Supabase',
-        status: 'ready',
-      });
-    }
-
-    return options;
-  }, [
-    triggerCatalog,
-    handleAddTriggerDraft,
-    gmailIntegrationReady,
-    handleConnectGmail,
-    isConnectingGmail,
-  ]);
-  const triggerInfoMessage = undefined;
-
-  const lifecycleStatus = useMemo(() => {
-    if (!loadedWorkflow) {
-      return null;
-    }
-    return {
-      draftRevision: loadedWorkflow.draft_revision,
-      latestVersion: loadedWorkflow.latest_version ?? null,
-      publishedVersion: loadedWorkflow.published_version ?? null,
-      lastTestedVersionId: lastRunVersionId,
-    };
-  }, [loadedWorkflow, lastRunVersionId]);
-
-  const canRun = Boolean(selectedWorkflowId);
-  const runDisabledReason = canRun ? undefined : 'Save the workflow before testing';
-  const canPublish = Boolean(selectedWorkflowId && lastRunVersionId);
-  // every workflow can be published 
-  //todo: add more checks if needed
-  // const canPublish = Boolean(selectedWorkflowId);
-  const publishDisabledReason = !selectedWorkflowId
-    ? 'Save the workflow before publishing'
-    : !lastRunVersionId
-      ? 'Run a test to create a publishable version'
-      : undefined;
-
-  const runWorkflowTest = useCallback(
-    async (inputs?: Record<string, any>) => {
-      if (!selectedWorkflowId) {
-        toast.error('Please save the workflow first');
-        return;
-      }
-      try {
-        const response = await executeWorkflow(selectedWorkflowId, inputs ?? {});
-        setLastRunVersionId(response.workflow_version_id ?? null);
-        invalidateWorkflowVersions();
-        toast.success('Test run started', {
-          description: `Run ID ${response.run_id}`,
-        });
-      } catch (error) {
-        console.error('Failed to execute workflow:', error);
-        toast.error('Failed to start test run');
-        throw error;
-      }
-    },
-    [selectedWorkflowId, executeWorkflow, invalidateWorkflowVersions],
-  );
-
-  const handleExecute = useCallback(() => {
-    if (!selectedWorkflowId) {
-      toast.error('Please save the workflow first');
-      return;
-    }
-
-    if (inputFields.length > 0) {
-      setInputData({});
-      setInputDialogOpen(true);
-      return;
-    }
-
-    runWorkflowTest();
-  }, [selectedWorkflowId, inputFields, runWorkflowTest, setInputDialogOpen]);
-
-  const handleExecuteWithInput = useCallback(async () => {
-    if (!selectedWorkflowId) {
-      toast.error('Please save the workflow first');
-      return;
-    }
-
-    const transformedInputData: Record<string, any> = {};
-    inputFields.forEach((field) => {
-      const value = inputData[field.id];
-      transformedInputData[field.variableName] = value;
-    });
-
-    try {
-      await runWorkflowTest(transformedInputData);
-      setInputDialogOpen(false);
-      setInputData({});
-    } catch {
-      // runWorkflowTest handles toasts/logging
-    }
-  }, [selectedWorkflowId, inputFields, inputData, runWorkflowTest, setInputDialogOpen]);
-
-  const handlePublish = useCallback(async () => {
-    if (!selectedWorkflowId) {
-      toast.error('Please save the workflow before publishing');
-      return;
-    }
-    if (!lastRunVersionId) {
-      toast.error('Run a test to create a publishable version');
-      return;
-    }
-    try {
-      const updated = await publishWorkflow(selectedWorkflowId, lastRunVersionId);
-      setLoadedWorkflow(updated);
-      setLastRunVersionId(null);
-      invalidateWorkflowVersions();
-      toast.success('Workflow published');
-    } catch (error) {
-      console.error('Failed to publish workflow:', error);
-      toast.error('Failed to publish workflow');
-    }
-  }, [selectedWorkflowId, lastRunVersionId, publishWorkflow, invalidateWorkflowVersions]);
-
-  const handleLoadWorkflow = useCallback(
-    async (workflow: WorkflowListItem) => {
-      // Navigate to the workflow URL - the useEffect will handle loading
-      navigate(`/workflows/${workflow.workflow_id}`, { replace: true });
-    },
-    [navigate],
-  );
-
-  const handleDeleteWorkflow = useCallback(async (workflowId: string) => {
-    if (!confirm('Are you sure you want to delete this workflow?')) {
-      return;
-    }
-    try {
-      await deleteWorkflow(workflowId);
-      // Navigate to /workflows if the deleted workflow was selected
-      if (selectedWorkflowId === workflowId) {
-        navigate('/workflows', { replace: true });
-        setLastRunVersionId(null);
-      }
-    } catch (error) {
-      console.error('Failed to delete workflow:', error);
-      toast.error('Failed to delete workflow');
-    }
-  }, [deleteWorkflow, selectedWorkflowId, navigate]);
-
-  const handleRenameWorkflow = useCallback(async (workflowId: string, newName: string) => {
-    if (!newName.trim()) {
-      toast.error('Workflow name cannot be empty');
-      return;
-    }
-    try {
-      await updateWorkflowMetadata(workflowId, { name: newName.trim() });
-      // Update local workflow name if it's the currently selected workflow
-      if (selectedWorkflowId === workflowId) {
-        setWorkflowName(newName.trim());
-        setLoadedWorkflow((prev) =>
-          prev ? { ...prev, name: newName.trim() } : prev,
-        );
-      }
-      toast.success('Workflow renamed successfully');
-    } catch (error) {
-      console.error('Failed to rename workflow:', error);
-      toast.error('Failed to rename workflow');
-      throw error; // Re-throw to allow ToolPalette to handle it
-    }
-  }, [updateWorkflowMetadata, selectedWorkflowId]);
-
-  const handleNewWorkflow = useCallback(async () => {
-    try {
-      const workflow = await createWorkflow('Untitled', undefined, { nodes: [], edges: [] });
-      // Navigate to the new workflow's URL - the useEffect will handle loading
-      navigate(`/workflows/${workflow.workflow_id}`, { replace: true });
-      // Workflow will appear in list automatically via React Query cache invalidation
-    } catch (error) {
-      console.error('Failed to create new workflow:', error);
-      toast.error('Failed to create new workflow');
-    }
-  }, [createWorkflow, navigate]);
-
-  const handleExportWorkflow = useCallback(async (workflowId: string) => {
-    try {
-      await exportWorkflow(workflowId);
-      toast.success('Workflow exported successfully');
-    } catch (error) {
-      console.error('Failed to export workflow:', error);
-      toast.error('Failed to export workflow');
-    }
-  }, [exportWorkflow]);
-
-  const handleImportWorkflow = useCallback(async (file: File, options: { name?: string; importTriggers: boolean }) => {
-    try {
-      const result = await importWorkflow(file, options);
-      // Navigate to the imported workflow
-      navigate(`/workflows/${result.workflow_id}`, { replace: true });
-      toast.success(`Workflow "${result.name}" imported successfully`);
-    } catch (error) {
-      console.error('Failed to import workflow:', error);
-      if (error instanceof BackendAPIError) {
-        toast.error(`Failed to import workflow: ${error.message}`);
-      } else {
-        toast.error('Failed to import workflow');
-      }
-      throw error;
-    }
-  }, [importWorkflow, navigate]);
-
-  const handleWorkflowGraphSync = useCallback(
-    (graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
-      if (!graph) return;
-      setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
-      setEdges(normalizeEdges(graph.edges));
-      setProposalPreview(null);
-      setLastRunVersionId(null);
-    },
-    [functionBlocksMap, setNodes, setEdges, setProposalPreview],
-  );
-
-  const handleRestoreVersion = useCallback(
-    async (versionId: number) => {
-      if (!selectedWorkflowId) {
-        toast.error('Select a workflow before restoring a version');
-        return;
-      }
-      if (!loadedWorkflow) {
-        toast.error('Workflow is still loading. Please try again in a moment.');
-        return;
-      }
-      try {
-        const restored = await restoreWorkflowVersion(selectedWorkflowId, {
-          versionId,
-          baseRevision: loadedWorkflow.draft_revision,
-        });
-        setLoadedWorkflow(restored);
-        setNodes(normalizeNodes(restored.graph.nodes, functionBlocksMap));
-        setEdges(normalizeEdges(restored.graph.edges));
-        setLastRunVersionId(null);
-        resetSavedDataRef.current?.();
-        toast.success('Version restored', {
-          description: `Draft now matches version ${versionId}`,
-        });
-      } catch (error) {
-        console.error('Failed to restore workflow version:', error);
-        if (error instanceof BackendAPIError && error.status === 409) {
-          await handleDraftConflict();
-          return;
-        }
-        toast.error('Failed to restore version', {
-          description: error instanceof BackendAPIError ? error.message : undefined,
-        });
-      }
-    },
-    [
-      selectedWorkflowId,
-      loadedWorkflow,
-      restoreWorkflowVersion,
-      functionBlocksMap,
-      handleDraftConflict,
-      setNodes,
-      setEdges,
-    ],
-  );
-
+  // Workflow URL sync
+  useWorkflowSync({
+    urlWorkflowId,
+    loadedWorkflow,
+    functionBlocksMap,
+    getWorkflow,
+    setSelectedWorkflowId,
+    setWorkflowName,
+    setLoadedWorkflow,
+    setNodes,
+    setEdges,
+    setProposalPreview,
+    setLastRunVersionId: lifecycle.setLastRunVersionId,
+    setIsLoadingWorkflow,
+  });
 
   // Check backend health
   const { isHealthy } = useBackendHealth(10000); // Check every 10 seconds
@@ -1402,47 +625,6 @@ export default function Workflows() {
     }
   }, [searchParams, refreshIntegrationTools, setSearchParams]);
 
-  // Sync URL param with state - load workflow when URL changes
-  useEffect(() => {
-    // If URL has workflowId but loaded workflow doesn't match, load the workflow
-    if (urlWorkflowId && urlWorkflowId !== loadedWorkflow?.workflow_id) {
-      const loadWorkflowFromUrl = async () => {
-        setIsLoadingWorkflow(true);
-        try {
-          const fullWorkflow = await getWorkflow(urlWorkflowId);
-          setSelectedWorkflowId(fullWorkflow.workflow_id);
-          setWorkflowName(fullWorkflow.name);
-          setLoadedWorkflow(fullWorkflow);
-          setNodes(normalizeNodes(fullWorkflow.graph.nodes, functionBlocksMap));
-          setEdges(normalizeEdges(fullWorkflow.graph.edges));
-          setProposalPreview(null);
-          setLastRunVersionId(null);
-          resetSavedDataRef.current?.();
-        } catch (error) {
-          console.error('Failed to load workflow from URL:', error);
-          toast.error('Failed to load workflow', {
-            description: 'The workflow may not exist or you may not have access to it.',
-          });
-          // Redirect to /workflows if workflow doesn't exist
-          navigate('/workflows', { replace: true });
-        } finally {
-          setTimeout(() => setIsLoadingWorkflow(false), 100);
-        }
-      };
-      loadWorkflowFromUrl();
-    } else if (!urlWorkflowId && loadedWorkflow) {
-      // If URL doesn't have workflowId but we have a loaded workflow, clear the selection
-      setSelectedWorkflowId(null);
-      setWorkflowName('My Workflow');
-      setNodes([]);
-      setEdges([]);
-      setLoadedWorkflow(null);
-      setProposalPreview(null);
-      setLastRunVersionId(null);
-      resetSavedDataRef.current?.();
-    }
-  }, [urlWorkflowId, loadedWorkflow, getWorkflow, functionBlocksMap, navigate, setNodes, setEdges, setProposalPreview]);
-
   return (
     <div className="flex flex-col h-screen bg-background">
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
@@ -1455,26 +637,26 @@ export default function Workflows() {
               key={selectedWorkflowId ?? 'new'}
                 triggerNodes={[]}
                 previewGraph={previewGraph}
-              onNodeDoubleClick={isPreviewActive ? undefined : handleCanvasNodeDoubleClick}
-              onNodeDrop={isPreviewActive ? undefined : handleNodeDrop}
+              onNodeDoubleClick={isPreviewActive ? undefined : nodeHandlers.handleCanvasNodeDoubleClick}
+              onNodeDrop={isPreviewActive ? undefined : nodeHandlers.handleNodeDrop}
               readOnly={isPreviewActive}
             />
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 pointer-events-none">
               <div className="pointer-events-auto">
                 <WorkflowLifecycleBar
-                  lifecycleStatus={lifecycleStatus}
-                  onRunClick={handleExecute}
-                  onPublishClick={handlePublish}
+                  lifecycleStatus={lifecycle.lifecycleStatus}
+                  onRunClick={lifecycle.handleExecute}
+                  onPublishClick={lifecycle.handlePublish}
                   isExecuting={isExecuting}
                   isPublishing={isPublishing}
                 isRestoringVersion={isRestoringVersion}
-                  canRun={canRun}
-                  canPublish={canPublish}
-                  publishDisabledReason={publishDisabledReason}
-                  runDisabledReason={runDisabledReason}
+                  canRun={lifecycle.canRun}
+                  canPublish={lifecycle.canPublish}
+                  publishDisabledReason={lifecycle.publishDisabledReason}
+                  runDisabledReason={lifecycle.runDisabledReason}
                 versionOptions={workflowVersions}
                 isVersionsLoading={isLoadingWorkflowVersions}
-                onVersionRestore={handleRestoreVersion}
+                onVersionRestore={lifecycle.handleRestoreVersion}
                 versionRestoreDisabledReason={
                   selectedWorkflowId ? undefined : 'Save the workflow before restoring versions'
                 }
@@ -1497,11 +679,11 @@ export default function Workflows() {
               workflows={workflows}
               isLoadingWorkflows={isLoadingWorkflows}
               selectedWorkflowId={selectedWorkflowId}
-              onLoadWorkflow={handleLoadWorkflow}
-              onDeleteWorkflow={handleDeleteWorkflow}
-              onRenameWorkflow={handleRenameWorkflow}
-              onNewWorkflow={handleNewWorkflow}
-              onExportWorkflow={handleExportWorkflow}
+              onLoadWorkflow={management.handleLoadWorkflow}
+              onDeleteWorkflow={management.handleDeleteWorkflow}
+              onRenameWorkflow={management.handleRenameWorkflow}
+              onNewWorkflow={management.handleNewWorkflow}
+              onExportWorkflow={management.handleExportWorkflow}
               onImportWorkflow={() => setImportDialogOpen(true)}
             />
 
@@ -1509,7 +691,7 @@ export default function Workflows() {
             <WorkflowImportDialog
               open={isImportDialogOpen}
               onOpenChange={setImportDialogOpen}
-              onImport={handleImportWorkflow}
+              onImport={management.handleImportWorkflow}
             />
             
             </div>
@@ -1529,13 +711,13 @@ export default function Workflows() {
               className="border-l"
             >
               <BuildAndChatPanel
-                onBlockSelect={handleBlockSelect}
+                onBlockSelect={nodeHandlers.handleBlockSelect}
                 workflowId={selectedWorkflowId}
                 onWorkflowGraphSync={handleWorkflowGraphSync}
                 functionBlocks={availableBlocks}
                 triggerOptions={triggerOptions}
                 isLoadingTriggers={isLoadingTriggers || isLoadingSubscriptions}
-                triggerInfoMessage={triggerInfoMessage}
+                triggerInfoMessage={undefined}
               />
             </ResizablePanel>
           </>
@@ -1547,43 +729,20 @@ export default function Workflows() {
         node={editingNode}
         allNodes={nodes}
         allEdges={edges}
-        onOpenChange={handleConfigDialogOpenChange}
+        onOpenChange={nodeHandlers.handleConfigDialogOpenChange}
         onUpdate={handleNodeConfigUpdate}
         workflowInputs={workflowInputsDef}
       />
 
       {/* Input Dialog */}
-      <AlertDialog open={isInputDialogOpen} onOpenChange={setInputDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Workflow Input</AlertDialogTitle>
-            <AlertDialogDescription>
-              Please provide input values for this workflow
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-4 py-4">
-            {inputFields.map((field) => (
-              <div key={field.id} className="space-y-2">
-                <Label htmlFor={field.id}>{field.label}</Label>
-                <Input
-                  id={field.id}
-                  type={field.type}
-                  value={inputData[field.id] || ''}
-                  onChange={(e) => setInputData({ ...inputData, [field.id]: e.target.value })}
-                  required={field.required}
-                  placeholder={`Enter ${field.label.toLowerCase()}`}
-                />
-              </div>
-            ))}
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleExecuteWithInput}>
-              Run Workflow
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <WorkflowInputDialog
+        open={isInputDialogOpen}
+        onOpenChange={setInputDialogOpen}
+        inputFields={inputFields}
+        inputData={inputData}
+        onInputDataChange={setInputData}
+        onExecute={lifecycle.handleExecuteWithInput}
+      />
 
       {/* Keyboard Shortcuts Dialog */}
       <KeymapDialog open={isKeymapOpen} onOpenChange={setKeymapOpen} />

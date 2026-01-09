@@ -20,9 +20,9 @@ import { KeyboardShortcutProvider } from "@/hooks/useKeyboardShortcuts";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
       refetchOnMount: true,
-      staleTime: 0,
+      staleTime: 5 * 60 * 1000, // 5 minutes - tools, models, and node types don't change frequently
     },
   },
 });
