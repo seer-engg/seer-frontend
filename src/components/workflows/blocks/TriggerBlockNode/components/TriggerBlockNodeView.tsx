@@ -9,69 +9,56 @@ import { CronDetailsSection, CronConfigForm } from '../triggers/CronTriggerConfi
 import { SupabaseConfigForm } from '../triggers/SupabaseTriggerConfig';
 import { WorkflowInputManager, BindingSection } from './BaseTriggerNode';
 import type { InputDef } from '@/types/workflow-spec';
-import type { BindingState } from '../../triggers/utils';
+import type { BindingState } from '../../../triggers/utils';
 import type { QuickOption } from './BaseTriggerNode';
-import type {
-  GmailConfigState,
-  CronConfigState,
-  SupabaseConfigState,
-  SupabaseEventType,
-} from '../../triggers/utils';
+import type { TriggerKind } from './constants';
+import type { TriggerConfigState } from '../triggers/useTriggerConfig';
 
 export interface TriggerBlockNodeViewProps {
   selected?: boolean;
   descriptor: NonNullable<WorkflowNodeData['triggerMeta']>['descriptor'];
   subscription: NonNullable<WorkflowNodeData['triggerMeta']>['subscription'];
   triggerKey: string;
-  isCronTrigger: boolean;
-  isGmailTrigger: boolean;
-  isSupabaseTrigger: boolean;
-  isWebhookTrigger: boolean;
+  triggerKind: TriggerKind;
   integration?: NonNullable<WorkflowNodeData['triggerMeta']>['integration'];
 
-  // Base trigger state
-  isExpanded: boolean;
-  setIsExpanded: (updater: (prev: boolean) => boolean) => void;
-  isSaving: boolean;
-  isDeleting: boolean;
-  isToggling: boolean;
-  isDraft: boolean;
+  // Base state
+  base: {
+    isExpanded: boolean;
+    setIsExpanded: (updater: (prev: boolean) => boolean) => void;
+    isDraft: boolean;
+    hasInputs: boolean;
+    // Workflow inputs
+    canManageInputs: boolean;
+    showInputsEditor: boolean;
+    setShowInputsEditor: (show: boolean | ((prev: boolean) => boolean)) => void;
+    workflowInputEntries: Array<[string, InputDef]>;
+    isSavingWorkflowInput: boolean;
+    inputDraft: { name: string; type: InputDef['type']; description: string; required: boolean };
+    setInputDraft: React.Dispatch<React.SetStateAction<{ name: string; type: InputDef['type']; description: string; required: boolean }>>;
+    handleCreateWorkflowInput: () => void;
+    handleRemoveWorkflowInput: (inputName: string) => void;
+    // Bindings
+    bindingState: BindingState;
+    handleBindingModeChange: TriggerBlockNodeViewInternalProps['handleBindingModeChange'];
+    handleBindingValueChange: TriggerBlockNodeViewInternalProps['handleBindingValueChange'];
+    bindingQuickInsert: TriggerBlockNodeViewInternalProps['bindingQuickInsert'];
+  };
 
-  // Handlers
-  handleToggle: (nextEnabled: boolean) => void;
-  handleSave: () => void;
-  handleDelete: () => void;
+  // Actions
+  actions: {
+    isSaving: boolean;
+    isDeleting: boolean;
+    isToggling: boolean;
+    handleToggle: (nextEnabled: boolean) => void;
+    handleSave: () => void;
+    handleDelete: () => void;
+  };
 
-  // Gmail
-  gmailConfig: GmailConfigState;
-  setGmailConfig: React.Dispatch<React.SetStateAction<GmailConfigState>>;
-  // Cron
-  cronConfig: CronConfigState;
-  setCronConfig: React.Dispatch<React.SetStateAction<CronConfigState>>;
-  // Supabase
-  supabaseConfig: SupabaseConfigState;
-  setSupabaseConfig: React.Dispatch<React.SetStateAction<SupabaseConfigState>>;
-  handleSupabaseResourceChange: (value: string, label?: string) => void;
-  handleSupabaseEventChange: (eventType: SupabaseEventType, nextChecked: boolean) => void;
-
-  // Workflow inputs
-  canManageInputs: boolean;
-  showInputsEditor: boolean;
-  setShowInputsEditor: (show: boolean | ((prev: boolean) => boolean)) => void;
-  workflowInputEntries: Array<[string, InputDef]>;
-  isSavingWorkflowInput: boolean;
-  inputDraft: { name: string; type: InputDef['type']; description: string; required: boolean };
-  setInputDraft: React.Dispatch<React.SetStateAction<{ name: string; type: InputDef['type']; description: string; required: boolean }>>;
-  handleCreateWorkflowInput: () => void;
-  handleRemoveWorkflowInput: (inputName: string) => void;
-
-  // Bindings
-  hasInputs: boolean;
-  bindingState: BindingState;
-  handleBindingModeChange: TriggerBlockNodeViewInternalProps['handleBindingModeChange'];
-  handleBindingValueChange: TriggerBlockNodeViewInternalProps['handleBindingValueChange'];
-  bindingQuickInsert: TriggerBlockNodeViewInternalProps['bindingQuickInsert'];
+  // Config
+  config: TriggerConfigState;
   quickOptions: QuickOption[];
+  isLoading: boolean;
 }
 
 interface TriggerBlockNodeViewInternalProps {
@@ -86,42 +73,13 @@ export function TriggerBlockNodeView(props: TriggerBlockNodeViewProps) {
     descriptor,
     subscription,
     triggerKey,
-    isCronTrigger,
-    isGmailTrigger,
-    isSupabaseTrigger,
-    isWebhookTrigger,
+    triggerKind,
     integration,
-    isExpanded,
-    setIsExpanded,
-    isSaving,
-    isDeleting,
-    isToggling,
-    handleToggle,
-    handleSave,
-    handleDelete,
-    gmailConfig,
-    setGmailConfig,
-    cronConfig,
-    setCronConfig,
-    supabaseConfig,
-    setSupabaseConfig,
-    handleSupabaseResourceChange,
-    handleSupabaseEventChange,
-    canManageInputs,
-    showInputsEditor,
-    setShowInputsEditor,
-    workflowInputEntries,
-    isSavingWorkflowInput,
-    inputDraft,
-    setInputDraft,
-    handleCreateWorkflowInput,
-    handleRemoveWorkflowInput,
-    hasInputs,
-    bindingState,
-    handleBindingModeChange,
-    handleBindingValueChange,
-    bindingQuickInsert,
+    base,
+    actions,
+    config,
     quickOptions,
+    isLoading,
   } = props;
 
   return (
@@ -135,65 +93,54 @@ export function TriggerBlockNodeView(props: TriggerBlockNodeViewProps) {
         descriptor={descriptor}
         subscription={subscription}
         triggerKey={triggerKey}
-        isCronTrigger={isCronTrigger}
-        isGmailTrigger={isGmailTrigger}
-        isSupabaseTrigger={isSupabaseTrigger}
-        isToggling={isToggling}
-        handleToggle={handleToggle}
+        triggerKind={triggerKind}
+        isToggling={actions.isToggling}
+        handleToggle={actions.handleToggle}
       />
 
       <div className="mt-3 space-y-3">
-        {isWebhookTrigger && <WebhookDetailsSection subscription={subscription} />}
-        {isGmailTrigger && <GmailDetailsSection integration={integration} />}
-        {isCronTrigger && <CronDetailsSection cronConfig={cronConfig} />}
+        {triggerKind === 'webhook' && <WebhookDetailsSection subscription={subscription} />}
+        {triggerKind === 'gmail' && <GmailDetailsSection integration={integration} />}        
+        {triggerKind === 'cron' && config.kind === 'cron' && <CronDetailsSection cronConfig={config.config} />}
 
         <button
           type="button"
           className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm"
-          onClick={() => setIsExpanded((prev) => !prev)}
+          onClick={() => base.setIsExpanded((prev) => !prev)}
         >
           <span>Bindings & configuration</span>
-          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {base.isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
 
-        {isExpanded && (
+        {base.isExpanded && (
           <ExpandedConfigSection
-            isGmailTrigger={isGmailTrigger}
-            isCronTrigger={isCronTrigger}
-            isSupabaseTrigger={isSupabaseTrigger}
-            gmailConfig={gmailConfig}
-            setGmailConfig={setGmailConfig}
-            cronConfig={cronConfig}
-            setCronConfig={setCronConfig}
-            supabaseConfig={supabaseConfig}
-            setSupabaseConfig={setSupabaseConfig}
-            handleSupabaseResourceChange={handleSupabaseResourceChange}
-            handleSupabaseEventChange={handleSupabaseEventChange}
-            canManageInputs={canManageInputs}
-            showInputsEditor={showInputsEditor}
-            setShowInputsEditor={setShowInputsEditor}
-            workflowInputEntries={workflowInputEntries}
-            isSavingWorkflowInput={isSavingWorkflowInput}
-            inputDraft={inputDraft}
-            setInputDraft={setInputDraft}
-            handleCreateWorkflowInput={handleCreateWorkflowInput}
-            handleRemoveWorkflowInput={handleRemoveWorkflowInput}
-            hasInputs={hasInputs}
-            bindingState={bindingState}
-            handleBindingModeChange={handleBindingModeChange}
-            handleBindingValueChange={handleBindingValueChange}
-            bindingQuickInsert={bindingQuickInsert}
+            triggerKind={triggerKind}
+            config={config}
+            canManageInputs={base.canManageInputs}
+            showInputsEditor={base.showInputsEditor}
+            setShowInputsEditor={base.setShowInputsEditor}
+            workflowInputEntries={base.workflowInputEntries}
+            isSavingWorkflowInput={base.isSavingWorkflowInput}
+            inputDraft={base.inputDraft}
+            setInputDraft={base.setInputDraft}
+            handleCreateWorkflowInput={base.handleCreateWorkflowInput}
+            handleRemoveWorkflowInput={base.handleRemoveWorkflowInput}
+            hasInputs={base.hasInputs}
+            bindingState={base.bindingState}
+            handleBindingModeChange={base.handleBindingModeChange}
+            handleBindingValueChange={base.handleBindingValueChange}
+            bindingQuickInsert={base.bindingQuickInsert}
             quickOptions={quickOptions}
           />
         )}
 
         <TriggerActions
           subscription={subscription}
-          isDraft={props.isDraft}
-          isSaving={isSaving}
-          isDeleting={isDeleting}
-          handleSave={handleSave}
-          handleDelete={handleDelete}
+          isDraft={base.isDraft}
+          isSaving={actions.isSaving}
+          isDeleting={actions.isDeleting}
+          handleSave={actions.handleSave}
+          handleDelete={actions.handleDelete}
         />
       </div>
     </div>
@@ -201,17 +148,8 @@ export function TriggerBlockNodeView(props: TriggerBlockNodeViewProps) {
 }
 
 function ExpandedConfigSection({
-  isGmailTrigger,
-  isCronTrigger,
-  isSupabaseTrigger,
-  gmailConfig,
-  setGmailConfig,
-  cronConfig,
-  setCronConfig,
-  supabaseConfig,
-  setSupabaseConfig,
-  handleSupabaseResourceChange,
-  handleSupabaseEventChange,
+  triggerKind,
+  config,
   canManageInputs,
   showInputsEditor,
   setShowInputsEditor,
@@ -227,45 +165,39 @@ function ExpandedConfigSection({
   handleBindingValueChange,
   bindingQuickInsert,
   quickOptions,
-}: Pick<
-  TriggerBlockNodeViewProps,
-  | 'isGmailTrigger'
-  | 'isCronTrigger'
-  | 'isSupabaseTrigger'
-  | 'gmailConfig'
-  | 'setGmailConfig'
-  | 'cronConfig'
-  | 'setCronConfig'
-  | 'supabaseConfig'
-  | 'setSupabaseConfig'
-  | 'handleSupabaseResourceChange'
-  | 'handleSupabaseEventChange'
-  | 'canManageInputs'
-  | 'showInputsEditor'
-  | 'setShowInputsEditor'
-  | 'workflowInputEntries'
-  | 'isSavingWorkflowInput'
-  | 'inputDraft'
-  | 'setInputDraft'
-  | 'handleCreateWorkflowInput'
-  | 'handleRemoveWorkflowInput'
-  | 'hasInputs'
-  | 'bindingState'
-  | 'handleBindingModeChange'
-  | 'handleBindingValueChange'
-  | 'bindingQuickInsert'
-  | 'quickOptions'
->) {
+}: {
+  triggerKind: TriggerKind;
+  config: TriggerConfigState;
+  canManageInputs: boolean;
+  showInputsEditor: boolean;
+  setShowInputsEditor: (show: boolean | ((prev: boolean) => boolean)) => void;
+  workflowInputEntries: Array<[string, InputDef]>;
+  isSavingWorkflowInput: boolean;
+  inputDraft: { name: string; type: InputDef['type']; description: string; required: boolean };
+  setInputDraft: React.Dispatch<React.SetStateAction<{ name: string; type: InputDef['type']; description: string; required: boolean }>>;
+  handleCreateWorkflowInput: () => void;
+  handleRemoveWorkflowInput: (inputName: string) => void;
+  hasInputs: boolean;
+  bindingState: BindingState;
+  handleBindingModeChange: (inputName: string, mode: 'event' | 'literal') => void;
+  handleBindingValueChange: (inputName: string, value: string) => void;
+  bindingQuickInsert: (inputName: string, value: string) => void;
+  quickOptions: QuickOption[];
+}) {
   return (
     <div className="space-y-4">
-      {isGmailTrigger && <GmailConfigForm gmailConfig={gmailConfig} setGmailConfig={setGmailConfig} />}
-      {isCronTrigger && <CronConfigForm cronConfig={cronConfig} setCronConfig={setCronConfig} />}
-      {isSupabaseTrigger && (
+      {triggerKind === 'gmail' && config.kind === 'gmail' && (
+        <GmailConfigForm gmailConfig={config.config} setGmailConfig={config.setConfig} />
+      )}
+      {triggerKind === 'cron' && config.kind === 'cron' && (
+        <CronConfigForm cronConfig={config.config} setCronConfig={config.setConfig} />
+      )}
+      {triggerKind === 'supabase' && config.kind === 'supabase' && (
         <SupabaseConfigForm
-          supabaseConfig={supabaseConfig}
-          setSupabaseConfig={setSupabaseConfig}
-          handleSupabaseResourceChange={handleSupabaseResourceChange}
-          handleSupabaseEventChange={handleSupabaseEventChange}
+          supabaseConfig={config.config}
+          setSupabaseConfig={config.setConfig}
+          handleSupabaseResourceChange={config.handleSupabaseResourceChange}
+          handleSupabaseEventChange={config.handleSupabaseEventChange}
         />
       )}
       <WorkflowInputManager

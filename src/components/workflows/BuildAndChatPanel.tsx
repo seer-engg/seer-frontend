@@ -27,7 +27,7 @@ import type {
   BuiltInBlock,
 } from './build-and-chat/types';
 import { filterSystemPrompt, getDisplayableAssistantMessage } from './build-and-chat/utils';
-import { useCanvasStore, useChatStore, useUIStore } from '@/stores';
+import { useCanvasStore, useChatStore, useIntegrationStore, useUIStore } from '@/stores';
 
 export function BuildAndChatPanel({
   onBlockSelect,
@@ -100,17 +100,36 @@ export function BuildAndChatPanel({
   );
   const queryClient = useQueryClient();
 
-  const { data: toolsData, isLoading: isLoadingTools } = useQuery({
-    queryKey: ['tools'],
-    queryFn: async () => {
-      const response = await backendApiClient.request<{ tools: Tool[] }>('/api/tools', {
-        method: 'GET',
-      });
-      return response;
-    },
-  });
+  // Use Integration Store for tools instead of fetching again here
+  const { tools: rawTools, toolsLoading, toolsLoaded, refreshIntegrationTools } = useIntegrationStore(
+    useShallow((state) => ({
+      tools: state.tools,
+      toolsLoading: state.toolsLoading,
+      toolsLoaded: state.toolsLoaded,
+      refreshIntegrationTools: state.refreshIntegrationTools,
+    })),
+  );
 
-  const tools = toolsData?.tools || [];
+  useEffect(() => {
+    if (!toolsLoaded && !toolsLoading) {
+      // Triggers bootstrap/individual loads as needed and de-duplicates concurrent fetches
+      void refreshIntegrationTools();
+    }
+  }, [toolsLoaded, toolsLoading, refreshIntegrationTools]);
+
+  const tools: Tool[] = React.useMemo(
+    () =>
+      rawTools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        provider: t.provider ?? undefined,
+        integration_type: (t.integration_type as string | undefined) ?? undefined,
+        output_schema: (t.output_schema as Record<string, any> | null) ?? null,
+      })),
+    [rawTools],
+  );
+
+  const isLoadingTools = toolsLoading || !toolsLoaded;
 
   const { data: models = [], isLoading: isLoadingModels } = useQuery<ModelInfo[]>({
     queryKey: ['available-models'],
