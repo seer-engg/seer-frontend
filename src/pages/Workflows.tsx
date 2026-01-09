@@ -13,7 +13,7 @@ import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { WorkflowImportDialog } from '@/components/workflows/WorkflowImportDialog';
 import { WorkflowLifecycleBar } from '@/components/workflows/WorkflowLifecycleBar';
-import { useWorkflowStore, WorkflowModel } from '@/stores/workflowStore';
+import { useWorkflowStore } from '@/stores/workflowStore';
 import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
@@ -47,7 +47,6 @@ const parseProviderConnectionId = (raw?: string | null): number | null => {
 export default function Workflows() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { workflowId: urlWorkflowId } = useParams<{ workflowId?: string }>();
-  // Phase 2: Direct store access instead of useIntegrationTools wrapper
   const refreshIntegrationTools = useToolsStore((state) => state.refreshIntegrationTools);
   const integrationTools = useToolsStore((state) => state.tools);
   const isIntegrationConnected = useToolsStore((state) => state.isIntegrationConnected);
@@ -71,7 +70,6 @@ export default function Workflows() {
   const setKeymapOpen = useUIStore((state) => state.setKeymapOpen);
   const setInputDialogOpen = useUIStore((state) => state.setInputDialogOpen);
   const setProposalPreview = useUIStore((state) => state.setProposalPreview);
-  // Phase 1: Replaced local state with workflowStore
   const setWorkflowName = useWorkflowStore((state) => state.setWorkflowName);
   const selectedWorkflowId = useWorkflowStore((state) => state.selectedWorkflowId);
   const setSelectedWorkflowId = useWorkflowStore((state) => state.setSelectedWorkflowId);
@@ -80,13 +78,6 @@ export default function Workflows() {
   const isLoadingWorkflow = useWorkflowStore((state) => state.isLoadingWorkflow);
   const setIsLoadingWorkflow = useWorkflowStore((state) => state.setIsLoadingWorkflow);
   const loadedWorkflow = useWorkflowStore((state) => state.currentWorkflow);
-  // Phase 1: Compatibility shim for hooks still expecting setLoadedWorkflow
-  // In Phase 2, hooks will be refactored to use stores directly
-  const setLoadedWorkflow = useCallback((_workflow: WorkflowModel | null) => {
-    // No-op: currentWorkflow is now managed by workflowStore automatically via getWorkflow()
-    // If hooks call this, they're updating state that's already been updated by store actions
-    console.debug('[Phase 1 Migration] setLoadedWorkflow called - currentWorkflow managed by store');
-  }, []);
   const editingNode = useMemo(
     () => nodes.find((node) => node.id === editingNodeId) ?? null,
     [nodes, editingNodeId],
@@ -102,7 +93,6 @@ export default function Workflows() {
     scope: 'global',
   });
 
-  // Phase 3: Store access for execution/publishing status and getWorkflow
   const workflows = useWorkflowStore((state) => state.workflows);
   const isLoadingWorkflows = useWorkflowStore((state) => state.isLoading);
   const getWorkflow = useWorkflowStore((state) => state.getWorkflow);
@@ -115,7 +105,6 @@ export default function Workflows() {
     isLoading: isLoadingWorkflowVersions,
     invalidate: invalidateWorkflowVersions,
   } = useWorkflowVersions(selectedWorkflowId);
-  // Phase 2: Direct store access instead of wrapper hook
   const functionBlockSchemas = useToolsStore((state) => state.functionBlocks);
   const functionBlocksMap = useToolsStore((state) => state.functionBlocksByType);
   const {
@@ -173,7 +162,6 @@ export default function Workflows() {
           },
         });
         const refreshed = await getWorkflow(selectedWorkflowId);
-        // Phase 1: No need to setLoadedWorkflow - getWorkflow updates store's currentWorkflow
         setNodes(normalizeNodes(refreshed.graph.nodes, functionBlocksMap));
         setEdges(normalizeEdges(refreshed.graph.edges));
       } catch (error) {
@@ -204,7 +192,6 @@ export default function Workflows() {
   );
   const gmailIntegrationReady = isIntegrationConnected('gmail') && typeof gmailConnectionId === 'number';
 
-  // Phase 3: Consolidated workflow actions hook
   const workflowActions = useWorkflowActions();
   const {
     handleSave,
@@ -229,7 +216,6 @@ export default function Workflows() {
     resetSavedDataRef,
   } = workflowActions;
 
-  // Setup autosave hook
   const { triggerSave, resetSavedData } = useDebouncedAutosave({
     data: { nodes, edges },
     onSave: autosaveCallback,
@@ -239,7 +225,6 @@ export default function Workflows() {
     },
   });
 
-  // Phase 3: Simplified trigger handlers hook (needs to be before nodeActions)
   const triggerHandlersHook = useTriggerHandlers({
     gmailIntegrationReady,
     gmailConnectionId,
@@ -248,7 +233,6 @@ export default function Workflows() {
   });
   const { draftTriggers, isConnectingGmail, handleAddTriggerDraft, handleSaveTriggerDraft, handleDiscardTriggerDraft, handleConnectGmail } = triggerHandlersHook;
 
-  // Phase 3: Consolidated node actions hook
   const nodeActions = useNodeActions({
     autosaveCallback,
     triggerSave,
@@ -420,7 +404,6 @@ export default function Workflows() {
     getWorkflow,
     setSelectedWorkflowId,
     setWorkflowName,
-    setLoadedWorkflow,
     setNodes,
     setEdges,
     setProposalPreview,
@@ -476,7 +459,6 @@ export default function Workflows() {
             <div className="flex-1 relative overflow-hidden">
               <WorkflowCanvas
               key={selectedWorkflowId ?? 'new'}
-                triggerNodes={[]}
                 previewGraph={previewGraph}
               onNodeDoubleClick={isPreviewActive ? undefined : handleCanvasNodeDoubleClick}
               onNodeDrop={isPreviewActive ? undefined : handleNodeDrop}

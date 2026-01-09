@@ -51,7 +51,7 @@ export function useNodeActions({
   const loadedWorkflow = currentWorkflow;
 
   const functionBlocksMap = useToolsStore((state) => state.functionBlocksByType);
-  const triggerCatalog = useTriggersStore((state) => state.triggers);
+  const triggerCatalog = useTriggersStore((state) => state.triggerCatalog);
 
   // Get workflow inputs definition from current workflow
   const workflowInputsDef = useMemo(

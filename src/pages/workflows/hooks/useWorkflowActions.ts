@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Node } from '@xyflow/react';
 import type { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
@@ -7,7 +7,7 @@ import type { InputDef } from '@/types/workflow-spec';
 import { toast } from '@/components/ui/sonner';
 import { BackendAPIError } from '@/lib/api-client';
 import { useWorkflowStore } from '@/stores/workflowStore';
-import { useCanvasStore } from '@/stores';
+import { useCanvasStore, useUIStore } from '@/stores';
 import { handleDraftConflict } from '../utils/conflictHandler';
 import { normalizeNodes, normalizeEdges } from '@/lib/workflow-normalization';
 import { useToolsStore } from '@/stores/toolsStore';
@@ -51,8 +51,8 @@ export function useWorkflowActions() {
 
   const functionBlocksMap = useToolsStore((state) => state.functionBlocksByType);
 
-  // Local state for lifecycle tracking
-  const [lastRunVersionId, setLastRunVersionId] = useState<number | null>(null);
+  const lastRunVersionId = useUIStore((state) => state.lastRunVersionId);
+  const setLastRunVersionId = useUIStore((state) => state.setLastRunVersionId);
   const resetSavedDataRef = useRef<(() => void) | undefined>();
 
   // ==================== LIFECYCLE ACTIONS ====================
@@ -66,7 +66,6 @@ export function useWorkflowActions() {
     await handleDraftConflict({
       selectedWorkflowId,
       getWorkflow,
-      setLoadedWorkflow: () => {}, // No-op, store handles this via getWorkflow
       setNodes,
       setEdges,
       functionBlocksMap,
@@ -420,7 +419,6 @@ export function useWorkflowActions() {
           await handleDraftConflict({
             selectedWorkflowId,
             getWorkflow,
-            setLoadedWorkflow: () => {},
             setNodes,
             setEdges,
             functionBlocksMap,

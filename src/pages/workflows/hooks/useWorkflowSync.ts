@@ -12,7 +12,6 @@ interface UseWorkflowSyncParams {
   getWorkflow: (id: string) => Promise<WorkflowModel>;
   setSelectedWorkflowId: (id: string | null) => void;
   setWorkflowName: (name: string) => void;
-  setLoadedWorkflow: (workflow: WorkflowModel | null) => void;
   setNodes: (nodes: Node<WorkflowNodeData>[]) => void;
   setEdges: (edges: WorkflowEdge[]) => void;
   setProposalPreview: (preview: unknown) => void;
@@ -27,7 +26,6 @@ export function useWorkflowSync({
   getWorkflow,
   setSelectedWorkflowId,
   setWorkflowName,
-  setLoadedWorkflow,
   setNodes,
   setEdges,
   setProposalPreview,
@@ -50,7 +48,7 @@ export function useWorkflowSync({
           const fullWorkflow = await getWorkflow(urlWorkflowId);
           setSelectedWorkflowId(fullWorkflow.workflow_id);
           setWorkflowName(fullWorkflow.name);
-          setLoadedWorkflow(fullWorkflow);
+          // currentWorkflow is now managed by workflowStore automatically via getWorkflow()
           setNodes(normalizeNodes(fullWorkflow.graph.nodes, functionBlocksMap));
           setEdges(normalizeEdges(fullWorkflow.graph.edges));
           setProposalPreview(null);
@@ -74,7 +72,7 @@ export function useWorkflowSync({
       setWorkflowName('My Workflow');
       setNodes([]);
       setEdges([]);
-      setLoadedWorkflow(null);
+      // currentWorkflow will be cleared by workflowStore when setSelectedWorkflowId(null) is called
       setProposalPreview(null);
       setLastRunVersionId(null);
       resetSavedDataRef.current?.();
@@ -90,7 +88,6 @@ export function useWorkflowSync({
     setProposalPreview,
     setSelectedWorkflowId,
     setWorkflowName,
-    setLoadedWorkflow,
     setLastRunVersionId,
     setIsLoadingWorkflow,
   ]);

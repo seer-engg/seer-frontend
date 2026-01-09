@@ -9,7 +9,7 @@ import { toast } from '@/components/ui/sonner';
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
 import { workflowSpecToGraph } from '@/lib/workflow-graph';
 
-import { BuildPanel } from './build-and-chat/build/BuildPanel';
+import { UnifiedBuildPanel } from './build-and-chat/build/UnifiedBuildPanel';
 import { ChatPanel } from './build-and-chat/chat/ChatPanel';
 import { ExecutionsPanel } from './build-and-chat/executions/ExecutionsPanel';
 import type { SessionsStatus } from './build-and-chat/chat/types';
@@ -59,7 +59,6 @@ export function BuildAndChatPanel({
   const selectedModel = useChatStore((state) => state.selectedModel);
   const currentSessionId = useChatStore((state) => state.currentSessionId);
   const currentThreadId = useChatStore((state) => state.currentThreadId);
-  const proposalActionLoading = useChatStore((state) => state.proposalActionLoading);
   const setMessages = useChatStore((state) => state.setMessages);
   const setInput = useChatStore((state) => state.setInput);
   const setIsLoading = useChatStore((state) => state.setIsLoading);
@@ -383,7 +382,7 @@ export function BuildAndChatPanel({
         </div>
 
         <TabsContent value="build" className="flex-1 mt-0 overflow-hidden">
-          <BuildPanel
+          <UnifiedBuildPanel
             tools={tools}
             isLoadingTools={isLoadingTools}
             onBlockSelect={onBlockSelect}

@@ -26,7 +26,6 @@ import {
   WorkflowNodeData,
   WorkflowEdge,
   ToolBlockConfig,
-  getNextBranchForSource,
 } from './types';
 
 // Import custom node types
@@ -61,7 +60,6 @@ const nodeTypes = {
 };
 
 interface WorkflowCanvasProps {
-  triggerNodes?: Node<WorkflowNodeData>[];
   previewGraph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] } | null;
   onNodeDoubleClick?: (node: Node<WorkflowNodeData>) => void;
   onNodeDrop?: (
@@ -73,14 +71,12 @@ interface WorkflowCanvasProps {
 }
 
 export function WorkflowCanvas({
-  triggerNodes = [],
   previewGraph = null,
   onNodeDoubleClick,
   onNodeDrop,
   className,
   readOnly = false,
 }: WorkflowCanvasProps) {
-  // FIXED: Individual selectors instead of useShallow
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
   const setNodes = useCanvasStore((state) => state.setNodes);
@@ -105,9 +101,9 @@ export function WorkflowCanvas({
       };
     });
 
-    // Don't include separate trigger nodes - triggers should be added like other nodes
+    // Triggers are now integrated as regular nodes in the workflow graph
     return workflowNodesWithSelection;
-  }, [workflowNodes, triggerNodes, selectedNodeId]);
+  }, [workflowNodes, selectedNodeId]);
 
   const updateNodeData = useCallback(
     (nodeId: string, updates: Partial<WorkflowNodeData>) => {

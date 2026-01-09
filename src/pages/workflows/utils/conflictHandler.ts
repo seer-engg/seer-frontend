@@ -7,7 +7,6 @@ import { normalizeNodes, normalizeEdges } from '@/lib/workflow-normalization';
 export async function handleDraftConflict(params: {
   selectedWorkflowId: string | null;
   getWorkflow: (id: string) => Promise<WorkflowModel>;
-  setLoadedWorkflow: (workflow: WorkflowModel | null) => void;
   setNodes: (nodes: Node<WorkflowNodeData>[]) => void;
   setEdges: (edges: WorkflowEdge[]) => void;
   setLastRunVersionId: (id: number | null) => void;
@@ -19,7 +18,7 @@ export async function handleDraftConflict(params: {
 
   try {
     const latest = await params.getWorkflow(params.selectedWorkflowId);
-    params.setLoadedWorkflow(latest);
+    // currentWorkflow is now managed by workflowStore automatically via getWorkflow()
     params.setNodes(normalizeNodes(latest.graph.nodes, params.functionBlocksMap));
     params.setEdges(normalizeEdges(latest.graph.edges));
     params.setLastRunVersionId(null);
