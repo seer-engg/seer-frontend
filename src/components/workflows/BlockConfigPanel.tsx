@@ -4,7 +4,6 @@
  * Right sidebar panel for configuring selected block.
  * Supports editing parameters and OAuth scopes.
  */
-/* eslint-disable max-lines-per-function, complexity, @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Node } from '@xyflow/react';
@@ -129,7 +128,6 @@ export function BlockConfigPanel({
         signature: '',
       };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id]); // Only run when node ID changes, not on every node property change
 
   const toolName = config.tool_name || config.toolName || '';

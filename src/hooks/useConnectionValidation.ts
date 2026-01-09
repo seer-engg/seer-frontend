@@ -32,7 +32,6 @@ export function useConnectionValidation({
         (e) => e.target === params.source && e.source === params.target,
       );
       if (wouldCreateCycle) {
-        // eslint-disable-next-line no-console
         console.warn('Connection would create a cycle');
         return;
       }
@@ -47,7 +46,6 @@ export function useConnectionValidation({
 
       const sourceNode = workflowNodes.find((node) => node.id === params.source);
       if (!branch && sourceNode && (sourceNode.type === 'if_else' || sourceNode.type === 'for_loop')) {
-        // eslint-disable-next-line no-console
         console.warn(`All branch handles are already used for node ${sourceNode.id}`);
         return;
       }

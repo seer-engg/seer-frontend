@@ -1,6 +1,3 @@
-/* eslint-disable max-lines */
-/* eslint-disable max-lines-per-function */
-/* eslint-disable complexity */
 import { useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams, useParams } from 'react-router-dom';
 import { Node, ReactFlowProvider } from '@xyflow/react';
@@ -281,7 +278,6 @@ export default function Workflows() {
       return;
     }
     triggerSave();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, edges, selectedWorkflowId, triggerSave, isLoadingWorkflow]);
 
   // Handle autosave errors
@@ -350,7 +346,6 @@ export default function Workflows() {
       });
       setNodes(updatedNodes);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.length, triggerHandlers, setNodes]); // Only react to changes in number of nodes
 
   const handleWorkflowGraphSync = useCallback(

@@ -101,7 +101,6 @@ export function useCanvasDragDrop({ readOnly = false, setNodes, onNodeDrop }: Us
           }
         } else if (dragData.type === 'trigger') {
           // Handle triggers like blocks - add via parent for full metadata
-          // eslint-disable-next-line no-console
           console.log('[WorkflowCanvas] Trigger dropped:', dragData.triggerKey);
           if (onNodeDrop) {
             onNodeDrop(
@@ -115,14 +114,12 @@ export function useCanvasDragDrop({ readOnly = false, setNodes, onNodeDrop }: Us
               position,
             );
           } else {
-            // eslint-disable-next-line no-console
             console.log(
               '[WorkflowCanvas] Trigger dropped without onNodeDrop handler, ignoring',
             );
           }
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
         console.error('Error processing drop:', error);
       }
     },

@@ -1,4 +1,3 @@
-/* eslint-disable max-lines, max-lines-per-function */
 import type { StateCreator } from 'zustand';
 
 import type { FunctionBlockSchema } from '@/components/workflows/types';
@@ -532,7 +531,6 @@ const createToolsStore: StateCreator<ToolsStore> = (set, get) => {
       }
       return providerConnectionsMap.get(provider)?.connectionId ?? null;
     },
-    /* eslint-disable-next-line complexity */
     async connectIntegration(type, options) {
       const { userEmail, tools, integrationProviderMap, integrationScopesMap } = get();
       if (!userEmail) {

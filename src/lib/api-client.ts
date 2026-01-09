@@ -139,7 +139,6 @@ export class BackendAPIClient {
     return `${this.getBaseUrl()}${normalized}`;
   }
 
-  // eslint-disable-next-line complexity
   async request<T>(endpoint: string, options: BackendRequestInit = {}): Promise<T> {
     const url = this.toAbsoluteUrl(endpoint);
     const token = await this.getToken();

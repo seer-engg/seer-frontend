@@ -176,7 +176,6 @@ function FieldRow({ field, index, onUpdate, onRemove, canRemove }: FieldRowProps
   );
 }
 
-// eslint-disable-next-line max-lines-per-function
 export function StructuredOutputEditor({ value, onChange }: StructuredOutputEditorProps) {
   const [fields, setFields] = useState<FieldDefinition[]>([createEmptyField()]);
   const lastEmittedSchemaRef = useRef<string>('');

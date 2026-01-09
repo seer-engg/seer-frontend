@@ -126,7 +126,6 @@ interface BackendClientWithMeta {
   getToken?: () => Promise<string | null>;
 }
 
-/* eslint-disable-next-line max-lines-per-function */
 const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   workflows: [],
   isLoading: false,
@@ -143,7 +142,6 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   isDeleting: false,
   isRestoringVersion: false,
   isExecuting: false,
-  // Phase 1: Initial values for consolidated state
   selectedWorkflowId: null,
   workflowName: 'My Workflow',
   workflowInputData: {},
