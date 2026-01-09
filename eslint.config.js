@@ -6,6 +6,8 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   { ignores: ["dist"] },
+
+  // Base rules
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -39,4 +41,23 @@ export default tseslint.config(
       "max-nested-callbacks": ["error", 3],
     },
   },
+
+  // Override: Hooks can be longer (functions named like useXxx)
+  {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "max-lines-per-function": [
+        "error",
+        {
+          max: 200, // keep base default
+          skipBlankLines: true,
+          skipComments: true,
+
+          // Different limit for hook-like names
+          name: "^use[A-Z0-9].*",
+          max: 500,
+        },
+      ],
+    },
+  }
 );
