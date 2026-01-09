@@ -588,7 +588,7 @@ export default function Workflows() {
   });
 
   // Check backend health
-  const { isHealthy } = useBackendHealth(10000); // Check every 10 seconds
+  const { isHealthy } = useBackendHealth(); // check backend health
 
   // Show toast notifications for backend status changes
   useEffect(() => {
