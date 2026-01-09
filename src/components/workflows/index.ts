@@ -14,7 +14,6 @@ export { IntegrationStatusPanel, IntegrationBadge } from './IntegrationStatusPan
 
 // Block nodes
 export { ToolBlockNode } from './blocks/ToolBlockNode';
-export { CodeBlockNode } from './blocks/CodeBlockNode';
 export { LLMBlockNode } from './blocks/LLMBlockNode';
 export { IfElseBlockNode } from './blocks/IfElseBlockNode';
 export { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
