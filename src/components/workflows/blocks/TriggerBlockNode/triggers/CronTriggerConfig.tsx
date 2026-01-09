@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,39 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-import type { WorkflowNodeData } from '../../types';
-import {
-  CronConfigState,
-  makeDefaultCronConfig,
-  buildCronConfigFromProviderConfig,
-  validateCronExpression,
-} from '../../triggers/utils';
-import { CRON_PRESETS, TIMEZONE_OPTIONS } from '../../triggers/constants';
-
-export interface CronTriggerConfigProps {
-  triggerMeta: NonNullable<WorkflowNodeData['triggerMeta']>;
-}
-
-export const useCronConfig = (triggerMeta: NonNullable<WorkflowNodeData['triggerMeta']>) => {
-  const { subscription, draft } = triggerMeta;
-  const [cronConfig, setCronConfig] = useState<CronConfigState>(() =>
-    subscription
-      ? buildCronConfigFromProviderConfig(subscription.provider_config)
-      : draft?.initialCronConfig ?? makeDefaultCronConfig(),
-  );
-
-  useEffect(() => {
-    if (subscription) {
-      setCronConfig(buildCronConfigFromProviderConfig(subscription.provider_config));
-    } else if (draft?.initialCronConfig) {
-      setCronConfig(draft.initialCronConfig);
-    } else {
-      setCronConfig(makeDefaultCronConfig());
-    }
-  }, [subscription, draft?.initialCronConfig]);
-
-  return { cronConfig, setCronConfig };
-};
+import { CronConfigState, validateCronExpression } from '../../../triggers/utils';
+import { CRON_PRESETS, TIMEZONE_OPTIONS } from '../../../triggers/constants';
 
 export const CronDetailsSection: React.FC<{ cronConfig: CronConfigState }> = ({ cronConfig }) => {
   const validation = validateCronExpression(cronConfig.cronExpression);

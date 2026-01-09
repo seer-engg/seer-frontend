@@ -1,18 +1,18 @@
 import { toast } from '@/components/ui/sonner';
-import type { WorkflowNodeData } from '../../types';
+import type { WorkflowNodeData } from '../../../types';
 import type {
   BindingState,
   GmailConfigState,
   CronConfigState,
   SupabaseConfigState,
-} from '../../triggers/utils';
+} from '../../../triggers/utils';
 import {
   buildBindingsPayload,
   serializeGmailConfig,
   serializeCronConfig,
   serializeSupabaseConfig,
   validateSupabaseConfig,
-} from '../../triggers/utils';
+} from '../../../triggers/utils';
 
 interface SaveTriggerParams {
   triggerKey: string;

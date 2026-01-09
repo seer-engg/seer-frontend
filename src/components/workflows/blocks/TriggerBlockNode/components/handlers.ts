@@ -1,7 +1,7 @@
 import { toast } from '@/components/ui/sonner';
-import type { WorkflowNodeData } from '../../types';
+import type { WorkflowNodeData } from '../../../types';
 import type { InputDef } from '@/types/workflow-spec';
-import type { BindingState } from '../../triggers/utils';
+import type { BindingState } from '../../../triggers/utils';
 import { INPUT_NAME_REGEX } from './inputConstants';
 
 export const createWorkflowInput = async (

@@ -1,19 +1,14 @@
-import { useState, useEffect } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-import type { WorkflowNodeData } from '../../types';
 import {
   SupabaseConfigState,
-  makeDefaultSupabaseConfig,
-  buildSupabaseConfigFromProviderConfig,
   validateSupabaseConfig,
   type SupabaseEventType,
   SUPABASE_EVENT_TYPES,
-} from '../../triggers/utils';
-import { ResourcePicker } from '../../ResourcePicker';
-import type { QuickOption } from './BaseTriggerNode';
+} from '../../../triggers/utils';
+import { ResourcePicker } from '../../../ResourcePicker';
 
 const SUPABASE_PROJECT_PICKER_CONFIG = {
   resource_type: 'supabase_binding',
@@ -29,50 +24,6 @@ const SUPABASE_EVENT_LABELS: Record<SupabaseEventType, string> = {
   DELETE: 'DELETE – Row removed',
 };
 
-export interface SupabaseTriggerConfigProps {
-  triggerMeta: NonNullable<WorkflowNodeData['triggerMeta']>;
-}
-
-export const useSupabaseConfig = (triggerMeta: NonNullable<WorkflowNodeData['triggerMeta']>) => {
-  const { subscription, draft } = triggerMeta;
-  const [supabaseConfig, setSupabaseConfig] = useState<SupabaseConfigState>(() =>
-    subscription
-      ? buildSupabaseConfigFromProviderConfig(subscription.provider_config)
-      : draft?.initialSupabaseConfig ?? makeDefaultSupabaseConfig(),
-  );
-
-  useEffect(() => {
-    if (subscription) {
-      setSupabaseConfig(buildSupabaseConfigFromProviderConfig(subscription.provider_config));
-    } else if (draft?.initialSupabaseConfig) {
-      setSupabaseConfig(draft.initialSupabaseConfig);
-    } else {
-      setSupabaseConfig(makeDefaultSupabaseConfig());
-    }
-  }, [subscription, draft?.initialSupabaseConfig]);
-
-  const handleSupabaseResourceChange = (value: string, label?: string) => {
-    setSupabaseConfig((prev) => ({
-      ...prev,
-      integrationResourceId: value,
-      integrationResourceLabel: label ?? value,
-    }));
-  };
-
-  const handleSupabaseEventChange = (eventType: SupabaseEventType, nextChecked: boolean) => {
-    setSupabaseConfig((prev) => {
-      const exists = prev.events.includes(eventType);
-      const nextEvents = nextChecked && !exists
-        ? [...prev.events, eventType]
-        : !nextChecked && exists
-          ? prev.events.filter((event) => event !== eventType)
-          : prev.events;
-      return { ...prev, events: nextEvents };
-    });
-  };
-
-  return { supabaseConfig, setSupabaseConfig, handleSupabaseResourceChange, handleSupabaseEventChange };
-};
 
 const getProjectLabel = (config: SupabaseConfigState) => {
   return config.integrationResourceLabel || (config.integrationResourceId ? `Resource #${config.integrationResourceId}` : '');

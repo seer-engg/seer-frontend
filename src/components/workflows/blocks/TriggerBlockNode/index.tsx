@@ -1,25 +1,21 @@
 import { memo } from 'react';
 import type { Node as FlowNode, NodeProps } from '@xyflow/react';
-import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 
 import type { WorkflowNodeData } from '../../types';
-import { validateSupabaseConfig } from '../../triggers/utils';
 import {
   GMAIL_TRIGGER_KEY,
   WEBHOOK_TRIGGER_KEY,
   CRON_TRIGGER_KEY,
   SUPABASE_TRIGGER_KEY,
 } from '../../triggers/constants';
-import { useBaseTrigger, WorkflowInputManager, BindingSection } from './BaseTriggerNode';
-import { useGmailConfig, GmailDetailsSection, GmailConfigForm } from './GmailTriggerConfig';
-import { useCronConfig, CronDetailsSection, CronConfigForm } from './CronTriggerConfig';
-import { useSupabaseConfig, SupabaseConfigForm } from './SupabaseTriggerConfig';
-import { WebhookDetailsSection } from './WebhookTriggerConfig';
-import { GMAIL_QUICK_OPTIONS, CRON_QUICK_OPTIONS, SUPABASE_QUICK_OPTIONS } from './constants';
-import { saveTrigger } from './saveHandlers';
-import { TriggerHeader } from './TriggerHeader';
-import { TriggerActions } from './TriggerActions';
+import { useBaseTrigger } from './components/useBaseTrigger';
+import { useGmailConfig } from './triggers/useGmailConfig';
+import { useCronConfig } from './triggers/useCronConfig';
+import { useSupabaseConfig } from './triggers/useSupabaseConfig';
+import { GMAIL_QUICK_OPTIONS, CRON_QUICK_OPTIONS, SUPABASE_QUICK_OPTIONS } from './components/constants';
+import { saveTrigger } from './components/saveHandlers';
+import { TriggerBlockNodeView } from './components/TriggerBlockNodeView';
+import type { TriggerBlockNodeViewProps } from './components/TriggerBlockNodeView';
 
 type WorkflowNode = FlowNode<WorkflowNodeData>;
 
@@ -92,10 +88,8 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   const { supabaseConfig, setSupabaseConfig, handleSupabaseResourceChange, handleSupabaseEventChange } =
     supabaseConfigResult;
 
-  // Supabase validation
-  const supabaseValidation = isSupabaseTrigger ? validateSupabaseConfig(supabaseConfig) : { valid: true, errors: {} };
-
-
+  // Supabase validation (kept if needed elsewhere)
+  // const supabaseValidation = isSupabaseTrigger ? validateSupabaseConfig(supabaseConfig) : { valid: true, errors: {} };
 
   const handleSave = () => {
     saveTrigger({
@@ -128,84 +122,55 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
         ? SUPABASE_QUICK_OPTIONS
         : [];
 
-  return (
-    <div
-      className={cn(
-        'min-w-[260px] rounded-xl border-2 bg-card p-4 shadow-sm transition-[border,box-shadow]',
-        selected ? 'border-primary shadow-lg' : 'border-border',
-      )}
-    >
-      <TriggerHeader
-        descriptor={descriptor}
-        subscription={subscription}
-        triggerKey={triggerKey}
-        isCronTrigger={isCronTrigger}
-        isGmailTrigger={isGmailTrigger}
-        isSupabaseTrigger={isSupabaseTrigger}
-        isToggling={isToggling}
-        handleToggle={handleToggle}
-      />
+  const viewProps: TriggerBlockNodeViewProps = {
+    selected,
+    descriptor,
+    subscription,
+    triggerKey,
+    isCronTrigger,
+    isGmailTrigger,
+    isSupabaseTrigger,
+    isWebhookTrigger,
+    integration,
+    isExpanded,
+    setIsExpanded,
+    isSaving,
+    isDeleting,
+    isToggling,
+    isDraft,
+    handleToggle,
+    handleSave,
+    handleDelete,
+    gmailConfig,
+    setGmailConfig,
+    cronConfig,
+    setCronConfig,
+    supabaseConfig,
+    setSupabaseConfig,
+    handleSupabaseResourceChange,
+    handleSupabaseEventChange,
+    canManageInputs,
+    showInputsEditor,
+    setShowInputsEditor,
+    workflowInputEntries,
+    isSavingWorkflowInput,
+    inputDraft,
+    setInputDraft,
+    handleCreateWorkflowInput,
+    handleRemoveWorkflowInput,
+    hasInputs,
+    bindingState,
+    handleBindingModeChange,
+    handleBindingValueChange,
+    bindingQuickInsert,
+    quickOptions,
+  };
 
-      <div className="mt-3 space-y-3">
-        {isWebhookTrigger && <WebhookDetailsSection subscription={subscription} />}
-        {isGmailTrigger && <GmailDetailsSection integration={integration} />}
-        {isCronTrigger && <CronDetailsSection cronConfig={cronConfig} />}
-
-        <button
-          type="button"
-          className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm"
-          onClick={() => setIsExpanded((prev) => !prev)}
-        >
-          <span>Bindings & configuration</span>
-          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
-
-        {isExpanded && (
-          <div className="space-y-4">
-            {isGmailTrigger && <GmailConfigForm gmailConfig={gmailConfig} setGmailConfig={setGmailConfig} />}
-            {isCronTrigger && <CronConfigForm cronConfig={cronConfig} setCronConfig={setCronConfig} />}
-            {isSupabaseTrigger && (
-              <SupabaseConfigForm
-                supabaseConfig={supabaseConfig}
-                setSupabaseConfig={setSupabaseConfig}
-                handleSupabaseResourceChange={handleSupabaseResourceChange}
-                handleSupabaseEventChange={handleSupabaseEventChange}
-              />
-            )}
-            <WorkflowInputManager
-              canManageInputs={canManageInputs}
-              showInputsEditor={showInputsEditor}
-              setShowInputsEditor={setShowInputsEditor}
-              workflowInputEntries={workflowInputEntries}
-              isSavingWorkflowInput={isSavingWorkflowInput}
-              inputDraft={inputDraft}
-              setInputDraft={setInputDraft}
-              handleCreateWorkflowInput={handleCreateWorkflowInput}
-              handleRemoveWorkflowInput={handleRemoveWorkflowInput}
-            />
-            <BindingSection
-              hasInputs={hasInputs}
-              canManageInputs={canManageInputs}
-              workflowInputEntries={workflowInputEntries}
-              bindingState={bindingState}
-              handleBindingModeChange={handleBindingModeChange}
-              handleBindingValueChange={handleBindingValueChange}
-              bindingQuickInsert={bindingQuickInsert}
-              quickOptions={quickOptions}
-            />
-          </div>
-        )}
-
-        <TriggerActions
-          subscription={subscription}
-          isDraft={isDraft}
-          isSaving={isSaving}
-          isDeleting={isDeleting}
-          handleSave={handleSave}
-          handleDelete={handleDelete}
-        />
-      </div>
-    </div>
-  );
+  return <TriggerBlockNodeContent props={viewProps} />;
 });
+
+// Lightweight content wrapper to reduce parent function length/complexity
+function TriggerBlockNodeContent({ props }: { props: TriggerBlockNodeViewProps }) {
+  return <TriggerBlockNodeView {...props} />;
+}
 

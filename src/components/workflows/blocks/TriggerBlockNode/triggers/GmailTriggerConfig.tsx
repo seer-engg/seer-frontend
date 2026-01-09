@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,37 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-import type { WorkflowNodeData } from '../../types';
-import {
-  GmailConfigState,
-  makeDefaultGmailConfig,
-  buildGmailConfigFromProviderConfig,
-} from '../../triggers/utils';
+import type { WorkflowNodeData } from '../../../types';
+import { GmailConfigState } from '../../../triggers/utils';
 
-export interface GmailTriggerConfigProps {
-  triggerMeta: NonNullable<WorkflowNodeData['triggerMeta']>;
-}
-
-export const useGmailConfig = (triggerMeta: NonNullable<WorkflowNodeData['triggerMeta']>) => {
-  const { subscription, draft } = triggerMeta;
-  const [gmailConfig, setGmailConfig] = useState<GmailConfigState>(() =>
-    subscription
-      ? buildGmailConfigFromProviderConfig(subscription.provider_config)
-      : draft?.initialGmailConfig ?? makeDefaultGmailConfig(),
-  );
-
-  useEffect(() => {
-    if (subscription) {
-      setGmailConfig(buildGmailConfigFromProviderConfig(subscription.provider_config));
-    } else if (draft?.initialGmailConfig) {
-      setGmailConfig(draft.initialGmailConfig);
-    } else {
-      setGmailConfig(makeDefaultGmailConfig());
-    }
-  }, [subscription, draft?.initialGmailConfig]);
-
-  return { gmailConfig, setGmailConfig };
-};
 
 const renderGmailStatus = (ready: boolean, connectionId?: number) => {
   if (ready && connectionId) {

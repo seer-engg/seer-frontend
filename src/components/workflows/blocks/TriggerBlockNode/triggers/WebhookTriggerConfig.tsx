@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Copy, Link } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 
-import type { WorkflowNodeData } from '../../types';
+import type { WorkflowNodeData } from '../../../types';
 
 export interface WebhookDetailsSectionProps {
   subscription: WorkflowNodeData['triggerMeta']['subscription'];
