@@ -1,26 +1,11 @@
 import { Button } from '@/components/ui/button';
 import { Copy, Link } from 'lucide-react';
-import { toast } from '@/components/ui/sonner';
-
 import type { WorkflowNodeData } from '../../../types';
+import { copyToClipboard } from '../components/handlers';
 
 export interface WebhookDetailsSectionProps {
   subscription: WorkflowNodeData['triggerMeta']['subscription'];
 }
-
-const handleCopy = async (value: string | null | undefined, label: string) => {
-  if (!value) {
-    toast.error(`No ${label.toLowerCase()} available`);
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(value);
-    toast.success(`${label} copied`);
-  } catch (error) {
-    console.error('Clipboard error', error);
-    toast.error('Unable to copy');
-  }
-};
 
 export const WebhookDetailsSection: React.FC<WebhookDetailsSectionProps> = ({ subscription }) => {
   if (!subscription) {
@@ -49,7 +34,7 @@ export const WebhookDetailsSection: React.FC<WebhookDetailsSectionProps> = ({ su
             variant="outline"
             size="sm"
             className="h-7 px-3"
-            onClick={() => handleCopy(absoluteWebhookUrl, 'Webhook URL')}
+            onClick={() => copyToClipboard(absoluteWebhookUrl, 'Webhook URL')}
           >
             <Copy className="mr-2 h-3.5 w-3.5" />
             Copy URL
@@ -66,7 +51,7 @@ export const WebhookDetailsSection: React.FC<WebhookDetailsSectionProps> = ({ su
             variant="outline"
             size="sm"
             className="h-7 px-3"
-            onClick={() => handleCopy(subscription.secret_token, 'Signing secret')}
+            onClick={() => copyToClipboard(subscription.secret_token, 'Signing secret')}
           >
             <Copy className="mr-2 h-3.5 w-3.5" />
             Copy secret

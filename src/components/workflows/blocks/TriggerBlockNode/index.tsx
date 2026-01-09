@@ -2,31 +2,18 @@ import { memo } from 'react';
 import type { Node as FlowNode, NodeProps } from '@xyflow/react';
 
 import type { WorkflowNodeData } from '../../types';
-import {
-  GMAIL_TRIGGER_KEY,
-  WEBHOOK_TRIGGER_KEY,
-  CRON_TRIGGER_KEY,
-  SUPABASE_TRIGGER_KEY,
-} from '../../triggers/constants';
+import { WEBHOOK_TRIGGER_KEY } from '../../triggers/constants';
 import { useBaseTrigger } from './components/useBaseTrigger';
-import { useGmailConfig } from './triggers/useGmailConfig';
-import { useCronConfig } from './triggers/useCronConfig';
-import { useSupabaseConfig } from './triggers/useSupabaseConfig';
-import { GMAIL_QUICK_OPTIONS, CRON_QUICK_OPTIONS, SUPABASE_QUICK_OPTIONS } from './components/constants';
-import { saveTrigger } from './components/saveHandlers';
 import { TriggerBlockNodeView } from './components/TriggerBlockNodeView';
-import type { TriggerBlockNodeViewProps } from './components/TriggerBlockNodeView';
+import { saveTrigger } from './components/saveHandlers';
+import { useTriggerConfig } from './triggers/useTriggerConfig';
+import { QUICK_OPTIONS_BY_KIND } from './components/constants';
 
 type WorkflowNode = FlowNode<WorkflowNodeData>;
 
 export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected }: NodeProps<WorkflowNode>) {
   const triggerMeta = data.triggerMeta;
-
-  // Call all hooks unconditionally before any early returns
   const baseTriggerResult = triggerMeta ? useBaseTrigger(triggerMeta) : null;
-  const gmailConfigResult = triggerMeta ? useGmailConfig(triggerMeta) : null;
-  const cronConfigResult = triggerMeta ? useCronConfig(triggerMeta) : null;
-  const supabaseConfigResult = triggerMeta ? useSupabaseConfig(triggerMeta) : null;
 
   if (!triggerMeta) {
     return (
@@ -39,14 +26,10 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
   const { subscription, descriptor, handlers, integration, draft } = triggerMeta;
   const triggerKey = subscription?.trigger_key ?? draft?.triggerKey ?? '';
 
-  // Handle case where handlers might not be provided yet
-  if (!handlers || !baseTriggerResult || !gmailConfigResult || !cronConfigResult || !supabaseConfigResult) {
-    return (
-      <div className="rounded-lg border-2 border-muted bg-card p-4 text-sm text-muted-foreground">
-        Loading trigger configuration...
-      </div>
-    );
-  }
+  const { kind: triggerKind, state: configState, quickOptions, isLoading, buildSavePayload } = useTriggerConfig(
+    triggerKey,
+    triggerMeta,
+  );
 
   // Destructure hook results
   const {
@@ -76,101 +59,59 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     buildBindingsPayload,
   } = baseTriggerResult;
 
-  // Trigger type checks
-  const isSupabaseTrigger = triggerKey === SUPABASE_TRIGGER_KEY;
-  const isWebhookTrigger = triggerKey === WEBHOOK_TRIGGER_KEY || isSupabaseTrigger;
-  const isGmailTrigger = triggerKey === GMAIL_TRIGGER_KEY;
-  const isCronTrigger = triggerKey === CRON_TRIGGER_KEY;
-
-  // Trigger-specific config
-  const { gmailConfig, setGmailConfig } = gmailConfigResult;
-  const { cronConfig, setCronConfig } = cronConfigResult;
-  const { supabaseConfig, setSupabaseConfig, handleSupabaseResourceChange, handleSupabaseEventChange } =
-    supabaseConfigResult;
-
-  // Supabase validation (kept if needed elsewhere)
-  // const supabaseValidation = isSupabaseTrigger ? validateSupabaseConfig(supabaseConfig) : { valid: true, errors: {} };
+  const isWebhookTrigger = triggerKind === 'webhook' && triggerKey === WEBHOOK_TRIGGER_KEY;
 
   const handleSave = () => {
-    saveTrigger({
-      triggerKey,
-      bindingState,
-      subscription,
-      draft,
-      handlers,
-      isDraft,
-      isGmailTrigger,
-      isCronTrigger,
-      isSupabaseTrigger,
-      gmailConfig,
-      cronConfig,
-      supabaseConfig,
-      setIsSaving,
-    });
+    const payload = buildSavePayload({ bindingState, subscription, draft });
+    if (!payload || !handlers) return;
+    saveTrigger({ payload, handlers, setIsSaving });
   };
 
 
 
 
 
-  // Determine quick options based on trigger type
-  const quickOptions = isGmailTrigger
-    ? GMAIL_QUICK_OPTIONS
-    : isCronTrigger
-      ? CRON_QUICK_OPTIONS
-      : isSupabaseTrigger
-        ? SUPABASE_QUICK_OPTIONS
-        : [];
-
-  const viewProps: TriggerBlockNodeViewProps = {
+  const viewProps = {
     selected,
     descriptor,
     subscription,
     triggerKey,
-    isCronTrigger,
-    isGmailTrigger,
-    isSupabaseTrigger,
-    isWebhookTrigger,
+    triggerKind,
     integration,
-    isExpanded,
-    setIsExpanded,
-    isSaving,
-    isDeleting,
-    isToggling,
-    isDraft,
-    handleToggle,
-    handleSave,
-    handleDelete,
-    gmailConfig,
-    setGmailConfig,
-    cronConfig,
-    setCronConfig,
-    supabaseConfig,
-    setSupabaseConfig,
-    handleSupabaseResourceChange,
-    handleSupabaseEventChange,
-    canManageInputs,
-    showInputsEditor,
-    setShowInputsEditor,
-    workflowInputEntries,
-    isSavingWorkflowInput,
-    inputDraft,
-    setInputDraft,
-    handleCreateWorkflowInput,
-    handleRemoveWorkflowInput,
-    hasInputs,
-    bindingState,
-    handleBindingModeChange,
-    handleBindingValueChange,
-    bindingQuickInsert,
-    quickOptions,
-  };
+    base: {
+      isExpanded,
+      setIsExpanded,
+      isDraft,
+      hasInputs,
+      canManageInputs,
+      showInputsEditor,
+      setShowInputsEditor,
+      workflowInputEntries,
+      isSavingWorkflowInput,
+      inputDraft,
+      setInputDraft,
+      handleCreateWorkflowInput,
+      handleRemoveWorkflowInput,
+      bindingState,
+      handleBindingModeChange,
+      handleBindingValueChange,
+      bindingQuickInsert,
+    },
+    actions: {
+      isSaving,
+      isDeleting,
+      isToggling,
+      handleToggle,
+      handleSave,
+      handleDelete,
+    },
+    config: configState,
+    quickOptions: quickOptions ?? (triggerKind === 'webhook' ? [] : QUICK_OPTIONS_BY_KIND[triggerKind] ?? []),
+    isLoading,
+  } as const;
 
-  return <TriggerBlockNodeContent props={viewProps} />;
+  return <TriggerBlockNodeView {...(viewProps as any)} />;
 });
 
-// Lightweight content wrapper to reduce parent function length/complexity
-function TriggerBlockNodeContent({ props }: { props: TriggerBlockNodeViewProps }) {
-  return <TriggerBlockNodeView {...props} />;
-}
+// Removed passthrough wrapper to simplify component
 

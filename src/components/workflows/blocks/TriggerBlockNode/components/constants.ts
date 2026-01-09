@@ -17,6 +17,14 @@ export const SUPABASE_QUICK_OPTIONS = [
   { label: 'Table', path: 'data.table' },
 ];
 
+export type TriggerKind = 'gmail' | 'cron' | 'supabase' | 'webhook';
+
+export const QUICK_OPTIONS_BY_KIND: Record<Exclude<TriggerKind, 'webhook'>, { label: string; path: string }[]> = {
+  gmail: GMAIL_QUICK_OPTIONS,
+  cron: CRON_QUICK_OPTIONS,
+  supabase: SUPABASE_QUICK_OPTIONS,
+};
+
 export const SUPABASE_PROJECT_PICKER_CONFIG = {
   resource_type: 'supabase_binding',
   endpoint: '/api/integrations/supabase/resources/bindings',

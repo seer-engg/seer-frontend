@@ -2,14 +2,13 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar, Database, Link, Mail } from 'lucide-react';
 import type { WorkflowNodeData } from '../../types';
+import type { TriggerKind } from './constants';
 
 interface TriggerHeaderProps {
   descriptor: WorkflowNodeData['triggerMeta']['descriptor'];
   subscription: WorkflowNodeData['triggerMeta']['subscription'];
   triggerKey: string;
-  isCronTrigger: boolean;
-  isGmailTrigger: boolean;
-  isSupabaseTrigger: boolean;
+  triggerKind: TriggerKind;
   isToggling: boolean;
   handleToggle: (nextEnabled: boolean) => void;
 }
@@ -18,9 +17,7 @@ export const TriggerHeader: React.FC<TriggerHeaderProps> = ({
   descriptor,
   subscription,
   triggerKey,
-  isCronTrigger,
-  isGmailTrigger,
-  isSupabaseTrigger,
+  triggerKind,
   isToggling,
   handleToggle,
 }) => {
@@ -28,11 +25,11 @@ export const TriggerHeader: React.FC<TriggerHeaderProps> = ({
     <div className="flex items-start justify-between gap-3">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          {isCronTrigger ? (
+          {triggerKind === 'cron' ? (
             <Calendar className="h-4 w-4 text-primary" />
-          ) : isGmailTrigger ? (
+          ) : triggerKind === 'gmail' ? (
             <Mail className="h-4 w-4 text-primary" />
-          ) : isSupabaseTrigger ? (
+          ) : triggerKind === 'supabase' ? (
             <Database className="h-4 w-4 text-primary" />
           ) : (
             <Link className="h-4 w-4 text-primary" />

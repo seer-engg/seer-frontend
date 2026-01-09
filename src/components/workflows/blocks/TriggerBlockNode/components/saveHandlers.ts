@@ -1,66 +1,32 @@
 import { toast } from '@/components/ui/sonner';
 import type { WorkflowNodeData } from '../../../types';
-import type {
-  BindingState,
-  GmailConfigState,
-  CronConfigState,
-  SupabaseConfigState,
-} from '../../../triggers/utils';
-import {
-  buildBindingsPayload,
-  serializeGmailConfig,
-  serializeCronConfig,
-  serializeSupabaseConfig,
-  validateSupabaseConfig,
-} from '../../../triggers/utils';
+
+type SaveDraftPayload = {
+  mode: 'draft';
+  draftId: string;
+  body: { triggerKey: string; bindings: any; providerConfig?: Record<string, any> };
+};
+
+type SaveSubscriptionPayload = {
+  mode: 'subscription';
+  subscriptionId: number;
+  body: { bindings: Record<string, any>; provider_config?: Record<string, any> };
+};
+
+export type SavePayload = SaveDraftPayload | SaveSubscriptionPayload;
 
 interface SaveTriggerParams {
-  triggerKey: string;
-  bindingState: BindingState;
-  subscription: WorkflowNodeData['triggerMeta']['subscription'];
-  draft: WorkflowNodeData['triggerMeta']['draft'];
+  payload: SavePayload;
   handlers: NonNullable<WorkflowNodeData['triggerMeta']['handlers']>;
-  isDraft: boolean;
-  isGmailTrigger: boolean;
-  isCronTrigger: boolean;
-  isSupabaseTrigger: boolean;
-  gmailConfig: GmailConfigState;
-  cronConfig: CronConfigState;
-  supabaseConfig: SupabaseConfigState;
   setIsSaving: (saving: boolean) => void;
 }
 
-const resolveProviderConfig = (params: {
-  isGmailTrigger: boolean;
-  isCronTrigger: boolean;
-  isSupabaseTrigger: boolean;
-  gmailConfig: GmailConfigState;
-  cronConfig: CronConfigState;
-  supabaseConfig: SupabaseConfigState;
-}) => {
-  if (params.isGmailTrigger) {
-    return serializeGmailConfig(params.gmailConfig);
-  }
-  if (params.isCronTrigger) {
-    return serializeCronConfig(params.cronConfig);
-  }
-  if (params.isSupabaseTrigger) {
-    return serializeSupabaseConfig(params.supabaseConfig);
-  }
-  return undefined;
-};
-
-const saveDraft = async (params: SaveTriggerParams) => {
-  if (!params.handlers.saveDraft || !params.draft) {
+const saveDraft = async ({ payload, handlers }: SaveTriggerParams) => {
+  if (!handlers.saveDraft || payload.mode !== 'draft') {
     return;
   }
-  const providerConfig = resolveProviderConfig(params);
   try {
-    await params.handlers.saveDraft(params.draft.id, {
-      triggerKey: params.triggerKey,
-      bindings: params.bindingState,
-      providerConfig,
-    });
+    await handlers.saveDraft(payload.draftId, payload.body);
     toast.success('Trigger saved');
   } catch (error) {
     console.error('Failed to save trigger draft', error);
@@ -71,19 +37,12 @@ const saveDraft = async (params: SaveTriggerParams) => {
   }
 };
 
-const updateSubscription = async (params: SaveTriggerParams) => {
-  if (!params.handlers.update || !params.subscription) {
+const updateSubscription = async ({ payload, handlers }: SaveTriggerParams) => {
+  if (!handlers.update || payload.mode !== 'subscription') {
     return;
   }
-  const providerConfig = resolveProviderConfig(params);
-  const payload: Parameters<NonNullable<typeof params.handlers.update>>[1] = {
-    bindings: buildBindingsPayload(params.bindingState),
-  };
-  if (providerConfig) {
-    payload.provider_config = providerConfig;
-  }
   try {
-    await params.handlers.update(params.subscription.subscription_id, payload);
+    await handlers.update(payload.subscriptionId, payload.body);
     toast.success('Trigger updated');
   } catch (error) {
     console.error('Failed to save trigger', error);
@@ -95,27 +54,10 @@ const updateSubscription = async (params: SaveTriggerParams) => {
 };
 
 export const saveTrigger = async (params: SaveTriggerParams) => {
-  // Validate Supabase configuration if applicable
-  if (params.isSupabaseTrigger) {
-    const supabaseValidation = validateSupabaseConfig(params.supabaseConfig);
-    if (!supabaseValidation.valid) {
-      const description =
-        supabaseValidation.errors.resource ||
-        supabaseValidation.errors.table ||
-        supabaseValidation.errors.events ||
-        'Complete the Supabase configuration before saving.';
-      toast.error('Supabase configuration incomplete', { description });
-      return;
-    }
-  }
-
   params.setIsSaving(true);
   try {
-    if (params.isDraft) {
-      await saveDraft(params);
-    } else {
-      await updateSubscription(params);
-    }
+    if (params.payload.mode === 'draft') await saveDraft(params);
+    else await updateSubscription(params);
   } finally {
     params.setIsSaving(false);
   }
