@@ -96,7 +96,20 @@ export function BlockConfigPanel({
           ...config,
           input_refs: inputRefs,
         };
+        console.log('[BlockConfigPanel] Calling onChange:', {
+          nodeType: node.data.type,
+          nodeId: node.id,
+          configKeys: Object.keys(config),
+          mergedConfigKeys: Object.keys(mergedConfig),
+          config,
+        });
         onChange(mergedConfig, oauthScope);
+      } else {
+        console.log('[BlockConfigPanel] Skipping onChange (not synced yet):', {
+          nodeType: node.data.type,
+          currentNodeId: node.id,
+          syncedNodeId: lastSyncedNodeStateRef.current.nodeId,
+        });
       }
     }
   }, [config, inputRefs, oauthScope, onChange, node]);

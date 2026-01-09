@@ -6,26 +6,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
-import { Kbd } from '@/components/ui/kbd';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { toast } from 'sonner';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
+import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { BlockConfigPanel } from './BlockConfigPanel';
 import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions } from './types';
 import type { InputDef } from '@/types/workflow-spec';
@@ -62,13 +46,9 @@ export function WorkflowNodeConfigDialog({
   onUpdate,
   workflowInputs,
 }: WorkflowNodeConfigDialogProps) {
-  const isMobile = useIsMobile();
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [pendingClose, setPendingClose] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  // Track local edits from BlockConfigPanel (for change detection without triggering autosave)
+  // Track local edits from BlockConfigPanel (for change detection and autosave)
   const [localConfig, setLocalConfig] = useState<Record<string, any> | null>(null);
   const [localOauthScope, setLocalOauthScope] = useState<string | undefined>(undefined);
 
@@ -97,30 +77,13 @@ export function WorkflowNodeConfigDialog({
       originalNodeRef.current = node ? JSON.parse(JSON.stringify(node)) : null;
       setLocalConfig(null);
       setLocalOauthScope(undefined);
-      setHasUnsavedChanges(false);
-      setPendingClose(false);
+      console.log('[WorkflowNodeConfigDialog] Node changed, reset state:', {
+        nodeType: node?.data.type,
+        nodeId: node?.id,
+        originalConfig: originalNodeRef.current?.data.config,
+      });
     }
   }, [node?.id]);
-
-  // Detect changes by comparing LOCAL state with original node
-  useEffect(() => {
-    if (!node || !originalNodeRef.current) {
-      setHasUnsavedChanges(false);
-      return;
-    }
-
-    // Use local state if available, otherwise fall back to node state
-    const currentConfig = localConfig ?? node.data.config;
-    const currentOauth = localOauthScope ?? node.data.oauth_scope;
-    const originalConfig = originalNodeRef.current.data.config;
-    const originalOauth = originalNodeRef.current.data.oauth_scope;
-
-    const hasChanges =
-      JSON.stringify(currentConfig) !== JSON.stringify(originalConfig) ||
-      currentOauth !== originalOauth;
-
-    setHasUnsavedChanges(hasChanges);
-  }, [node, localConfig, localOauthScope]);
 
   // Validate configuration (use local state if available)
   useEffect(() => {
@@ -157,17 +120,17 @@ export function WorkflowNodeConfigDialog({
 
   // Compute validation state
   const hasValidationErrors = Object.keys(validationErrors).length > 0;
-  const validationErrorCount = Object.keys(validationErrors).length;
 
-  // Save handler - uses LOCAL state, not node state
-  const handleSave = useCallback(async () => {
-    if (!node || !hasUnsavedChanges || hasValidationErrors) return;
+  // Debounced autosave hook - saves changes after 800ms of inactivity
+  const { triggerSave } = useDebouncedAutosave({
+    data: { localConfig, localOauthScope, nodeId: node?.id },
+    onSave: async (data) => {
+      if (!node) return;
 
-    // Use local state if available, otherwise fall back to node state
-    const finalConfig = localConfig ?? node.data.config;
-    const finalOauthScope = localOauthScope ?? node.data.oauth_scope;
+      // Use local state if available, otherwise fall back to node state
+      const finalConfig = data.localConfig ?? node.data.config;
+      const finalOauthScope = data.localOauthScope ?? node.data.oauth_scope;
 
-    try {
       await onUpdate(
         node.id,
         {
@@ -176,189 +139,107 @@ export function WorkflowNodeConfigDialog({
         },
         { persist: true },
       );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save block configuration';
-      toast.error('Failed to save configuration', {
-        description: message,
-      });
-      return;
-    }
 
-    // Reset local state after save
-    setLocalConfig(null);
-    setLocalOauthScope(undefined);
-    setHasUnsavedChanges(false);
-
-    // Update original ref with the saved state
-    originalNodeRef.current = node
-      ? JSON.parse(
-          JSON.stringify({
-            ...node,
-            data: { ...node.data, config: finalConfig, oauth_scope: finalOauthScope },
-          }),
-        )
-      : null;
-
-    toast.success('Configuration saved', {
-      description: 'Block configuration has been saved successfully',
-    });
-
-    if (pendingClose) {
-      setPendingClose(false);
-      onOpenChange(false);
-    }
-  }, [
-    node,
-    localConfig,
-    localOauthScope,
-    hasUnsavedChanges,
-    hasValidationErrors,
-    onUpdate,
-    onOpenChange,
-    pendingClose,
-  ]);
-
-  // Handle dialog close attempt
-  const handleOpenChange = useCallback(
-    (newOpen: boolean) => {
-      if (!newOpen && hasUnsavedChanges) {
-        setShowDiscardDialog(true);
-        return;
-      }
-      onOpenChange(newOpen);
+      // Update original ref with the saved state
+      originalNodeRef.current = node
+        ? JSON.parse(
+            JSON.stringify({
+              ...node,
+              data: { ...node.data, config: finalConfig, oauth_scope: finalOauthScope },
+            }),
+          )
+        : null;
     },
-    [hasUnsavedChanges, onOpenChange]
-  );
-
-  // Discard changes and close
-  const handleDiscard = useCallback(() => {
-    setShowDiscardDialog(false);
-    setHasUnsavedChanges(false);
-    onOpenChange(false);
-  }, [onOpenChange]);
-
-  // Save and close
-  const handleSaveAndClose = useCallback(() => {
-    setShowDiscardDialog(false);
-    setPendingClose(true);
-    void handleSave();
-  }, [handleSave]);
-
-  // Handle local config changes from BlockConfigPanel (for change detection only, doesn't trigger parent update)
-  const handleLocalConfigChange = useCallback(
-    (config: Record<string, any>, oauthScope?: string) => {
-      // Just update local state - no parent update, no autosave trigger
-      setLocalConfig(config);
-      setLocalOauthScope(oauthScope);
+    options: {
+      delay: 800,
+      enabled: open, // Allow autosave even with validation errors - save work-in-progress
     },
-    []
-  );
-
-  // Register Ctrl+S shortcut
-  useKeyboardShortcut({
-    key: 's',
-    modifiers: { ctrl: true, meta: true },
-    handler: () => {
-      void handleSave();
-    },
-    category: 'Dialog Actions',
-    description: 'Save configuration',
-    scope: 'dialog',
-    enabled: open && hasUnsavedChanges && !hasValidationErrors,
   });
 
+  // Trigger autosave when local config changes
+  useEffect(() => {
+    if (!node || !originalNodeRef.current || !localConfig) return;
+
+    // Only trigger when we have LOCAL changes (not when node updates from elsewhere)
+    const currentConfig = localConfig;
+    const currentOauth = localOauthScope ?? node.data.oauth_scope;
+    const originalConfig = originalNodeRef.current.data.config;
+    const originalOauth = originalNodeRef.current.data.oauth_scope;
+
+    const hasChanges =
+      JSON.stringify(currentConfig) !== JSON.stringify(originalConfig) ||
+      currentOauth !== originalOauth;
+
+    console.log('[WorkflowNodeConfigDialog] Checking for changes:', {
+      nodeType: node.data.type,
+      hasChanges,
+      hasValidationErrors,
+      localConfigExists: !!localConfig,
+      currentConfig,
+      originalConfig,
+    });
+
+    if (hasChanges) {
+      console.log('[WorkflowNodeConfigDialog] Triggering autosave for', node.data.type);
+      triggerSave();
+    }
+  }, [localConfig, localOauthScope, triggerSave]);
+
+  // Handle local config changes from BlockConfigPanel
+  const handleLocalConfigChange = useCallback(
+    (config: Record<string, any>, oauthScope?: string) => {
+      // BlockConfigPanel includes input_refs in the merged config, but we need to extract it
+      // to compare properly with the original node config
+      const { input_refs, ...configWithoutRefs } = config;
+
+      console.log('[WorkflowNodeConfigDialog] Local config changed:', {
+        config: configWithoutRefs,
+        input_refs,
+        oauthScope,
+        nodeType: node?.data.type,
+        nodeId: node?.id,
+      });
+
+      // Store the config WITHOUT input_refs (input_refs are handled separately by BlockConfigPanel)
+      setLocalConfig(configWithoutRefs);
+      setLocalOauthScope(oauthScope);
+    },
+    [node]
+  );
+
   return (
-    <>
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader className="text-left">
-            <DialogTitle>{node?.data.label ?? 'Configure block'}</DialogTitle>
-            <DialogDescription>
-              Update block parameters, inputs, and outputs.
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader className="text-left">
+          <DialogTitle>{node?.data.label ?? 'Configure block'}</DialogTitle>
+          <DialogDescription>
+            Update block parameters, inputs, and outputs. Changes are saved automatically.
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="max-h-[60vh] overflow-y-auto pr-2 scrollbar-thin">
-            {node ? (
-              <BlockConfigPanel
-                node={node}
-                onUpdate={onUpdate}
-                allNodes={allNodes}
-                allEdges={allEdges}
-                autoSave={false}
-                variant="inline"
-                liveUpdate={false}
-                showSaveButton={false}
-                validationErrors={validationErrors}
-                onChange={handleLocalConfigChange}
+        <div className="max-h-[60vh] overflow-y-auto pr-2 scrollbar-thin">
+          {node ? (
+            <BlockConfigPanel
+              node={node}
+              onUpdate={onUpdate}
+              allNodes={allNodes}
+              allEdges={allEdges}
+              autoSave={false}
+              variant="inline"
+              liveUpdate={false}
+              showSaveButton={false}
+              validationErrors={validationErrors}
+              onChange={handleLocalConfigChange}
               workflowInputs={workflowInputs}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Select a block to configure.
-              </p>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => handleOpenChange(false)}>
-              Cancel {!isMobile && <Kbd className="ml-1.5">Esc</Kbd>}
-            </Button>
-            {hasValidationErrors ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                  <Button
-                    onClick={() => void handleSave()}
-                    disabled={!hasUnsavedChanges || hasValidationErrors}
-                  >
-                      Save {!isMobile && <Kbd className="ml-1.5">⌘S</Kbd>}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">
-                    {validationErrorCount} validation{' '}
-                    {validationErrorCount === 1 ? 'error' : 'errors'}. Fix errors
-                    before saving.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <Button onClick={() => void handleSave()} disabled={!hasUnsavedChanges}>
-                Save {!isMobile && <Kbd className="ml-1.5">⌘S</Kbd>}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Discard changes confirmation */}
-      <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved changes. Would you like to save them before
-              closing?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Continue Editing</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSaveAndClose}>
-              Save & Close
-            </AlertDialogAction>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={handleDiscard}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Discard Changes
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Select a block to configure.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
