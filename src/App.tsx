@@ -14,6 +14,7 @@ import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { getStoredSignupSource } from "./utils/utm-tracker";
 import { KeyboardShortcutProvider } from "@/hooks/useKeyboardShortcuts";
+import { StoreInitializer } from "@/components/StoreInitializer";
 
 
 
@@ -32,6 +33,7 @@ const App = () => (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <TooltipProvider>
         <KeyboardShortcutProvider>
+          <StoreInitializer />
           <Toaster />
           <Sonner />
           <BrowserRouter>

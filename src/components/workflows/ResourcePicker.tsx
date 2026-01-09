@@ -34,8 +34,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { backendApiClient, bindSupabaseProject, bindSupabaseProjectManual } from '@/lib/api-client';
 import type { IntegrationResource } from '@/lib/api-client';
-import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import { useToast } from '@/hooks/use-toast';
+import { useToolsStore } from '@/stores/toolsStore';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -138,12 +138,12 @@ export function ResourcePicker({
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const { toast } = useToast();
-  const {
-    connectIntegration,
-    getConnectionId,
-    isIntegrationConnected,
-    toolsWithStatus,
-  } = useIntegrationTools();
+  // Phase 2: Direct store access instead of wrapper hook
+  // FIXED: Individual selectors instead of useShallow
+  const connectIntegration = useToolsStore((state) => state.connectIntegration);
+  const getConnectionId = useToolsStore((state) => state.getConnectionId);
+  const isIntegrationConnected = useToolsStore((state) => state.isIntegrationConnected);
+  const toolsWithStatus = useToolsStore((state) => state.toolsWithStatus);
 
   const resetManualForm = useCallback(() => {
     setManualForm(buildDefaultSupabaseManualForm());

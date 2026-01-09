@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
-import { useShallow } from 'zustand/shallow';
 
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,25 +37,14 @@ export function BuildAndChatPanel({
   isLoadingTriggers = false,
   triggerInfoMessage,
 }: BuildAndChatPanelProps) {
-  const { nodes, edges } = useCanvasStore(
-    useShallow((state) => ({
-      nodes: state.nodes,
-      edges: state.edges,
-    })),
-  );
-  const {
-    buildChatPanelCollapsed,
-    setBuildChatPanelCollapsed,
-    proposalPreview,
-    setProposalPreview,
-  } = useUIStore(
-    useShallow((state) => ({
-      buildChatPanelCollapsed: state.buildChatPanelCollapsed,
-      setBuildChatPanelCollapsed: state.setBuildChatPanelCollapsed,
-      proposalPreview: state.proposalPreview,
-      setProposalPreview: state.setProposalPreview,
-    })),
-  );
+  // FIXED: Individual selectors instead of useShallow
+  const nodes = useCanvasStore((state) => state.nodes);
+  const edges = useCanvasStore((state) => state.edges);
+  // FIXED: Individual selectors instead of useShallow
+  const buildChatPanelCollapsed = useUIStore((state) => state.buildChatPanelCollapsed);
+  const setBuildChatPanelCollapsed = useUIStore((state) => state.setBuildChatPanelCollapsed);
+  const proposalPreview = useUIStore((state) => state.proposalPreview);
+  const setProposalPreview = useUIStore((state) => state.setProposalPreview);
 
   const collapsed = buildChatPanelCollapsed;
   const activePreviewProposalId = proposalPreview?.proposal.id ?? null;
@@ -65,50 +53,29 @@ export function BuildAndChatPanel({
     setBuildChatPanelCollapsed(!collapsed);
   };
 
-  const {
-    input,
-    isLoading,
-    selectedModel,
-    currentSessionId,
-    currentThreadId,
-    proposalActionLoading,
-    setMessages,
-    setInput,
-    setIsLoading,
-    setSelectedModel,
-    setCurrentSessionId,
-    setCurrentThreadId,
-    setProposalActionLoading,
-    clearMessages,
-  } = useChatStore(
-    useShallow((state) => ({
-      input: state.input,
-      isLoading: state.isLoading,
-      selectedModel: state.selectedModel,
-      currentSessionId: state.currentSessionId,
-      currentThreadId: state.currentThreadId,
-      proposalActionLoading: state.proposalActionLoading,
-      setMessages: state.setMessages,
-      setInput: state.setInput,
-      setIsLoading: state.setIsLoading,
-      setSelectedModel: state.setSelectedModel,
-      setCurrentSessionId: state.setCurrentSessionId,
-      setCurrentThreadId: state.setCurrentThreadId,
-      setProposalActionLoading: state.setProposalActionLoading,
-      clearMessages: state.clearMessages,
-    })),
-  );
+  // FIXED: Individual selectors instead of useShallow
+  const input = useChatStore((state) => state.input);
+  const isLoading = useChatStore((state) => state.isLoading);
+  const selectedModel = useChatStore((state) => state.selectedModel);
+  const currentSessionId = useChatStore((state) => state.currentSessionId);
+  const currentThreadId = useChatStore((state) => state.currentThreadId);
+  const proposalActionLoading = useChatStore((state) => state.proposalActionLoading);
+  const setMessages = useChatStore((state) => state.setMessages);
+  const setInput = useChatStore((state) => state.setInput);
+  const setIsLoading = useChatStore((state) => state.setIsLoading);
+  const setSelectedModel = useChatStore((state) => state.setSelectedModel);
+  const setCurrentSessionId = useChatStore((state) => state.setCurrentSessionId);
+  const setCurrentThreadId = useChatStore((state) => state.setCurrentThreadId);
+  const setProposalActionLoading = useChatStore((state) => state.setProposalActionLoading);
+  const clearMessages = useChatStore((state) => state.clearMessages);
   const queryClient = useQueryClient();
 
   // Use Tools Store for tools instead of fetching again here
-  const { tools: rawTools, toolsLoading, toolsLoaded, refreshIntegrationTools } = useToolsStore(
-    useShallow((state) => ({
-      tools: state.tools,
-      toolsLoading: state.toolsLoading,
-      toolsLoaded: state.toolsLoaded,
-      refreshIntegrationTools: state.refreshIntegrationTools,
-    })),
-  );
+  // FIXED: Individual selectors instead of useShallow
+  const rawTools = useToolsStore((state) => state.tools);
+  const toolsLoading = useToolsStore((state) => state.toolsLoading);
+  const toolsLoaded = useToolsStore((state) => state.toolsLoaded);
+  const refreshIntegrationTools = useToolsStore((state) => state.refreshIntegrationTools);
 
   useEffect(() => {
     if (!toolsLoaded && !toolsLoading) {

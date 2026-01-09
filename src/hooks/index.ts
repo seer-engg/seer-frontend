@@ -1,23 +1,16 @@
 /**
  * Hooks Index
- * 
+ *
  * Exports all custom hooks for the application.
  */
 
-// Integration tools
-export {
-  useIntegrationTools,
-  useToolIntegration,
-  type ToolMetadata,
-  type ToolIntegrationStatus,
-} from './useIntegrationTools';
+// Phase 2: Wrapper hooks removed, types moved to stores
+// Integration tools - only export helper hook with business logic
+export { useToolIntegration } from './useToolIntegration';
 
-// Workflow
-export {
-  useWorkflowBuilder,
-  type WorkflowListItem,
-  type WorkflowModel,
-} from './useWorkflowBuilder';
+// Re-export types from stores for convenience
+export type { ToolMetadata, ToolIntegrationStatus } from '@/stores/toolsStore';
+export type { WorkflowListItem, WorkflowModel } from '@/stores/workflowStore';
 
 
 // UI hooks

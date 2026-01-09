@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -54,13 +54,14 @@ function getDragData(item: UnifiedItem) {
   return null;
 }
 
-function SimpleCard({ item, onDragStart, onClick }: {
+const SimpleCard = forwardRef<HTMLDivElement, {
   item: UnifiedItem;
   onDragStart: (e: React.DragEvent) => void;
   onClick: () => void;
-}) {
+}>(({ item, onDragStart, onClick }, ref) => {
   return (
     <Card
+      ref={ref}
       draggable
       onDragStart={onDragStart}
       className="relative cursor-grab active:cursor-grabbing hover:bg-accent transition-colors"
@@ -80,7 +81,8 @@ function SimpleCard({ item, onDragStart, onClick }: {
       </CardContent>
     </Card>
   );
-}
+});
+SimpleCard.displayName = 'SimpleCard';
 
 function StatusBadge({ status, badge }: { status?: string; badge: string }) {
   const badgeClass = status === 'ready'
@@ -123,14 +125,15 @@ function TriggerActions({ item }: { item: UnifiedItem }) {
   );
 }
 
-function TriggerCard({ item, onDragStart, onClick, onKeyDown }: {
+const TriggerCard = forwardRef<HTMLDivElement, {
   item: UnifiedItem;
   onDragStart: (e: React.DragEvent) => void;
   onClick: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
-}) {
+}>(({ item, onDragStart, onClick, onKeyDown }, ref) => {
   return (
     <Card
+      ref={ref}
       draggable={!item.disabled}
       onDragStart={onDragStart}
       role="button"
@@ -155,7 +158,8 @@ function TriggerCard({ item, onDragStart, onClick, onKeyDown }: {
       </CardContent>
     </Card>
   );
-}
+});
+TriggerCard.displayName = 'TriggerCard';
 
 export function UnifiedBuildItem({ item, onItemClick }: UnifiedBuildItemProps) {
   const handleDragStart = (e: React.DragEvent) => {

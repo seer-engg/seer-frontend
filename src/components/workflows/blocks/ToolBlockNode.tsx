@@ -9,7 +9,8 @@ import { Handle, Position, NodeProps, type Node as FlowNode } from '@xyflow/reac
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
-import { useToolIntegration, ToolMetadata } from '@/hooks/useIntegrationTools';
+import { useToolIntegration } from '@/hooks/useToolIntegration';
+import type { ToolMetadata } from '@/stores/toolsStore';
 import { backendApiClient } from '@/lib/api-client';
 import { 
   Wrench, 

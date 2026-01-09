@@ -44,11 +44,22 @@ export interface WorkflowStore {
   isDeleting: boolean;
   isRestoringVersion: boolean;
   isExecuting: boolean;
+  // Phase 1: Consolidated workflow UI state (previously in Workflows.tsx local state)
+  selectedWorkflowId: string | null;
+  workflowName: string;
+  workflowInputData: Record<string, unknown>;
+  isLoadingWorkflow: boolean;
   loadWorkflows: () => Promise<WorkflowListItem[]>;
   getWorkflow: (workflowId: string) => Promise<WorkflowModel>;
   loadWorkflow: (workflowId: string) => Promise<WorkflowModel>;
   setCurrentWorkflowId: (workflowId: string | null) => void;
   setSelectedNodeId: (nodeId: string | null) => void;
+  // Phase 1: Setter actions for consolidated state
+  setSelectedWorkflowId: (id: string | null) => void;
+  setWorkflowName: (name: string) => void;
+  setWorkflowInputData: (data: Record<string, unknown>) => void;
+  clearWorkflowInputData: () => void;
+  setIsLoadingWorkflow: (isLoading: boolean) => void;
   createWorkflow: (
     name: string,
     description: string | undefined,
@@ -132,6 +143,11 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   isDeleting: false,
   isRestoringVersion: false,
   isExecuting: false,
+  // Phase 1: Initial values for consolidated state
+  selectedWorkflowId: null,
+  workflowName: 'My Workflow',
+  workflowInputData: {},
+  isLoadingWorkflow: false,
   async loadWorkflows() {
     set({ isLoading: true, error: null });
     try {
@@ -173,6 +189,22 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   },
   setSelectedNodeId(nodeId) {
     set({ selectedNodeId: nodeId });
+  },
+  // Phase 1: Implementation of consolidated state setters
+  setSelectedWorkflowId(id) {
+    set({ selectedWorkflowId: id });
+  },
+  setWorkflowName(name) {
+    set({ workflowName: name });
+  },
+  setWorkflowInputData(data) {
+    set({ workflowInputData: data });
+  },
+  clearWorkflowInputData() {
+    set({ workflowInputData: {} });
+  },
+  setIsLoadingWorkflow(isLoading) {
+    set({ isLoadingWorkflow: isLoading });
   },
   async createWorkflow(name, description, graph) {
     set({ isCreating: true, error: null });

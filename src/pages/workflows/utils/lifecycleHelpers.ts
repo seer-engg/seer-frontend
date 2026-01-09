@@ -1,6 +1,6 @@
 import type { Node } from '@xyflow/react';
 import type { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
-import type { WorkflowModel } from '@/hooks/useWorkflowBuilder';
+import type { WorkflowModel } from '@/stores/workflowStore';
 import type { InputDef } from '@/types/workflow-spec';
 import { toast } from '@/components/ui/sonner';
 import { BackendAPIError } from '@/lib/api-client';

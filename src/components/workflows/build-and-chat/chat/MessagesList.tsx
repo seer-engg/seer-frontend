@@ -4,7 +4,6 @@ import { Bot, FileText } from 'lucide-react';
 
 import { MessageBubble } from './MessageBubble';
 import { useChatStore } from '@/stores';
-import { useShallow } from 'zustand/shallow';
 
 interface MessagesListProps {
   filterSystemPrompt: (content: string) => string;
@@ -21,13 +20,10 @@ export function MessagesList({
   onRejectProposal,
   activePreviewProposalId,
 }: MessagesListProps) {
-  const { messages, isLoading, proposalActionLoading } = useChatStore(
-    useShallow((state) => ({
-      messages: state.messages,
-      isLoading: state.isLoading,
-      proposalActionLoading: state.proposalActionLoading,
-    })),
-  );
+  // FIXED: Individual selectors instead of useShallow
+  const messages = useChatStore((state) => state.messages);
+  const isLoading = useChatStore((state) => state.isLoading);
+  const proposalActionLoading = useChatStore((state) => state.proposalActionLoading);
   const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set());
 
   const noMessages = useMemo(() => messages.length === 0, [messages.length]);

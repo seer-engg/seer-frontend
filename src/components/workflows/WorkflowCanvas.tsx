@@ -36,7 +36,6 @@ import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
 import { TriggerBlockNode } from './blocks/TriggerBlockNode';
 import { useCanvasStore } from '@/stores';
-import { useShallow } from 'zustand/shallow';
 import { useCanvasDragDrop } from '../../hooks/useCanvasDragDrop';
 import { useConnectionValidation } from '../../hooks/useConnectionValidation';
 
@@ -81,25 +80,14 @@ export function WorkflowCanvas({
   className,
   readOnly = false,
 }: WorkflowCanvasProps) {
-  const {
-    nodes,
-    edges,
-    setNodes,
-    setEdges,
-    setSelectedNodeId,
-    selectedNodeId,
-    updateNode,
-  } = useCanvasStore(
-    useShallow((state) => ({
-      nodes: state.nodes,
-      edges: state.edges,
-      setNodes: state.setNodes,
-      setEdges: state.setEdges,
-      setSelectedNodeId: state.setSelectedNodeId,
-      selectedNodeId: state.selectedNodeId,
-      updateNode: state.updateNode,
-    })),
-  );
+  // FIXED: Individual selectors instead of useShallow
+  const nodes = useCanvasStore((state) => state.nodes);
+  const edges = useCanvasStore((state) => state.edges);
+  const setNodes = useCanvasStore((state) => state.setNodes);
+  const setEdges = useCanvasStore((state) => state.setEdges);
+  const setSelectedNodeId = useCanvasStore((state) => state.setSelectedNodeId);
+  const selectedNodeId = useCanvasStore((state) => state.selectedNodeId);
+  const updateNode = useCanvasStore((state) => state.updateNode);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const workflowNodes = previewGraph?.nodes ?? nodes;
@@ -133,11 +121,24 @@ export function WorkflowCanvas({
       if (readOnly) {
         return;
       }
-      const updatedNodes = applyNodeChanges<Node<WorkflowNodeData>>(changes, renderedNodes);
-      // Don't filter out trigger nodes - they should be part of the workflow
-      setNodes(updatedNodes);
+      // PHASE 3 FIX: Don't depend on renderedNodes - use functional update instead
+      // This prevents infinite loops when renderedNodes changes after setNodes
+      setNodes((currentNodes) => {
+        // Apply selection state to current nodes before applying changes
+        const nodesWithSelection = currentNodes.map((node) => {
+          const isSelected = selectedNodeId ? node.id === selectedNodeId : false;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              selected: isSelected,
+            },
+          };
+        });
+        return applyNodeChanges<Node<WorkflowNodeData>>(changes, nodesWithSelection);
+      });
     },
-    [renderedNodes, readOnly, setNodes],
+    [readOnly, setNodes, selectedNodeId],
   );
 
   const handleEdgesChange = useCallback(

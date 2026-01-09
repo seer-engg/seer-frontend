@@ -1,20 +1,12 @@
 import { useCallback, useEffect } from 'react';
-import { useShallow } from 'zustand/shallow';
 
 import { useWorkflowStore } from '@/stores/workflowStore';
 
 export function useWorkflowVersions(workflowId: string | null) {
-  const {
-    workflowVersions,
-    loadWorkflowVersions,
-    invalidateWorkflowVersions,
-  } = useWorkflowStore(
-    useShallow((state) => ({
-      workflowVersions: state.workflowVersions,
-      loadWorkflowVersions: state.loadWorkflowVersions,
-      invalidateWorkflowVersions: state.invalidateWorkflowVersions,
-    })),
-  );
+  // FIXED: Individual selectors instead of useShallow
+  const workflowVersions = useWorkflowStore((state) => state.workflowVersions);
+  const loadWorkflowVersions = useWorkflowStore((state) => state.loadWorkflowVersions);
+  const invalidateWorkflowVersions = useWorkflowStore((state) => state.invalidateWorkflowVersions);
 
   const versionState = workflowId ? workflowVersions[workflowId] : undefined;
   const versionsResponse = versionState?.response ?? null;

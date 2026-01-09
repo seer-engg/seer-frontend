@@ -30,6 +30,8 @@ export interface UIStore {
   isInputDialogOpen: boolean;
   buildChatPanelCollapsed: boolean;
   proposalPreview: WorkflowProposalPreview | null;
+  // Phase 1: Workflow execution state (previously in useWorkflowLifecycle hook)
+  lastRunVersionId: number | null;
   openConfigDialog: () => void;
   closeConfigDialog: () => void;
   setConfigDialogOpen: (open: boolean) => void;
@@ -39,6 +41,8 @@ export interface UIStore {
   toggleBuildChatPanel: () => void;
   setBuildChatPanelCollapsed: (collapsed: boolean) => void;
   setProposalPreview: (preview: WorkflowProposalPreview | null) => void;
+  // Phase 1: Setter for execution state
+  setLastRunVersionId: (id: number | null) => void;
   resetUIState: () => void;
 }
 
@@ -50,6 +54,7 @@ const initialState: Pick<
   | 'isInputDialogOpen'
   | 'buildChatPanelCollapsed'
   | 'proposalPreview'
+  | 'lastRunVersionId'
 > = {
   isConfigDialogOpen: false,
   isImportDialogOpen: false,
@@ -57,6 +62,7 @@ const initialState: Pick<
   isInputDialogOpen: false,
   buildChatPanelCollapsed: false,
   proposalPreview: null,
+  lastRunVersionId: null,
 };
 
 export const useUIStore = createStore(
@@ -75,6 +81,8 @@ export const useUIStore = createStore(
         })),
       setBuildChatPanelCollapsed: (collapsed) => set({ buildChatPanelCollapsed: collapsed }),
       setProposalPreview: (preview) => set({ proposalPreview: preview }),
+      // Phase 1: Implementation of execution state setter
+      setLastRunVersionId: (id) => set({ lastRunVersionId: id }),
       resetUIState: () => set({ ...initialState }),
     }),
     {

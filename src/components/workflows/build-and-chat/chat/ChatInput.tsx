@@ -14,7 +14,6 @@ import { Send } from 'lucide-react';
 
 import type { ModelInfo } from '../types';
 import { useChatStore } from '@/stores';
-import { useShallow } from 'zustand/shallow';
 
 interface ChatInputProps {
   onSend: () => void;
@@ -27,15 +26,12 @@ export function ChatInput({
   models,
   isLoadingModels,
 }: ChatInputProps) {
-  const { input, isLoading, selectedModel, setInput, setSelectedModel } = useChatStore(
-    useShallow((state) => ({
-      input: state.input,
-      isLoading: state.isLoading,
-      selectedModel: state.selectedModel,
-      setInput: state.setInput,
-      setSelectedModel: state.setSelectedModel,
-    })),
-  );
+  // FIXED: Individual selectors instead of useShallow
+  const input = useChatStore((state) => state.input);
+  const isLoading = useChatStore((state) => state.isLoading);
+  const selectedModel = useChatStore((state) => state.selectedModel);
+  const setInput = useChatStore((state) => state.setInput);
+  const setSelectedModel = useChatStore((state) => state.setSelectedModel);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {

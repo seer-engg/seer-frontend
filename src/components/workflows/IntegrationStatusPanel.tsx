@@ -6,8 +6,8 @@
  */
 import { useMemo } from 'react';
 import { Node } from '@xyflow/react';
-import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import { IntegrationType } from '@/lib/integrations/client';
+import { useToolsStore } from '@/stores/toolsStore';
 import { cn } from '@/lib/utils';
 import { getToolNamesFromNodes } from './WorkflowCanvas';
 import type { WorkflowNodeData } from './types';
@@ -80,13 +80,20 @@ export function IntegrationStatusPanel({
   compact = false,
   className,
 }: IntegrationStatusPanelProps) {
-  const { 
-    toolsWithStatus, 
-    isLoading, 
+  // Phase 2: Direct store access instead of wrapper hook
+  const {
+    toolsWithStatus,
+    isLoading,
     connectedIntegrations,
     connectIntegration,
     refresh,
-  } = useIntegrationTools();
+  // Phase 2: Direct store access instead of wrapper hook - FIXED: Individual selectors
+  const toolsWithStatus = useToolsStore((state) => state.toolsWithStatus);
+  const isLoading = useToolsStore((state) => state.toolsLoading);
+  const connectedIntegrations = useToolsStore((state) => state.connectedIntegrations);
+  const connectIntegration = useToolsStore((state) => state.connectIntegration);
+  const refresh = useToolsStore((state) => state.refreshIntegrationTools);
+  );
 
   // Extract tool names from nodes if not provided
   const toolNamesFromNodes = useMemo(() => {
@@ -380,18 +387,22 @@ export function IntegrationStatusPanel({
 /**
  * Compact inline status badge for a single integration
  */
-export function IntegrationBadge({ 
+export function IntegrationBadge({
   type,
   toolNames,
   showConnect = true,
-  className 
-}: { 
+  className
+}: {
   type: IntegrationType;
   toolNames?: string[];
   showConnect?: boolean;
   className?: string;
 }) {
-  const { isIntegrationConnected, connectIntegration, isLoading } = useIntegrationTools();
+  // Phase 2: Direct store access instead of wrapper hook
+  // Phase 2: Direct store access instead of wrapper hook - FIXED: Individual selectors
+  const isIntegrationConnected = useToolsStore((state) => state.isIntegrationConnected);
+  const connectIntegration = useToolsStore((state) => state.connectIntegration);
+  const isLoading = useToolsStore((state) => state.toolsLoading);
   const isConnected = isIntegrationConnected(type);
   const meta = INTEGRATION_META[type];
 

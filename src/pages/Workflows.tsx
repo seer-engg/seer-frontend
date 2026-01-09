@@ -1,10 +1,9 @@
 /* eslint-disable max-lines */
 /* eslint-disable max-lines-per-function */
 /* eslint-disable complexity */
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
+import { useCallback, useMemo, useEffect } from 'react';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { Node, ReactFlowProvider } from '@xyflow/react';
-import { useShallow } from 'zustand/shallow';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { WorkflowNodeConfigDialog } from '@/components/workflows/WorkflowNodeConfigDialog';
 import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
@@ -14,31 +13,27 @@ import { BuildAndChatPanel } from '@/components/workflows/BuildAndChatPanel';
 import { FloatingWorkflowsPanel } from '@/components/workflows/FloatingWorkflowsPanel';
 import { WorkflowImportDialog } from '@/components/workflows/WorkflowImportDialog';
 import { WorkflowLifecycleBar } from '@/components/workflows/WorkflowLifecycleBar';
-import { useWorkflowBuilder, WorkflowModel } from '@/hooks/useWorkflowBuilder';
+import { useWorkflowStore, WorkflowModel } from '@/stores/workflowStore';
 import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
-import { useFunctionBlocks } from '@/hooks/useFunctionBlocks';
 import { useBackendHealth } from '@/lib/backend-health';
+import { useToolsStore } from '@/stores/toolsStore';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { toast } from '@/components/ui/sonner';
 import { backendApiClient } from '@/lib/api-client';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/build-and-chat/constants';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
 import { KeymapDialog } from '@/components/KeymapDialog';
-import { useIntegrationTools } from '@/hooks/useIntegrationTools';
 import { GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
 import { useCanvasStore, useUIStore } from '@/stores';
 import { normalizeEdges, normalizeNodes } from '@/lib/workflow-normalization';
 import { useTriggerOptions } from './workflows/hooks/useTriggerOptions';
 import { useWorkflowSync } from './workflows/hooks/useWorkflowSync';
 import { WorkflowInputDialog } from './workflows/components/WorkflowInputDialog';
-import { useNodeConfigUpdate } from './workflows/hooks/useNodeConfigUpdate';
-import { useNodeHandlers } from './workflows/hooks/useNodeHandlers';
-import { useWorkflowLifecycle } from './workflows/hooks/useWorkflowLifecycle';
-import { useWorkflowManagement } from './workflows/hooks/useWorkflowManagement';
+import { useWorkflowActions } from './workflows/hooks/useWorkflowActions';
+import { useNodeActions } from './workflows/hooks/useNodeActions';
 import { useTriggerHandlers } from './workflows/hooks/useTriggerHandlers';
-import { useWorkflowAutosave } from './workflows/hooks/useWorkflowAutosave';
 
 const parseProviderConnectionId = (raw?: string | null): number | null => {
   if (!raw) {
@@ -50,73 +45,48 @@ const parseProviderConnectionId = (raw?: string | null): number | null => {
 };
 
 export default function Workflows() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { workflowId: urlWorkflowId } = useParams<{ workflowId?: string }>();
-  const {
-    refresh: refreshIntegrationTools,
-    tools: integrationTools,
-    isIntegrationConnected,
-    getConnectionId,
-    connectIntegration,
-  } = useIntegrationTools();
-  const {
-    nodes,
-    edges,
-    selectedNodeId,
-    editingNodeId,
-    setNodes,
-    setEdges,
-    setSelectedNodeId,
-    setEditingNodeId,
-    autosaveStatus,
-    setAutosaveStatus,
-  } = useCanvasStore(
-    useShallow((state) => ({
-      nodes: state.nodes,
-      edges: state.edges,
-      selectedNodeId: state.selectedNodeId,
-      editingNodeId: state.editingNodeId,
-      setNodes: state.setNodes,
-      setEdges: state.setEdges,
-      setSelectedNodeId: state.setSelectedNodeId,
-      setEditingNodeId: state.setEditingNodeId,
-      autosaveStatus: state.autosaveStatus,
-      setAutosaveStatus: state.setAutosaveStatus,
-    })),
-  );
-  const {
-    isConfigDialogOpen,
-    isImportDialogOpen,
-    isKeymapOpen,
-    isInputDialogOpen,
-    buildChatPanelCollapsed,
-    proposalPreview,
-    setConfigDialogOpen,
-    setImportDialogOpen,
-    setKeymapOpen,
-    setInputDialogOpen,
-    setProposalPreview,
-  } = useUIStore(
-    useShallow((state) => ({
-      isConfigDialogOpen: state.isConfigDialogOpen,
-      isImportDialogOpen: state.isImportDialogOpen,
-      isKeymapOpen: state.isKeymapOpen,
-      isInputDialogOpen: state.isInputDialogOpen,
-      buildChatPanelCollapsed: state.buildChatPanelCollapsed,
-      proposalPreview: state.proposalPreview,
-      setConfigDialogOpen: state.setConfigDialogOpen,
-      setImportDialogOpen: state.setImportDialogOpen,
-      setKeymapOpen: state.setKeymapOpen,
-      setInputDialogOpen: state.setInputDialogOpen,
-      setProposalPreview: state.setProposalPreview,
-    })),
-  );
-  const [workflowName, setWorkflowName] = useState('My Workflow');
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
-  const [inputData, setInputData] = useState<Record<string, unknown>>({});
-  const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
-  const [loadedWorkflow, setLoadedWorkflow] = useState<WorkflowModel | null>(null);
+  // Phase 2: Direct store access instead of useIntegrationTools wrapper
+  const refreshIntegrationTools = useToolsStore((state) => state.refreshIntegrationTools);
+  const integrationTools = useToolsStore((state) => state.tools);
+  const isIntegrationConnected = useToolsStore((state) => state.isIntegrationConnected);
+  const getConnectionId = useToolsStore((state) => state.getConnectionId);
+  const nodes = useCanvasStore((state) => state.nodes);
+  const edges = useCanvasStore((state) => state.edges);
+  const editingNodeId = useCanvasStore((state) => state.editingNodeId);
+  const setNodes = useCanvasStore((state) => state.setNodes);
+  const setEdges = useCanvasStore((state) => state.setEdges);
+  const setSelectedNodeId = useCanvasStore((state) => state.setSelectedNodeId);
+  const setEditingNodeId = useCanvasStore((state) => state.setEditingNodeId);
+  const autosaveStatus = useCanvasStore((state) => state.autosaveStatus);
+  const isConfigDialogOpen = useUIStore((state) => state.isConfigDialogOpen);
+  const isImportDialogOpen = useUIStore((state) => state.isImportDialogOpen);
+  const isKeymapOpen = useUIStore((state) => state.isKeymapOpen);
+  const isInputDialogOpen = useUIStore((state) => state.isInputDialogOpen);
+  const buildChatPanelCollapsed = useUIStore((state) => state.buildChatPanelCollapsed);
+  const proposalPreview = useUIStore((state) => state.proposalPreview);
+  const setConfigDialogOpen = useUIStore((state) => state.setConfigDialogOpen);
+  const setImportDialogOpen = useUIStore((state) => state.setImportDialogOpen);
+  const setKeymapOpen = useUIStore((state) => state.setKeymapOpen);
+  const setInputDialogOpen = useUIStore((state) => state.setInputDialogOpen);
+  const setProposalPreview = useUIStore((state) => state.setProposalPreview);
+  // Phase 1: Replaced local state with workflowStore
+  const setWorkflowName = useWorkflowStore((state) => state.setWorkflowName);
+  const selectedWorkflowId = useWorkflowStore((state) => state.selectedWorkflowId);
+  const setSelectedWorkflowId = useWorkflowStore((state) => state.setSelectedWorkflowId);
+  const inputData = useWorkflowStore((state) => state.workflowInputData);
+  const setInputData = useWorkflowStore((state) => state.setWorkflowInputData);
+  const isLoadingWorkflow = useWorkflowStore((state) => state.isLoadingWorkflow);
+  const setIsLoadingWorkflow = useWorkflowStore((state) => state.setIsLoadingWorkflow);
+  const loadedWorkflow = useWorkflowStore((state) => state.currentWorkflow);
+  // Phase 1: Compatibility shim for hooks still expecting setLoadedWorkflow
+  // In Phase 2, hooks will be refactored to use stores directly
+  const setLoadedWorkflow = useCallback((_workflow: WorkflowModel | null) => {
+    // No-op: currentWorkflow is now managed by workflowStore automatically via getWorkflow()
+    // If hooks call this, they're updating state that's already been updated by store actions
+    console.debug('[Phase 1 Migration] setLoadedWorkflow called - currentWorkflow managed by store');
+  }, []);
   const editingNode = useMemo(
     () => nodes.find((node) => node.id === editingNodeId) ?? null,
     [nodes, editingNodeId],
@@ -132,36 +102,22 @@ export default function Workflows() {
     scope: 'global',
   });
 
-  const {
-    workflows,
-    isLoading: isLoadingWorkflows,
-    createWorkflow,
-    updateWorkflowMetadata,
-    saveWorkflowDraft,
-    deleteWorkflow,
-    executeWorkflow,
-    publishWorkflow,
-    getWorkflow,
-    restoreWorkflowVersion,
-    exportWorkflow,
-    importWorkflow,
-    isCreating,
-    isExecuting,
-    isDeleting,
-    isSavingDraft,
-    isPublishing,
-    isRestoringVersion,
-  } = useWorkflowBuilder();
+  // Phase 3: Store access for execution/publishing status and getWorkflow
+  const workflows = useWorkflowStore((state) => state.workflows);
+  const isLoadingWorkflows = useWorkflowStore((state) => state.isLoading);
+  const getWorkflow = useWorkflowStore((state) => state.getWorkflow);
+  const isExecuting = useWorkflowStore((state) => state.isExecuting);
+  const isPublishing = useWorkflowStore((state) => state.isPublishing);
+  const isRestoringVersion = useWorkflowStore((state) => state.isRestoringVersion);
 
   const {
     versions: workflowVersions,
     isLoading: isLoadingWorkflowVersions,
     invalidate: invalidateWorkflowVersions,
   } = useWorkflowVersions(selectedWorkflowId);
-  const {
-    blocks: functionBlockSchemas,
-    blocksByType: functionBlocksMap,
-  } = useFunctionBlocks();
+  // Phase 2: Direct store access instead of wrapper hook
+  const functionBlockSchemas = useToolsStore((state) => state.functionBlocks);
+  const functionBlocksMap = useToolsStore((state) => state.functionBlocksByType);
   const {
     triggers: triggerCatalog,
     subscriptions: triggerSubscriptions,
@@ -217,7 +173,7 @@ export default function Workflows() {
           },
         });
         const refreshed = await getWorkflow(selectedWorkflowId);
-        setLoadedWorkflow(refreshed);
+        // Phase 1: No need to setLoadedWorkflow - getWorkflow updates store's currentWorkflow
         setNodes(normalizeNodes(refreshed.graph.nodes, functionBlocksMap));
         setEdges(normalizeEdges(refreshed.graph.edges));
       } catch (error) {
@@ -248,18 +204,67 @@ export default function Workflows() {
   );
   const gmailIntegrationReady = isIntegrationConnected('gmail') && typeof gmailConnectionId === 'number';
 
-  // Trigger handlers hook
+  // Phase 3: Consolidated workflow actions hook
+  const workflowActions = useWorkflowActions();
+  const {
+    handleSave,
+    handleExecute,
+    handleExecuteWithInput,
+    handlePublish,
+    handleRestoreVersion,
+    handleNewWorkflow,
+    handleLoadWorkflow,
+    handleDeleteWorkflow,
+    handleRenameWorkflow,
+    handleExportWorkflow,
+    handleImportWorkflow,
+    autosaveCallback,
+    lifecycleStatus,
+    lastRunVersionId,
+    setLastRunVersionId,
+    canRun,
+    canPublish,
+    runDisabledReason,
+    publishDisabledReason,
+    resetSavedDataRef,
+  } = workflowActions;
+
+  // Setup autosave hook
+  const { triggerSave, resetSavedData } = useDebouncedAutosave({
+    data: { nodes, edges },
+    onSave: autosaveCallback,
+    options: {
+      delay: 1000,
+      enabled: !!selectedWorkflowId && !isLoadingWorkflow,
+    },
+  });
+
+  // Phase 3: Simplified trigger handlers hook (needs to be before nodeActions)
   const triggerHandlersHook = useTriggerHandlers({
-    selectedWorkflowId,
-    triggerCatalog,
-    workflowInputsDef,
     gmailIntegrationReady,
     gmailConnectionId,
-    createSubscription,
-    connectIntegration,
     gmailToolNames,
+    createSubscription,
   });
   const { draftTriggers, isConnectingGmail, handleAddTriggerDraft, handleSaveTriggerDraft, handleDiscardTriggerDraft, handleConnectGmail } = triggerHandlersHook;
+
+  // Phase 3: Consolidated node actions hook
+  const nodeActions = useNodeActions({
+    autosaveCallback,
+    triggerSave,
+    gmailIntegrationReady,
+    gmailConnectionId,
+    handleConnectGmail,
+    isConnectingGmail,
+  });
+  const {
+    handleBlockSelect,
+    handleNodeDrop,
+    handleCanvasNodeDoubleClick,
+    handleConfigDialogOpenChange,
+    handleNodeConfigUpdate,
+    skipNextAutosaveRef,
+  } = nodeActions;
 
   // Input fields for workflow execution
   const inputFields = useMemo(() => {
@@ -277,85 +282,6 @@ export default function Workflows() {
       variableName: name,
     }));
   }, [workflowInputsDef]);
-
-  // Workflow lifecycle hook
-  const resetSavedDataRef = useRef<(() => void) | undefined>();
-  const lifecycle = useWorkflowLifecycle({
-    selectedWorkflowId,
-    loadedWorkflow,
-    nodes,
-    edges,
-    workflowName,
-    workflowInputsDef,
-    inputFields,
-    inputData,
-    functionBlocksMap,
-    createWorkflow,
-    saveWorkflowDraft,
-    executeWorkflow,
-    publishWorkflow,
-    restoreWorkflowVersion,
-    getWorkflow,
-    setSelectedWorkflowId,
-    setLoadedWorkflow,
-    setWorkflowName,
-    setNodes,
-    setEdges,
-    setInputDialogOpen,
-    setInputData,
-    invalidateWorkflowVersions,
-    resetSavedDataRef,
-  });
-
-  const { autosaveCallback } = useWorkflowAutosave({
-    selectedWorkflowId,
-    loadedWorkflow,
-    functionBlocksMap,
-    saveWorkflowDraft,
-    getWorkflow,
-    setLoadedWorkflow,
-    setNodes,
-    setEdges,
-    setAutosaveStatus,
-    setLastRunVersionId: lifecycle.setLastRunVersionId,
-    invalidateWorkflowVersions,
-    resetSavedDataRef,
-  });
-
-  // Setup autosave hook
-  const { triggerSave, resetSavedData } = useDebouncedAutosave({
-    data: { nodes, edges },
-    onSave: autosaveCallback,
-    options: {
-      delay: 1000,
-      enabled: !!selectedWorkflowId && !isLoadingWorkflow,
-    },
-  });
-
-  // Node config update hook
-  const nodeConfigUpdate = useNodeConfigUpdate({
-    selectedWorkflowId,
-    loadedWorkflow,
-    setNodes,
-    autosaveCallback,
-    triggerSave,
-  });
-  const { handleNodeConfigUpdate, skipNextAutosaveRef } = nodeConfigUpdate;
-
-  // Node handlers hook
-  const nodeHandlers = useNodeHandlers({
-    setNodes,
-    setSelectedNodeId,
-    setEditingNodeId,
-    setConfigDialogOpen,
-    functionBlocksMap,
-    triggerCatalog,
-    workflowInputsDef,
-    gmailIntegrationReady,
-    gmailConnectionId,
-    handleConnectGmail,
-    isConnectingGmail,
-  });
 
   useEffect(() => {
     resetSavedDataRef.current = resetSavedData;
@@ -443,29 +369,15 @@ export default function Workflows() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.length, triggerHandlers, setNodes]); // Only react to changes in number of nodes
 
-  // Workflow management hook
-  const management = useWorkflowManagement({
-    selectedWorkflowId,
-    loadedWorkflow,
-    deleteWorkflow,
-    updateWorkflowMetadata,
-    exportWorkflow,
-    importWorkflow,
-    createWorkflow,
-    navigate,
-    setWorkflowName,
-    setLoadedWorkflow,
-  });
-
   const handleWorkflowGraphSync = useCallback(
     (graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
       if (!graph) return;
       setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
       setEdges(normalizeEdges(graph.edges));
       setProposalPreview(null);
-      lifecycle.setLastRunVersionId(null);
+      setLastRunVersionId(null);
     },
-    [functionBlocksMap, setNodes, setEdges, setProposalPreview, lifecycle],
+    [functionBlocksMap, setNodes, setEdges, setProposalPreview, setLastRunVersionId],
   );
 
   const triggerOptions = useTriggerOptions({
@@ -512,7 +424,7 @@ export default function Workflows() {
     setNodes,
     setEdges,
     setProposalPreview,
-    setLastRunVersionId: lifecycle.setLastRunVersionId,
+    setLastRunVersionId,
     setIsLoadingWorkflow,
   });
 
@@ -566,26 +478,26 @@ export default function Workflows() {
               key={selectedWorkflowId ?? 'new'}
                 triggerNodes={[]}
                 previewGraph={previewGraph}
-              onNodeDoubleClick={isPreviewActive ? undefined : nodeHandlers.handleCanvasNodeDoubleClick}
-              onNodeDrop={isPreviewActive ? undefined : nodeHandlers.handleNodeDrop}
+              onNodeDoubleClick={isPreviewActive ? undefined : handleCanvasNodeDoubleClick}
+              onNodeDrop={isPreviewActive ? undefined : handleNodeDrop}
               readOnly={isPreviewActive}
             />
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 pointer-events-none">
               <div className="pointer-events-auto">
                 <WorkflowLifecycleBar
-                  lifecycleStatus={lifecycle.lifecycleStatus}
-                  onRunClick={lifecycle.handleExecute}
-                  onPublishClick={lifecycle.handlePublish}
+                  lifecycleStatus={lifecycleStatus}
+                  onRunClick={() => handleExecute(inputFields)}
+                  onPublishClick={handlePublish}
                   isExecuting={isExecuting}
                   isPublishing={isPublishing}
                 isRestoringVersion={isRestoringVersion}
-                  canRun={lifecycle.canRun}
-                  canPublish={lifecycle.canPublish}
-                  publishDisabledReason={lifecycle.publishDisabledReason}
-                  runDisabledReason={lifecycle.runDisabledReason}
+                  canRun={canRun}
+                  canPublish={canPublish}
+                  publishDisabledReason={publishDisabledReason}
+                  runDisabledReason={runDisabledReason}
                 versionOptions={workflowVersions}
                 isVersionsLoading={isLoadingWorkflowVersions}
-                onVersionRestore={lifecycle.handleRestoreVersion}
+                onVersionRestore={handleRestoreVersion}
                 versionRestoreDisabledReason={
                   selectedWorkflowId ? undefined : 'Save the workflow before restoring versions'
                 }
@@ -608,11 +520,11 @@ export default function Workflows() {
               workflows={workflows}
               isLoadingWorkflows={isLoadingWorkflows}
               selectedWorkflowId={selectedWorkflowId}
-              onLoadWorkflow={management.handleLoadWorkflow}
-              onDeleteWorkflow={management.handleDeleteWorkflow}
-              onRenameWorkflow={management.handleRenameWorkflow}
-              onNewWorkflow={management.handleNewWorkflow}
-              onExportWorkflow={management.handleExportWorkflow}
+              onLoadWorkflow={handleLoadWorkflow}
+              onDeleteWorkflow={handleDeleteWorkflow}
+              onRenameWorkflow={handleRenameWorkflow}
+              onNewWorkflow={handleNewWorkflow}
+              onExportWorkflow={handleExportWorkflow}
               onImportWorkflow={() => setImportDialogOpen(true)}
             />
 
@@ -620,7 +532,7 @@ export default function Workflows() {
             <WorkflowImportDialog
               open={isImportDialogOpen}
               onOpenChange={setImportDialogOpen}
-              onImport={management.handleImportWorkflow}
+              onImport={handleImportWorkflow}
             />
             
             </div>
@@ -640,7 +552,7 @@ export default function Workflows() {
               className="border-l"
             >
               <BuildAndChatPanel
-                onBlockSelect={nodeHandlers.handleBlockSelect}
+                onBlockSelect={handleBlockSelect}
                 workflowId={selectedWorkflowId}
                 onWorkflowGraphSync={handleWorkflowGraphSync}
                 functionBlocks={availableBlocks}
@@ -657,7 +569,7 @@ export default function Workflows() {
         node={editingNode}
         allNodes={nodes}
         allEdges={edges}
-        onOpenChange={nodeHandlers.handleConfigDialogOpenChange}
+        onOpenChange={handleConfigDialogOpenChange}
         onUpdate={handleNodeConfigUpdate}
         workflowInputs={workflowInputsDef}
       />
@@ -669,7 +581,7 @@ export default function Workflows() {
         inputFields={inputFields}
         inputData={inputData}
         onInputDataChange={setInputData}
-        onExecute={lifecycle.handleExecuteWithInput}
+        onExecute={() => handleExecuteWithInput(inputFields, inputData)}
       />
 
       {/* Keyboard Shortcuts Dialog */}

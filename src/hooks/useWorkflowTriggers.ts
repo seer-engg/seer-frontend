@@ -1,5 +1,4 @@
 import { useCallback, useEffect } from 'react';
-import { useShallow } from 'zustand/shallow';
 
 import { useTriggersStore } from '@/stores/triggersStore';
 import type {
@@ -39,31 +38,17 @@ export interface UseWorkflowTriggersResult {
 }
 
 export function useWorkflowTriggers(workflowId?: string | null): UseWorkflowTriggersResult {
-  const {
-    triggerCatalog,
-    triggerCatalogLoading,
-    triggerSubscriptions,
-    triggerSubscriptionsLoading,
-    loadTriggerCatalog,
-    loadTriggerSubscriptions,
-    createTriggerSubscription,
-    updateTriggerSubscription,
-    deleteTriggerSubscription,
-    testTriggerSubscription,
-  } = useTriggersStore(
-    useShallow((state) => ({
-      triggerCatalog: state.triggerCatalog,
-      triggerCatalogLoading: state.triggerCatalogLoading,
-      triggerSubscriptions: state.triggerSubscriptions,
-      triggerSubscriptionsLoading: state.triggerSubscriptionsLoading,
-      loadTriggerCatalog: state.loadTriggerCatalog,
-      loadTriggerSubscriptions: state.loadTriggerSubscriptions,
-      createTriggerSubscription: state.createTriggerSubscription,
-      updateTriggerSubscription: state.updateTriggerSubscription,
-      deleteTriggerSubscription: state.deleteTriggerSubscription,
-      testTriggerSubscription: state.testTriggerSubscription,
-    })),
-  );
+  // FIXED: Individual selectors instead of useShallow
+  const triggerCatalog = useTriggersStore((state) => state.triggerCatalog);
+  const triggerCatalogLoading = useTriggersStore((state) => state.triggerCatalogLoading);
+  const triggerSubscriptions = useTriggersStore((state) => state.triggerSubscriptions);
+  const triggerSubscriptionsLoading = useTriggersStore((state) => state.triggerSubscriptionsLoading);
+  const loadTriggerCatalog = useTriggersStore((state) => state.loadTriggerCatalog);
+  const loadTriggerSubscriptions = useTriggersStore((state) => state.loadTriggerSubscriptions);
+  const createTriggerSubscription = useTriggersStore((state) => state.createTriggerSubscription);
+  const updateTriggerSubscription = useTriggersStore((state) => state.updateTriggerSubscription);
+  const deleteTriggerSubscription = useTriggersStore((state) => state.deleteTriggerSubscription);
+  const testTriggerSubscription = useTriggersStore((state) => state.testTriggerSubscription);
 
   const subscriptions = workflowId ? triggerSubscriptions[workflowId] ?? [] : [];
   const isLoadingSubscriptions = workflowId

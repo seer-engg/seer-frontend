@@ -37,9 +37,13 @@ export function useWorkflowSync({
   const navigate = useNavigate();
   const resetSavedDataRef = useRef<(() => void) | null>(null);
 
+  // PHASE 3 FIX: Only depend on workflow ID, not the entire workflow object
+  // This prevents infinite loops when getWorkflow updates the store's currentWorkflow
+  const loadedWorkflowId = loadedWorkflow?.workflow_id;
+
   useEffect(() => {
     // If URL has workflowId but loaded workflow doesn't match, load the workflow
-    if (urlWorkflowId && urlWorkflowId !== loadedWorkflow?.workflow_id) {
+    if (urlWorkflowId && urlWorkflowId !== loadedWorkflowId) {
       const loadWorkflowFromUrl = async () => {
         setIsLoadingWorkflow(true);
         try {
@@ -64,7 +68,7 @@ export function useWorkflowSync({
         }
       };
       loadWorkflowFromUrl();
-    } else if (!urlWorkflowId && loadedWorkflow) {
+    } else if (!urlWorkflowId && loadedWorkflowId) {
       // If URL doesn't have workflowId but we have a loaded workflow, clear the selection
       setSelectedWorkflowId(null);
       setWorkflowName('My Workflow');
@@ -77,7 +81,7 @@ export function useWorkflowSync({
     }
   }, [
     urlWorkflowId,
-    loadedWorkflow,
+    loadedWorkflowId, // CHANGED: Only depend on ID, not entire object
     getWorkflow,
     functionBlocksMap,
     navigate,
