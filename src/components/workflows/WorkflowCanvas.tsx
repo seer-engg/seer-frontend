@@ -38,7 +38,6 @@ import { ToolBlockNode } from './blocks/ToolBlockNode';
 import { LLMBlockNode } from './blocks/LLMBlockNode';
 import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
-import { InputBlockNode } from './blocks/InputBlockNode';
 import { TriggerBlockNode } from './blocks/TriggerBlockNode';
 import { useCanvasStore } from '@/stores';
 import { useShallow } from 'zustand/shallow';
@@ -61,7 +60,6 @@ const nodeTypes = {
   llm: LLMBlockNode,
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
-  input: InputBlockNode,
   trigger: TriggerBlockNode,
 };
 
