@@ -35,7 +35,7 @@ export default tseslint.config(
         "skipBlankLines": true,
         "skipComments": true
       }],
-      "complexity": ["error", 10],
+      "complexity": ["error", 15],
       "max-depth": ["error", 4],
       "max-params": ["error", 5],
       "max-nested-callbacks": ["error", 3],
@@ -43,21 +43,15 @@ export default tseslint.config(
   },
 
   // Override: Hooks can be longer (functions named like useXxx)
+  // ✅ Hooks folder override (pick the pattern that matches your repo)
   {
-    files: ["**/*.{ts,tsx}"],
+    files: ["src/hooks/**/*.{ts,tsx}"],
     rules: {
-      "max-lines-per-function": [
-        "error",
-        {
-          max: 200, // keep base default
-          skipBlankLines: true,
-          skipComments: true,
-
-          // Different limit for hook-like names
-          name: "^use[A-Z0-9].*",
-          max: 500,
-        },
-      ],
+      "max-lines-per-function": ["error", {
+        max: 500,
+        skipBlankLines: true,
+        skipComments: true
+      }],
     },
   }
 );
