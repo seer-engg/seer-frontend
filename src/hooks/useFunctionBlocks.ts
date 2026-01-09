@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useShallow } from 'zustand/shallow';
 
-import { useIntegrationStore } from '@/stores/integrationStore';
+import { useToolsStore } from '@/stores/toolsStore';
 
 export function useFunctionBlocks() {
   const {
@@ -11,7 +11,7 @@ export function useFunctionBlocks() {
     functionBlocksError,
     functionBlocksLoaded,
     loadFunctionBlocks,
-  } = useIntegrationStore(
+  } = useToolsStore(
     useShallow((state) => ({
       functionBlocks: state.functionBlocks,
       functionBlocksByType: state.functionBlocksByType,

@@ -1,7 +1,7 @@
 /* eslint-disable max-lines, max-lines-per-function */
 import type { StateCreator } from 'zustand';
 
-import type { FunctionBlockSchema, TriggerDraftMeta } from '@/components/workflows/types';
+import type { FunctionBlockSchema } from '@/components/workflows/types';
 import type {
   ConnectedAccount,
   ToolConnectionStatus,
@@ -13,22 +13,6 @@ import {
   initiateConnection,
   listConnectedAccounts,
 } from '@/lib/api-client';
-import {
-  createTriggerSubscription as apiCreateTriggerSubscription,
-  deleteTriggerSubscription as apiDeleteTriggerSubscription,
-  listTriggerSubscriptions,
-  listTriggers,
-  testTriggerSubscription as apiTestTriggerSubscription,
-  updateTriggerSubscription as apiUpdateTriggerSubscription,
-} from '@/lib/workflow-triggers';
-import type {
-  TriggerDescriptor,
-  TriggerSubscriptionCreateRequest,
-  TriggerSubscriptionResponse,
-  TriggerSubscriptionTestRequest,
-  TriggerSubscriptionTestResponse,
-  TriggerSubscriptionUpdateRequest,
-} from '@/types/triggers';
 import type { JsonObject } from '@/types/workflow-spec';
 import { IntegrationType, formatScopes, getOAuthProvider } from '@/lib/integrations/client';
 
@@ -312,7 +296,7 @@ const deriveIntegrationData = ({
   };
 };
 
-export interface IntegrationStore {
+export interface ToolsStore {
   userEmail: string | null;
   isAuthenticated: boolean;
   tools: ToolMetadata[];
@@ -336,14 +320,6 @@ export interface IntegrationStore {
   functionBlocksLoading: boolean;
   functionBlocksLoaded: boolean;
   functionBlocksError: string | null;
-  triggerCatalog: TriggerDescriptor[];
-  triggerCatalogLoading: boolean;
-  triggerCatalogLoaded: boolean;
-  triggerCatalogError: string | null;
-  triggerSubscriptions: Record<string, TriggerSubscriptionResponse[]>;
-  triggerSubscriptionsLoading: Record<string, boolean>;
-  triggerSubscriptionsError: Record<string, string | null>;
-  draftTriggers: TriggerDraftMeta[];
   setUserContext: (payload: { email: string | null; isAuthenticated: boolean }) => void;
   loadIntegrationTools: () => Promise<ToolMetadata[]>;
   loadToolStatus: () => Promise<ToolConnectionStatus[] | null>;
@@ -358,24 +334,9 @@ export interface IntegrationStore {
     options: { toolNames?: string[]; toolName?: string },
   ) => Promise<string | null>;
   loadFunctionBlocks: () => Promise<FunctionBlockSchema[]>;
-  loadTriggerCatalog: () => Promise<TriggerDescriptor[]>;
-  loadTriggerSubscriptions: (workflowId: string) => Promise<TriggerSubscriptionResponse[]>;
-  createTriggerSubscription: (
-    payload: TriggerSubscriptionCreateRequest,
-  ) => Promise<TriggerSubscriptionResponse>;
-  updateTriggerSubscription: (
-    subscriptionId: number,
-    payload: TriggerSubscriptionUpdateRequest,
-  ) => Promise<TriggerSubscriptionResponse>;
-  deleteTriggerSubscription: (subscriptionId: number) => Promise<void>;
-  testTriggerSubscription: (payload: {
-    subscriptionId: number;
-    payload: TriggerSubscriptionTestRequest;
-  }) => Promise<TriggerSubscriptionTestResponse>;
-  setDraftTriggers: (drafts: TriggerDraftMeta[]) => void;
 }
 
-const createIntegrationStore: StateCreator<IntegrationStore> = (set, get) => {
+const createToolsStore: StateCreator<ToolsStore> = (set, get) => {
   const syncDerived = () => {
     const { tools, toolStatus, connections } = get();
     const derived = deriveIntegrationData({ tools, toolStatus, connections });
@@ -406,14 +367,6 @@ const createIntegrationStore: StateCreator<IntegrationStore> = (set, get) => {
     functionBlocksLoading: false,
     functionBlocksLoaded: false,
     functionBlocksError: null,
-    triggerCatalog: [],
-    triggerCatalogLoading: false,
-    triggerCatalogLoaded: false,
-    triggerCatalogError: null,
-    triggerSubscriptions: {},
-    triggerSubscriptionsLoading: {},
-    triggerSubscriptionsError: {},
-    draftTriggers: [],
     setUserContext({ email, isAuthenticated }) {
       set({ userEmail: email, isAuthenticated });
     },
@@ -583,16 +536,16 @@ const createIntegrationStore: StateCreator<IntegrationStore> = (set, get) => {
     async connectIntegration(type, options) {
       const { userEmail, tools, integrationProviderMap, integrationScopesMap } = get();
       if (!userEmail) {
-        console.error('[integrationStore] Cannot connect integration without user email.');
+        console.error('[toolsStore] Cannot connect integration without user email.');
         return null;
       }
       if (!integrationNeedsConnection(type)) {
-        console.warn(`[integrationStore] Integration ${type} does not require OAuth connection.`);
+        console.warn(`[toolsStore] Integration ${type} does not require OAuth connection.`);
         return null;
       }
       const toolNames = options.toolNames ?? (options.toolName ? [options.toolName] : []);
       if (!toolNames.length) {
-        console.error(`[integrationStore] connectIntegration requires toolNames for ${type}.`);
+        console.error(`[toolsStore] connectIntegration requires toolNames for ${type}.`);
         return null;
       }
       const scopeSet = new Set<string>();
@@ -606,12 +559,12 @@ const createIntegrationStore: StateCreator<IntegrationStore> = (set, get) => {
         getIntegrationScopesForType(type, integrationScopesMap).forEach((scope) => scopeSet.add(scope));
       }
       if (!scopeSet.size) {
-        console.error(`[integrationStore] No scopes available for integration type ${type}.`);
+        console.error(`[toolsStore] No scopes available for integration type ${type}.`);
         return null;
       }
       const provider = getIntegrationProviderForType(type, integrationProviderMap);
       if (!provider && type !== 'sandbox') {
-        console.error(`[integrationStore] No OAuth provider configured for ${type}`);
+        console.error(`[toolsStore] No OAuth provider configured for ${type}`);
         return null;
       }
       const callbackUrl = `${window.location.origin}${window.location.pathname}`;
@@ -664,109 +617,7 @@ const createIntegrationStore: StateCreator<IntegrationStore> = (set, get) => {
         throw error;
       }
     },
-    async loadTriggerCatalog() {
-      if (get().triggerCatalogLoading) {
-        return get().triggerCatalog;
-      }
-      set({ triggerCatalogLoading: true, triggerCatalogError: null });
-      try {
-        const triggers = await listTriggers();
-        set({
-          triggerCatalog: triggers,
-          triggerCatalogLoading: false,
-          triggerCatalogLoaded: true,
-        });
-        return triggers;
-      } catch (error) {
-        set({
-          triggerCatalogLoading: false,
-          triggerCatalogError: error instanceof Error ? error.message : 'Failed to load triggers',
-        });
-        throw error;
-      }
-    },
-    async loadTriggerSubscriptions(workflowId) {
-      if (!workflowId) {
-        return [];
-      }
-      set((state) => ({
-        triggerSubscriptionsLoading: {
-          ...state.triggerSubscriptionsLoading,
-          [workflowId]: true,
-        },
-        triggerSubscriptionsError: {
-          ...state.triggerSubscriptionsError,
-          [workflowId]: null,
-        },
-      }));
-      try {
-        const subscriptions = await listTriggerSubscriptions(workflowId);
-        set((state) => ({
-          triggerSubscriptions: {
-            ...state.triggerSubscriptions,
-            [workflowId]: subscriptions,
-          },
-          triggerSubscriptionsLoading: {
-            ...state.triggerSubscriptionsLoading,
-            [workflowId]: false,
-          },
-        }));
-        return subscriptions;
-      } catch (error) {
-        set((state) => ({
-          triggerSubscriptionsLoading: {
-            ...state.triggerSubscriptionsLoading,
-            [workflowId]: false,
-          },
-          triggerSubscriptionsError: {
-            ...state.triggerSubscriptionsError,
-            [workflowId]: error instanceof Error ? error.message : 'Failed to load trigger subscriptions',
-          },
-        }));
-        throw error;
-      }
-    },
-    async createTriggerSubscription(payload) {
-      const created = await apiCreateTriggerSubscription(payload);
-      set((state) => ({
-        triggerSubscriptions: {
-          ...state.triggerSubscriptions,
-          [payload.workflow_id]: [...(state.triggerSubscriptions[payload.workflow_id] ?? []), created],
-        },
-      }));
-      return created;
-    },
-    async updateTriggerSubscription(subscriptionId, payload) {
-      const updated = await apiUpdateTriggerSubscription(subscriptionId, payload);
-      set((state) => ({
-        triggerSubscriptions: {
-          ...state.triggerSubscriptions,
-          [updated.workflow_id]: (state.triggerSubscriptions[updated.workflow_id] ?? []).map((subscription) =>
-            subscription.subscription_id === updated.subscription_id ? updated : subscription,
-          ),
-        },
-      }));
-      return updated;
-    },
-    async deleteTriggerSubscription(subscriptionId) {
-      await apiDeleteTriggerSubscription(subscriptionId);
-      set((state) => {
-        const next: Record<string, TriggerSubscriptionResponse[]> = {};
-        for (const [workflowId, subscriptions] of Object.entries(state.triggerSubscriptions)) {
-          next[workflowId] = subscriptions.filter((subscription) => subscription.subscription_id !== subscriptionId);
-        }
-        return { triggerSubscriptions: next };
-      });
-    },
-    async testTriggerSubscription({ subscriptionId, payload }) {
-      return apiTestTriggerSubscription(subscriptionId, payload);
-    },
-    setDraftTriggers(drafts) {
-      set({ draftTriggers: drafts });
-    },
   };
 };
 
-export const useIntegrationStore = createStore(createIntegrationStore);
-
-
+export const useToolsStore = createStore(createToolsStore);

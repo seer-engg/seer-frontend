@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useShallow } from 'zustand/shallow';
 
-import { useIntegrationStore } from '@/stores/integrationStore';
+import { useTriggersStore } from '@/stores/triggersStore';
 import type {
   TriggerDescriptor,
   TriggerSubscriptionCreateRequest,
@@ -50,7 +50,7 @@ export function useWorkflowTriggers(workflowId?: string | null): UseWorkflowTrig
     updateTriggerSubscription,
     deleteTriggerSubscription,
     testTriggerSubscription,
-  } = useIntegrationStore(
+  } = useTriggersStore(
     useShallow((state) => ({
       triggerCatalog: state.triggerCatalog,
       triggerCatalogLoading: state.triggerCatalogLoading,

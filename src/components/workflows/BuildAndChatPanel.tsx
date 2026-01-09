@@ -27,7 +27,7 @@ import type {
   BuiltInBlock,
 } from './build-and-chat/types';
 import { filterSystemPrompt, getDisplayableAssistantMessage } from './build-and-chat/utils';
-import { useCanvasStore, useChatStore, useIntegrationStore, useUIStore } from '@/stores';
+import { useCanvasStore, useChatStore, useToolsStore, useUIStore } from '@/stores';
 
 export function BuildAndChatPanel({
   onBlockSelect,
@@ -100,8 +100,8 @@ export function BuildAndChatPanel({
   );
   const queryClient = useQueryClient();
 
-  // Use Integration Store for tools instead of fetching again here
-  const { tools: rawTools, toolsLoading, toolsLoaded, refreshIntegrationTools } = useIntegrationStore(
+  // Use Tools Store for tools instead of fetching again here
+  const { tools: rawTools, toolsLoading, toolsLoaded, refreshIntegrationTools } = useToolsStore(
     useShallow((state) => ({
       tools: state.tools,
       toolsLoading: state.toolsLoading,

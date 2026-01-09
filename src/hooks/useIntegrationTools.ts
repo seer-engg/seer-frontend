@@ -3,10 +3,10 @@ import { useUser } from '@clerk/clerk-react';
 import { useShallow } from 'zustand/shallow';
 
 import {
-  useIntegrationStore,
+  useToolsStore,
   type ToolIntegrationStatus,
   type ToolMetadata,
-} from '@/stores/integrationStore';
+} from '@/stores/toolsStore';
 
 export type { ToolMetadata, ToolIntegrationStatus };
 
@@ -36,7 +36,7 @@ export function useIntegrationTools() {
     isIntegrationConnected,
     getConnectionId,
     connectIntegration,
-  } = useIntegrationStore(
+  } = useToolsStore(
     useShallow((state) => ({
       tools: state.tools,
       toolsWithStatus: state.toolsWithStatus,
