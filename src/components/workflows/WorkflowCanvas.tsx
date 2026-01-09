@@ -11,16 +11,12 @@ import {
   BackgroundVariant,
   Controls,
   Node,
-  Connection,
-  addEdge,
   NodeMouseHandler,
   ConnectionMode,
-  MarkerType,
   applyNodeChanges,
   applyEdgeChanges,
   type NodeChange,
   type EdgeChange,
-  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
@@ -41,6 +37,8 @@ import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
 import { TriggerBlockNode } from './blocks/TriggerBlockNode';
 import { useCanvasStore } from '@/stores';
 import { useShallow } from 'zustand/shallow';
+import { useCanvasDragDrop } from '../../hooks/useCanvasDragDrop';
+import { useConnectionValidation } from '../../hooks/useConnectionValidation';
 
 /**
  * Extract tool names from workflow nodes
@@ -103,7 +101,6 @@ export function WorkflowCanvas({
     })),
   );
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
 
   const workflowNodes = previewGraph?.nodes ?? nodes;
   const workflowEdges = previewGraph?.edges ?? edges;
@@ -153,56 +150,13 @@ export function WorkflowCanvas({
     [readOnly, setEdges],
   );
 
-  // Handle connections
-  const onConnect = useCallback(
-    (params: Connection) => {
-      if (readOnly) {
-        return;
-      }
-      if (!params.source || !params.target) {
-        return;
-      }
-
-      const wouldCreateCycle = workflowEdges.some(
-        (e) => e.target === params.source && e.source === params.target
-      );
-
-      if (wouldCreateCycle) {
-        console.warn('Connection would create a cycle');
-        return;
-      }
-
-      const branchFromHandle =
-        params.sourceHandle &&
-        ['true', 'false', 'loop', 'exit'].includes(params.sourceHandle)
-          ? (params.sourceHandle as 'true' | 'false' | 'loop' | 'exit')
-          : undefined;
-      const branch =
-        branchFromHandle ?? getNextBranchForSource(params.source, workflowNodes, workflowEdges);
-      const sourceNode = workflowNodes.find((node) => node.id === params.source);
-
-      if (!branch && sourceNode && (sourceNode.type === 'if_else' || sourceNode.type === 'for_loop')) {
-        console.warn(`All branch handles are already used for node ${sourceNode.id}`);
-        return;
-      }
-
-      const newEdge: WorkflowEdge = {
-        id: `edge-${params.source}-${params.target}`,
-        source: params.source,
-        target: params.target,
-        sourceHandle: params.sourceHandle,
-        targetHandle: params.targetHandle,
-        data: branch ? { branch } : undefined,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-        },
-      };
-
-      setEdges((eds) => addEdge(newEdge, eds));
-      // Remove manual onEdgesChange call - useEffect will handle parent notification
-    },
-    [workflowEdges, workflowNodes, setEdges, readOnly]
-  );
+  // Handle connections via extracted hook
+  const { onConnect } = useConnectionValidation({
+    readOnly,
+    workflowNodes,
+    workflowEdges,
+    setEdges,
+  });
 
   // Handle node clicks
   const handleNodeClick: NodeMouseHandler = useCallback(
@@ -220,117 +174,13 @@ export function WorkflowCanvas({
       if (readOnly) {
         return;
       }
-      onNodeDoubleClick?.(node);
+      onNodeDoubleClick?.(node as Node<WorkflowNodeData>);
     },
     [readOnly, onNodeDoubleClick],
   );
 
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-
-      if (readOnly) return;
-
-      const data = event.dataTransfer.getData('application/reactflow');
-      if (!data) return;
-
-      try {
-        const dragData = JSON.parse(data);
-        const position = screenToFlowPosition({
-          x: event.clientX,
-          y: event.clientY,
-        });
-
-        if (dragData.type === 'block') {
-          // Use the onNodeDrop callback if provided, otherwise create node directly
-          if (onNodeDrop) {
-            onNodeDrop(
-              {
-                type: dragData.blockType,
-                label: dragData.label,
-              },
-              position
-            );
-          } else {
-            const newNode: Node<WorkflowNodeData> = {
-              id: `node-${Date.now()}`,
-              type: dragData.blockType,
-              position,
-              data: {
-                type: dragData.blockType,
-                label: dragData.label,
-                config: {},
-              },
-            };
-            setNodes((nds) => [...nds, newNode]);
-          }
-        } else if (dragData.type === 'tool') {
-          const tool = dragData.tool;
-          if (onNodeDrop) {
-            onNodeDrop(
-              {
-                type: 'tool',
-                label: tool.name,
-                config: {
-                  tool_name: tool.slug || tool.name,
-                  provider: tool.provider,
-                  integration_type: tool.integration_type,
-                  ...(tool.output_schema ? { output_schema: tool.output_schema } : {}),
-                  params: {},
-                },
-              },
-              position
-            );
-          } else {
-            const newNode: Node<WorkflowNodeData> = {
-              id: `node-${Date.now()}`,
-              type: 'tool',
-              position,
-              data: {
-                type: 'tool',
-                label: tool.name,
-                config: {
-                  tool_name: tool.slug || tool.name,
-                  provider: tool.provider,
-                  integration_type: tool.integration_type,
-                  ...(tool.output_schema ? { output_schema: tool.output_schema } : {}),
-                  params: {},
-                },
-              },
-            };
-            setNodes((nds) => [...nds, newNode]);
-          }
-        } else if (dragData.type === 'trigger') {
-          // Handle triggers like blocks - add them directly to canvas
-          console.log('[WorkflowCanvas] Trigger dropped:', dragData.triggerKey);
-          if (onNodeDrop) {
-            onNodeDrop(
-              {
-                type: 'trigger',
-                label: dragData.title || dragData.triggerKey,
-                config: {
-                  triggerKey: dragData.triggerKey,
-                },
-              },
-              position
-            );
-          } else {
-            // For triggers, we should not create them directly here
-            // They need proper metadata which is handled by the parent component
-            console.log('[WorkflowCanvas] Trigger dropped without onNodeDrop handler, ignoring');
-          }
-        }
-      } catch (error) {
-        console.error('Error processing drop:', error);
-      }
-    },
-    [readOnly, screenToFlowPosition, setNodes, onNodeDrop]
-  );
+  // Drag & drop via extracted hook
+  const { onDragOver, onDrop } = useCanvasDragDrop({ readOnly, setNodes, onNodeDrop });
 
   const contextValue = useMemo(
     () => ({
