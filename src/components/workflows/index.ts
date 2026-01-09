@@ -8,8 +8,6 @@
 export { WorkflowCanvas, getToolNamesFromNodes } from './WorkflowCanvas';
 export type { BlockType, WorkflowNodeData, ToolBlockConfig } from './types';
 
-// Tool selection and integration status
-export { ToolSelector, ToolStatusIndicator } from './ToolSelector';
 export { IntegrationStatusPanel, IntegrationBadge } from './IntegrationStatusPanel';
 
 // Block nodes
