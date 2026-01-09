@@ -52,35 +52,6 @@ function getIntegrationIcon(integrationType: IntegrationType | null) {
   }
 }
 
-/**
- * Get display name for integration type
- */
-function getIntegrationDisplayName(integrationType: IntegrationType | null): string {
-  const key = integrationType?.toLowerCase() ?? '';
-  switch (key) {
-    case 'gmail':
-      return 'Gmail';
-    case 'google_drive':
-    case 'googledrive':
-      return 'Google Drive';
-    case 'google_sheets':
-    case 'googlesheets':
-      return 'Google Sheets';
-    case 'pull_request':
-      return 'GitHub Pull Requests';
-    case 'github':
-      return 'GitHub';
-    case 'asana':
-      return 'Asana';
-    case 'sandbox':
-      return 'Sandbox';
-    case 'supabase':
-      return 'Supabase';
-    default:
-      return 'Tool';
-  }
-}
-
 type WorkflowNode = FlowNode<WorkflowNodeData>;
 
 export const ToolBlockNode = memo(function ToolBlockNode(
@@ -137,7 +108,6 @@ export const ToolBlockNode = memo(function ToolBlockNode(
     }
 
     const intIcon = getIntegrationIcon(status.integrationType);
-    const displayName = getIntegrationDisplayName(status.integrationType);
 
     // No OAuth required
     if (!status.integrationType) {
