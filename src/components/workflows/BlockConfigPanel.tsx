@@ -64,8 +64,6 @@ export function BlockConfigPanel({
   const [inputRefs, setInputRefs] = useState<Record<string, string>>({});
   const [useStructuredOutput, setUseStructuredOutput] = useState(false);
   const [structuredOutputSchema, setStructuredOutputSchema] = useState<Record<string, any> | undefined>();
-  const systemPromptRef = useRef<HTMLTextAreaElement>(null);
-  const userPromptRef = useRef<HTMLTextAreaElement>(null);
   const lastSyncedNodeStateRef = useRef<{ nodeId: string | null; signature: string }>({
     nodeId: null,
     signature: '',
@@ -421,9 +419,8 @@ export function BlockConfigPanel({
             setUseStructuredOutput={setUseStructuredOutput}
             structuredOutputSchema={structuredOutputSchema}
             onStructuredOutputSchemaChange={handleStructuredOutputSchemaChange}
-            systemPromptRef={systemPromptRef}
-            userPromptRef={userPromptRef}
             templateAutocomplete={templateAutocomplete}
+            validationErrors={validationErrors}
           />
         );
       case 'if_else':
@@ -432,6 +429,7 @@ export function BlockConfigPanel({
             config={config}
             setConfig={setConfig}
             templateAutocomplete={templateAutocomplete}
+            validationErrors={validationErrors}
           />
         );
       case 'for_loop':
@@ -440,6 +438,7 @@ export function BlockConfigPanel({
             config={config}
             setConfig={setConfig}
             templateAutocomplete={templateAutocomplete}
+            validationErrors={validationErrors}
           />
         );
     }

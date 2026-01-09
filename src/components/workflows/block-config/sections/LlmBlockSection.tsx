@@ -1,15 +1,13 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 
 import { StructuredOutputEditor } from '@/components/workflows/StructuredOutputEditor';
 
 import { LlmBlockConfig, BlockSectionProps } from '../types';
-import { AutocompleteTextarea } from '../widgets/AutocompleteTextarea';
 import { FormField } from '../widgets/FormField';
+import { DynamicFormField } from '../widgets/DynamicFormField';
 
-interface LlmBlockSectionProps extends Omit<BlockSectionProps<LlmBlockConfig>, 'validationErrors'> {
+interface LlmBlockSectionProps extends BlockSectionProps<LlmBlockConfig> {
   useStructuredOutput: boolean;
   setUseStructuredOutput: (value: boolean) => void;
   structuredOutputSchema?: Record<string, unknown>;
@@ -76,64 +74,62 @@ export function LlmBlockSection({
   structuredOutputSchema,
   onStructuredOutputSchemaChange,
   templateAutocomplete,
+  validationErrors = {},
 }: LlmBlockSectionProps) {
   const outputSchema = structuredOutputSchema ?? config.output_schema;
 
   return (
     <div className="space-y-2">
-      <FormField
+      <DynamicFormField
+        name="system_prompt"
         label="System Prompt"
         description="Instructions that set the AI's behavior and context"
-        htmlFor="system-prompt"
-      >
-        <AutocompleteTextarea
-          id="system-prompt"
-          value={config.system_prompt || ''}
-          onChange={value => setConfig(prev => ({ ...prev, system_prompt: value }))}
-          placeholder="You are a helpful assistant..."
-          templateAutocomplete={templateAutocomplete}
-          rows={4}
-          className="max-h-[120px] overflow-y-auto"
-        />
-      </FormField>
+        value={config.system_prompt || ''}
+        onChange={value => setConfig(prev => ({ ...prev, system_prompt: value as string }))}
+        def={{ type: 'string', multiline: true } as any}
+        templateAutocomplete={templateAutocomplete}
+        rows={4}
+        className="max-h-[120px] overflow-y-auto"
+        error={validationErrors['system_prompt']}
+      />
 
-      <FormField
+      <DynamicFormField
+        name="user_prompt"
         label="User Prompt"
         description="The main prompt or question for the LLM"
         required
-        htmlFor="user-prompt"
-      >
-        <AutocompleteTextarea
-          id="user-prompt"
-          value={config.user_prompt || ''}
-          onChange={value => setConfig(prev => ({ ...prev, user_prompt: value }))}
-          placeholder="Enter your message or question..."
-          templateAutocomplete={templateAutocomplete}
-          rows={4}
-          className="max-h-[120px] overflow-y-auto"
-        />
-      </FormField>
+        value={config.user_prompt || ''}
+        onChange={value => setConfig(prev => ({ ...prev, user_prompt: value as string }))}
+        def={{ type: 'string', multiline: true } as any}
+        templateAutocomplete={templateAutocomplete}
+        rows={4}
+        className="max-h-[120px] overflow-y-auto"
+        error={validationErrors['user_prompt']}
+      />
 
-      <FormField label="Model" description="Choose the AI model to use" defaultValue={MODEL_OPTIONS[0].label} htmlFor="model">
-        <Select value={config.model || MODEL_OPTIONS[0].value} onValueChange={value => setConfig(prev => ({ ...prev, model: value }))}>
-          <SelectTrigger id="model"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {MODEL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </FormField>
+      <DynamicFormField
+        name="model"
+        label="Model"
+        description="Choose the AI model to use"
+        defaultValue={MODEL_OPTIONS[0].label}
+        value={config.model || MODEL_OPTIONS[0].value}
+        onChange={value => setConfig(prev => ({ ...prev, model: String(value) }))}
+        def={{ type: 'string', enum: MODEL_OPTIONS.map(o => o.value) }}
+        templateAutocomplete={templateAutocomplete}
+        error={validationErrors['model']}
+      />
 
-      <FormField label="Temperature" description="Controls randomness (0=deterministic, 2=very creative)" defaultValue={0.2} htmlFor="temperature">
-        <Input
-          id="temperature"
-          type="number"
-          min="0"
-          max="2"
-          step="0.1"
-          value={config.temperature ?? 0.2}
-          onChange={e => setConfig(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
-        />
-      </FormField>
+      <DynamicFormField
+        name="temperature"
+        label="Temperature"
+        description="Controls randomness (0=deterministic, 2=very creative)"
+        defaultValue={0.2}
+        value={config.temperature ?? 0.2}
+        onChange={value => setConfig(prev => ({ ...prev, temperature: typeof value === 'string' ? parseFloat(value) : (value as number) }))}
+        def={{ type: 'number', minimum: 0, maximum: 2 }}
+        templateAutocomplete={templateAutocomplete}
+        error={validationErrors['temperature']}
+      />
 
       <StructuredOutputToggle
         useStructuredOutput={useStructuredOutput}

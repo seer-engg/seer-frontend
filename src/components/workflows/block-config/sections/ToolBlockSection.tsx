@@ -2,17 +2,17 @@ import { useEffect, useCallback, useMemo } from 'react';
 
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ResourcePicker } from '@/components/workflows/ResourcePicker';
 
 import {
   ToolBlockConfig,
-  ResourcePickerConfig,
+  type ResourcePickerConfig,
   ToolMetadata,
   BlockSectionProps,
   TemplateAutocompleteControls,
 } from '../types';
 import { FormField } from '../widgets/FormField';
-import { ParamInputFactory, type ToolParamDefinition } from '../widgets/ParamInputFactory';
+import { DynamicFormField } from '../widgets/DynamicFormField';
+import type { ToolParamDefinition } from '../widgets/ParamInputFactory';
 
 interface ToolBlockSectionProps extends BlockSectionProps<ToolBlockConfig> {
   toolSchema?: ToolMetadata;
@@ -94,6 +94,7 @@ interface ParamFieldProps {
   updateParams: (updater: (prev: Record<string, unknown>) => Record<string, unknown>) => void;
   updateResourceLabel: (paramName: string, label?: string) => void;
   templateAutocomplete: TemplateAutocompleteControls;
+  error?: string;
 }
 
 function ParamField({
@@ -105,72 +106,35 @@ function ParamField({
   updateParams,
   updateResourceLabel,
   templateAutocomplete,
+  error,
 }: ParamFieldProps) {
-  const inputId = `param-${paramName}`;
   const paramValue = toolParams[paramName];
   const isRequired = requiredParams.includes(paramName);
-  const hasDefault = paramDef.default !== undefined;
   const resourcePicker = paramDef['x-resource-picker'] as ResourcePickerConfig | undefined;
-  const paramType = typeof paramDef.type === 'string' ? paramDef.type : 'string';
+  const dependsOnKey = resourcePicker?.depends_on;
+  const dependsOnValues = dependsOnKey ? { [dependsOnKey]: toolParams[dependsOnKey] as string } : undefined;
 
   return (
-    <FormField
-      key={paramName}
+    <DynamicFormField
+      name={paramName}
       label={paramName}
-      description={paramDef.description}
-      defaultValue={hasDefault ? (typeof paramDef.default === 'object' ? JSON.stringify(paramDef.default) : paramDef.default) : undefined}
+      description={paramDef.description as string | undefined}
       required={isRequired}
-      htmlFor={inputId}
-    >
-      {resourcePicker ? (
-        <>
-          <ResourcePicker
-            config={resourcePicker}
-            provider={toolProvider}
-            value={paramValue != null ? String(paramValue) : undefined}
-            onChange={(nextValue, displayName) => {
-              const parsedValue =
-                paramType === 'integer'
-                  ? (() => {
-                      const asNumber = typeof nextValue === 'string' ? parseInt(nextValue, 10) : Number(nextValue);
-                      return Number.isNaN(asNumber) ? nextValue : asNumber;
-                    })()
-                  : nextValue;
-              updateParams(prev => ({
-                ...prev,
-                [paramName]: parsedValue,
-              }));
-              updateResourceLabel(paramName, displayName);
-            }}
-            placeholder={`Select ${paramName}...`}
-            dependsOnValues={
-              resourcePicker.depends_on
-                ? { [resourcePicker.depends_on]: toolParams[resourcePicker.depends_on] }
-                : undefined
-            }
-            className="text-xs"
-          />
-          {toolProvider === 'supabase' && paramName === 'integration_resource_id' && (
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Connect Supabase Mgmt, then use "Bind project" to select a project.
-            </p>
-          )}
-        </>
-      ) : (
-        <ParamInputFactory
-          paramName={paramName}
-          paramDef={paramDef}
-          value={paramValue}
-          onChange={value => {
-            updateParams(prev => ({
-              ...prev,
-              [paramName]: value,
-            }));
-          }}
-          templateAutocomplete={templateAutocomplete}
-        />
-      )}
-    </FormField>
+      defaultValue={paramDef.default}
+      value={paramValue}
+      onChange={val => {
+        updateParams(prev => ({
+          ...prev,
+          [paramName]: val,
+        }));
+      }}
+      def={paramDef as any}
+      provider={toolProvider}
+      dependsOnValues={dependsOnValues}
+      templateAutocomplete={templateAutocomplete}
+      error={error}
+      onResourceLabelChange={(field, label) => updateResourceLabel(field, label)}
+    />
   );
 }
 
@@ -224,6 +188,7 @@ export function ToolBlockSection({
           updateParams={updateParams}
           updateResourceLabel={updateResourceLabel}
           templateAutocomplete={templateAutocomplete}
+          error={validationErrors?.[name]}
         />
       ))}
     </div>
