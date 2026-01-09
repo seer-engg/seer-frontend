@@ -2,9 +2,8 @@ import { useCallback } from 'react';
 import type { Node } from '@xyflow/react';
 import type { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
 import type { WorkflowModel } from '@/hooks/useWorkflowBuilder';
-import { toast } from '@/components/ui/sonner';
 import { BackendAPIError } from '@/lib/api-client';
-import { normalizeNodes, normalizeEdges } from '@/lib/workflow-normalization';
+import { handleDraftConflict } from '../utils/conflictHandler';
 
 export interface UseWorkflowAutosaveParams {
   selectedWorkflowId: string | null;
@@ -21,35 +20,7 @@ export interface UseWorkflowAutosaveParams {
   resetSavedDataRef: React.MutableRefObject<(() => void) | undefined>;
 }
 
-async function handleConflictError(params: {
-  selectedWorkflowId: string;
-  getWorkflow: (id: string) => Promise<WorkflowModel>;
-  setLoadedWorkflow: (workflow: WorkflowModel | null) => void;
-  setNodes: (nodes: Node<WorkflowNodeData>[]) => void;
-  setEdges: (edges: WorkflowEdge[]) => void;
-  functionBlocksMap: Map<string, unknown>;
-  setLastRunVersionId: (id: number | null) => void;
-  resetSavedDataRef: React.MutableRefObject<(() => void) | undefined>;
-  invalidateWorkflowVersions: () => void;
-}) {
-  try {
-    const latest = await params.getWorkflow(params.selectedWorkflowId);
-    params.setLoadedWorkflow(latest);
-    params.setNodes(normalizeNodes(latest.graph.nodes, params.functionBlocksMap));
-    params.setEdges(normalizeEdges(latest.graph.edges));
-    params.setLastRunVersionId(null);
-    params.resetSavedDataRef.current?.();
-    params.invalidateWorkflowVersions();
-    toast.error('Draft conflict detected', {
-      description: 'Reloaded the latest draft from the server. Please retry your change.',
-    });
-  } catch (error) {
-    console.error('Failed to refresh workflow after conflict:', error);
-    toast.error('Draft conflict detected', {
-      description: 'Reload failed. Please refresh the page to continue.',
-    });
-  }
-}
+// Draft conflict handling is shared via utils/conflictHandler
 
 export function useWorkflowAutosave(params: UseWorkflowAutosaveParams) {
   const {
@@ -92,7 +63,7 @@ export function useWorkflowAutosave(params: UseWorkflowAutosaveParams) {
         setTimeout(() => setAutosaveStatus('idle'), 2000);
       } catch (error) {
         if (error instanceof BackendAPIError && error.status === 409) {
-          await handleConflictError({
+          await handleDraftConflict({
             selectedWorkflowId,
             getWorkflow,
             setLoadedWorkflow,
