@@ -128,6 +128,7 @@ export interface WorkflowNodeSummaryProps {
   fallbackMessage?: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const getWorkflowNodeSummaryEntries = (
   config?: JsonRecord | null,
   priorityKeys: string[] = [],

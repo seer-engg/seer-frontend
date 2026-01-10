@@ -26,6 +26,289 @@ import { backendApiClient } from '@/lib/api-client';
 import type { InputDef, JsonObject } from '@/types/workflow-spec';
 import { ToolBlockConfig } from '@/components/workflows/block-config/types';
 
+// Helper function to build merged config with proper fields handling
+function buildMergedConfig(
+  originalConfig: ToolBlockConfig,
+  currentConfig: ToolBlockConfig,
+  currentInputRefs: Record<string, string>,
+): ToolBlockConfig {
+  const mergedConfig: ToolBlockConfig = {
+    ...originalConfig,
+    ...currentConfig,
+    input_refs: currentInputRefs,
+    output_schema: currentConfig.output_schema,
+  };
+
+  // Always include fields array if it exists in currentConfig (even if empty)
+  if ('fields' in currentConfig) {
+    mergedConfig.fields = currentConfig.fields;
+  }
+
+  return mergedConfig;
+}
+
+// Helper function to check if Supabase binding is required
+function validateSupabaseBinding(
+  toolSchema: ToolMetadata | undefined,
+  config: ToolBlockConfig,
+): { isValid: boolean; error?: string } {
+  const requiresSupabaseBinding = toolSchema?.integration_type === 'supabase';
+  if (requiresSupabaseBinding && !config?.params?.integration_resource_id) {
+    return {
+      isValid: false,
+      error: 'Supabase project required',
+    };
+  }
+  return { isValid: true };
+}
+
+// Helper function to check if config has changes
+function hasConfigChanges(params: {
+  currentConfig: ToolBlockConfig;
+  currentInputRefs: Record<string, string>;
+  currentOauthScope: string | undefined;
+  originalConfig: ToolBlockConfig;
+  originalInputRefs: Record<string, string>;
+  originalOauthScope: string | undefined;
+}): boolean {
+  return (
+    JSON.stringify(params.currentConfig) !== JSON.stringify(params.originalConfig) ||
+    params.currentOauthScope !== params.originalOauthScope ||
+    JSON.stringify(params.currentInputRefs) !== JSON.stringify(params.originalInputRefs)
+  );
+}
+
+// Helper function to handle save with validation
+async function handleConfigSave(params: {
+  node: Node<WorkflowNodeData>;
+  toolSchema: ToolMetadata | undefined;
+  config: ToolBlockConfig;
+  inputRefs: Record<string, string>;
+  oauthScope: string | undefined;
+  onUpdate: (
+    nodeId: string,
+    updates: Partial<WorkflowNodeData>,
+    options?: WorkflowNodeUpdateOptions,
+  ) => Promise<void> | void;
+}): Promise<void> {
+  const { node, toolSchema, config, inputRefs, oauthScope, onUpdate } = params;
+
+  const validation = validateSupabaseBinding(toolSchema, config);
+  if (!validation.isValid) {
+    toast.error(validation.error!, {
+      description: 'Select and bind a Supabase project before saving this tool.',
+    });
+    return;
+  }
+
+  const originalConfig = node.data.config || {};
+  const mergedConfig = buildMergedConfig(originalConfig, config, inputRefs);
+
+  try {
+    await onUpdate(
+      node.id,
+      {
+        config: mergedConfig,
+        oauth_scope: oauthScope,
+      },
+      { persist: true },
+    );
+    toast.success('Configuration saved', {
+      description: 'Block configuration has been saved successfully',
+      duration: 2000,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Unable to save block configuration';
+    toast.error('Failed to save configuration', {
+      description: message,
+    });
+  }
+}
+
+// Helper function to notify parent of config changes
+function notifyConfigChange(params: {
+  node: Node<WorkflowNodeData> | null;
+  config: ToolBlockConfig;
+  inputRefs: Record<string, string>;
+  oauthScope: string | undefined;
+  lastSyncedNodeId: string | null;
+  onChange?: (config: ToolBlockConfig, oauthScope?: string) => void;
+}): void {
+  const { node, config, inputRefs, oauthScope, lastSyncedNodeId, onChange } = params;
+
+  if (!onChange || !node) return;
+
+  // Only notify if we've synced the node already (avoid triggering on initial load)
+  if (lastSyncedNodeId !== node.id) {
+    console.log('[BlockConfigPanel] Skipping onChange (not synced yet):', {
+      nodeType: node.data.type,
+      currentNodeId: node.id,
+      syncedNodeId: lastSyncedNodeId,
+    });
+    return;
+  }
+
+  // Include inputRefs in the config so dialog can detect changes to template variables
+  const mergedConfig = {
+    ...config,
+    input_refs: inputRefs,
+  };
+
+  console.log('[BlockConfigPanel] Calling onChange:', {
+    nodeType: node.data.type,
+    nodeId: node.id,
+    configKeys: Object.keys(config),
+    mergedConfigKeys: Object.keys(mergedConfig),
+    config,
+  });
+
+  onChange(mergedConfig, oauthScope);
+}
+
+// Helper function to initialize/reset node sync state
+function initializeNodeSyncState(params: {
+  node: Node<WorkflowNodeData> | null;
+  lastSyncedNodeStateRef: React.MutableRefObject<{ nodeId: string | null; signature: string }>;
+}): void {
+  const { node, lastSyncedNodeStateRef } = params;
+
+  if (node) {
+    // Only set nodeId if it's a different node
+    if (lastSyncedNodeStateRef.current.nodeId !== node.id) {
+      lastSyncedNodeStateRef.current.nodeId = node.id;
+      // Keep existing signature to trigger sync effect
+      // (signature will be updated by the main sync effect)
+    }
+  } else {
+    // Reset when no node
+    lastSyncedNodeStateRef.current = {
+      nodeId: null,
+      signature: '',
+    };
+  }
+}
+
+// Helper function to trigger live update with debounce
+function triggerLiveUpdate(params: {
+  node: Node<WorkflowNodeData>;
+  liveUpdateDelayMs: number;
+  liveUpdateTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  configRef: React.MutableRefObject<ToolBlockConfig>;
+  inputRefsRef: React.MutableRefObject<Record<string, string>>;
+  oauthScopeRef: React.MutableRefObject<string | undefined>;
+  onUpdate: (
+    nodeId: string,
+    updates: Partial<WorkflowNodeData>,
+    options?: WorkflowNodeUpdateOptions,
+  ) => Promise<void> | void;
+}): void {
+  const { node, liveUpdateDelayMs, liveUpdateTimeoutRef, configRef, inputRefsRef, oauthScopeRef, onUpdate } = params;
+
+  if (liveUpdateTimeoutRef.current) {
+    clearTimeout(liveUpdateTimeoutRef.current);
+  }
+
+  liveUpdateTimeoutRef.current = setTimeout(() => {
+    // Use refs to get latest values when timeout fires
+    const latestConfig = configRef.current;
+    const latestInputRefs = inputRefsRef.current;
+    const latestOauthScope = oauthScopeRef.current;
+
+    const originalConfig = node.data.config || {};
+    const mergedConfig = buildMergedConfig(originalConfig, latestConfig, latestInputRefs);
+
+    const updatePayload: Partial<WorkflowNodeData> = {
+      config: mergedConfig,
+      oauth_scope: latestOauthScope,
+    };
+
+    void onUpdate(node.id, updatePayload);
+    liveUpdateTimeoutRef.current = null;
+  }, liveUpdateDelayMs);
+}
+
+interface BlockSectionProps {
+  node: Node<WorkflowNodeData>;
+  config: ToolBlockConfig;
+  setConfig: (config: ToolBlockConfig) => void;
+  toolSchema?: ToolMetadata;
+  templateAutocomplete: ReturnType<typeof useTemplateAutocomplete>;
+  validationErrors: Record<string, string>;
+  useStructuredOutput: boolean;
+  setUseStructuredOutput: (value: boolean) => void;
+  structuredOutputSchema?: JsonObject;
+  onStructuredOutputSchemaChange: (schema?: JsonObject) => void;
+}
+
+// Helper component to render block-specific config sections
+function BlockSection({
+  node,
+  config,
+  setConfig,
+  toolSchema,
+  templateAutocomplete,
+  validationErrors,
+  useStructuredOutput,
+  setUseStructuredOutput,
+  structuredOutputSchema,
+  onStructuredOutputSchemaChange,
+}: BlockSectionProps) {
+  if (node.data.type === 'code') {
+    return (
+      <div className="text-sm text-muted-foreground">
+        Code blocks are temporarily disabled while we migrate to the new workflow engine.
+      </div>
+    );
+  }
+
+  switch (node.data.type) {
+    case 'tool':
+      return (
+        <ToolBlockSection
+          config={config}
+          setConfig={setConfig}
+          toolSchema={toolSchema}
+          templateAutocomplete={templateAutocomplete}
+          validationErrors={validationErrors}
+        />
+      );
+    case 'llm':
+      return (
+        <LlmBlockSection
+          config={config}
+          setConfig={setConfig}
+          useStructuredOutput={useStructuredOutput}
+          setUseStructuredOutput={setUseStructuredOutput}
+          structuredOutputSchema={structuredOutputSchema}
+          onStructuredOutputSchemaChange={onStructuredOutputSchemaChange}
+          templateAutocomplete={templateAutocomplete}
+          validationErrors={validationErrors}
+        />
+      );
+    case 'if_else':
+      return (
+        <IfElseBlockSection
+          config={config}
+          setConfig={setConfig}
+          templateAutocomplete={templateAutocomplete}
+          validationErrors={validationErrors}
+        />
+      );
+    case 'for_loop':
+      return (
+        <ForLoopBlockSection
+          config={config}
+          setConfig={setConfig}
+          templateAutocomplete={templateAutocomplete}
+          validationErrors={validationErrors}
+        />
+      );
+    default:
+      return null;
+  }
+}
+
 interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;
   onUpdate: (
@@ -45,6 +328,7 @@ interface BlockConfigPanelProps {
   onChange?: (config: ToolBlockConfig, oauthScope?: string) => void; // Notify parent of local changes (for button enable, not for parent state update)
 }
 
+// eslint-disable-next-line complexity, max-lines-per-function
 export function BlockConfigPanel({
   node,
   onUpdate,
@@ -86,49 +370,21 @@ export function BlockConfigPanel({
 
   // Notify parent of local state changes (for change detection only, doesn't trigger parent state update)
   useEffect(() => {
-    if (onChange && node) {
-      // Only notify if we've synced the node already (avoid triggering on initial load)
-      if (lastSyncedNodeStateRef.current.nodeId === node.id) {
-        // Include inputRefs in the config so dialog can detect changes to template variables
-        const mergedConfig = {
-          ...config,
-          input_refs: inputRefs,
-        };
-        console.log('[BlockConfigPanel] Calling onChange:', {
-          nodeType: node.data.type,
-          nodeId: node.id,
-          configKeys: Object.keys(config),
-          mergedConfigKeys: Object.keys(mergedConfig),
-          config,
-        });
-        onChange(mergedConfig, oauthScope);
-      } else {
-        console.log('[BlockConfigPanel] Skipping onChange (not synced yet):', {
-          nodeType: node.data.type,
-          currentNodeId: node.id,
-          syncedNodeId: lastSyncedNodeStateRef.current.nodeId,
-        });
-      }
-    }
+    notifyConfigChange({
+      node,
+      config,
+      inputRefs,
+      oauthScope,
+      lastSyncedNodeId: lastSyncedNodeStateRef.current.nodeId,
+      onChange,
+    });
   }, [config, inputRefs, oauthScope, onChange, node]);
 
   // Initialize lastSyncedNodeStateRef.nodeId immediately when node changes
   // This ensures onChange can fire even if user edits before sync completes
   useEffect(() => {
-    if (node) {
-      // Only set nodeId if it's a different node
-      if (lastSyncedNodeStateRef.current.nodeId !== node.id) {
-        lastSyncedNodeStateRef.current.nodeId = node.id;
-        // Keep existing signature to trigger sync effect
-        // (signature will be updated by the main sync effect)
-      }
-    } else {
-      // Reset when no node
-      lastSyncedNodeStateRef.current = {
-        nodeId: null,
-        signature: '',
-      };
-    }
+    initializeNodeSyncState({ node, lastSyncedNodeStateRef });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id]); // Only run when node ID changes, not on every node property change
 
   const toolName = config.tool_name || config.toolName || '';
@@ -216,52 +472,29 @@ export function BlockConfigPanel({
     const currentInputRefs = inputRefsRef.current;
     const currentOauthScope = oauthScopeRef.current;
 
-    // Check for changes including fields array
-    const configChanged = JSON.stringify(currentConfig) !== JSON.stringify(nodeConfig);
-    const fieldsChanged = JSON.stringify(currentConfig.fields) !== JSON.stringify(nodeConfig.fields);
-    const hasChanges =
-      configChanged ||
-      fieldsChanged ||
-      currentOauthScope !== node.data.oauth_scope ||
-      JSON.stringify(currentInputRefs) !== JSON.stringify(nodeInputRefs);
+    // Check for changes
+    const changesDetected = hasConfigChanges({
+      currentConfig,
+      currentInputRefs,
+      currentOauthScope,
+      originalConfig: nodeConfig,
+      originalInputRefs: nodeInputRefs,
+      originalOauthScope: node.data.oauth_scope,
+    });
 
-    if (!hasChanges) {
+    if (!changesDetected) {
       return;
     }
 
-    if (liveUpdateTimeoutRef.current) {
-      clearTimeout(liveUpdateTimeoutRef.current);
-    }
-
-    liveUpdateTimeoutRef.current = setTimeout(() => {
-      // Use refs to get latest values when timeout fires
-      const latestConfig = configRef.current;
-      const latestInputRefs = inputRefsRef.current;
-      const latestOauthScope = oauthScopeRef.current;
-      
-      const originalConfig = node.data.config || {};
-      
-      // Build merged config, always preserving fields if present in latestConfig
-      const mergedConfig: ToolBlockConfig = {
-        ...originalConfig,
-        ...latestConfig,
-        input_refs: latestInputRefs,
-        output_schema: latestConfig.output_schema,
-      };
-      
-      // Always include fields array if it exists in latestConfig (even if empty)
-      if ('fields' in latestConfig) {
-        mergedConfig.fields = latestConfig.fields;
-      }
-      
-      const updatePayload: Partial<WorkflowNodeData> = {
-        config: mergedConfig,
-        oauth_scope: latestOauthScope,
-      };
-      
-      void onUpdate(node.id, updatePayload);
-      liveUpdateTimeoutRef.current = null;
-    }, liveUpdateDelayMs);
+    triggerLiveUpdate({
+      node,
+      liveUpdateDelayMs,
+      liveUpdateTimeoutRef,
+      configRef,
+      inputRefsRef,
+      oauthScopeRef,
+      onUpdate,
+    });
 
     return () => {
       if (liveUpdateTimeoutRef.current) {
@@ -292,27 +525,19 @@ export function BlockConfigPanel({
         if (!originalNode) return;
         
         // Check if data actually changed before saving
-        const hasChanges = 
-          JSON.stringify(configRef.current) !== JSON.stringify(originalNode.data.config || {}) ||
-          oauthScopeRef.current !== originalNode.data.oauth_scope ||
-          JSON.stringify(inputRefsRef.current) !== JSON.stringify(originalNode.data.config?.input_refs || {});
-        
-        if (hasChanges) {
+        const changesDetected = hasConfigChanges({
+          currentConfig: configRef.current,
+          currentInputRefs: inputRefsRef.current,
+          currentOauthScope: oauthScopeRef.current,
+          originalConfig: originalNode.data.config || {},
+          originalInputRefs: originalNode.data.config?.input_refs || {},
+          originalOauthScope: originalNode.data.oauth_scope,
+        });
+
+        if (changesDetected) {
           isSavingRef.current = true;
           const originalConfig = originalNode.data.config || {};
-          
-          // Build merged config, always preserving fields if present
-          const mergedConfig: ToolBlockConfig = {
-            ...originalConfig,
-            ...configRef.current,
-            input_refs: inputRefsRef.current,
-            output_schema: configRef.current.output_schema,
-          };
-          
-          // Always include fields array if it exists in current config (even if empty)
-          if ('fields' in configRef.current) {
-            mergedConfig.fields = configRef.current.fields;
-          }
+          const mergedConfig = buildMergedConfig(originalConfig, configRef.current, inputRefsRef.current);
           
           void onUpdate(originalNode.id, {
             config: mergedConfig,
@@ -335,117 +560,22 @@ export function BlockConfigPanel({
     );
   }
 
-  const handleSave = async () => {
-    if (node) {
-      const requiresSupabaseBinding = toolSchema?.integration_type === 'supabase';
-      if (
-        requiresSupabaseBinding &&
-        !config?.params?.integration_resource_id
-      ) {
-        toast.error('Supabase project required', {
-          description: 'Select and bind a Supabase project before saving this tool.',
-        });
-        return;
-      }
-      const originalConfig = node.data.config || {};
-      
-      // Build merged config, always preserving fields if present
-      const mergedConfig: ToolBlockConfig = {
-        ...originalConfig,
-        ...config,
-        input_refs: inputRefs,
-        output_schema: config.output_schema,
-      };
-      
-      // Always include fields array if it exists in config (even if empty)
-      if ('fields' in config) {
-        mergedConfig.fields = config.fields;
-      }
-      
-      try {
-        await onUpdate(
-          node.id,
-          {
-            config: mergedConfig,
-            oauth_scope: oauthScope,
-          },
-          { persist: true },
-        );
-        toast.success('Configuration saved', {
-          description: 'Block configuration has been saved successfully',
-          duration: 2000,
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Unable to save block configuration';
-        toast.error('Failed to save configuration', {
-          description: message,
-        });
-      }
-    }
-  };
-
-  const renderBlockSection = () => {
-    if (!node) {
-      return null;
-    }
-
-    if (node.data.type === 'code') {
-      return (
-        <div className="text-sm text-muted-foreground">
-          Code blocks are temporarily disabled while we migrate to the new workflow engine.
-        </div>
-      );
-    }
-
-    switch (node.data.type) {
-      case 'tool':
-        return (
-          <ToolBlockSection
-            config={config}
-            setConfig={setConfig}
-            toolSchema={toolSchema}
-            templateAutocomplete={templateAutocomplete}
-            validationErrors={validationErrors}
-          />
-        );
-      case 'llm':
-        return (
-          <LlmBlockSection
-            config={config}
-            setConfig={setConfig}
-            useStructuredOutput={useStructuredOutput}
-            setUseStructuredOutput={setUseStructuredOutput}
-            structuredOutputSchema={structuredOutputSchema}
-            onStructuredOutputSchemaChange={handleStructuredOutputSchemaChange}
-            templateAutocomplete={templateAutocomplete}
-            validationErrors={validationErrors}
-          />
-        );
-      case 'if_else':
-        return (
-          <IfElseBlockSection
-            config={config}
-            setConfig={setConfig}
-            templateAutocomplete={templateAutocomplete}
-            validationErrors={validationErrors}
-          />
-        );
-      case 'for_loop':
-        return (
-          <ForLoopBlockSection
-            config={config}
-            setConfig={setConfig}
-            templateAutocomplete={templateAutocomplete}
-            validationErrors={validationErrors}
-          />
-        );
-    }
-  };
-
   const shouldShowSaveButton = showSaveButton ?? (!autoSave && !liveUpdate);
   const saveButton = shouldShowSaveButton ? (
-    <Button onClick={() => void handleSave()} className="w-full" size="sm">
+    <Button
+      onClick={() =>
+        void handleConfigSave({
+          node,
+          toolSchema,
+          config,
+          inputRefs,
+          oauthScope,
+          onUpdate,
+        })
+      }
+      className="w-full"
+      size="sm"
+    >
       <Save className="w-4 h-4 mr-2" />
       Save Configuration
     </Button>
@@ -454,7 +584,18 @@ export function BlockConfigPanel({
   if (variant === 'inline') {
     return (
       <div className="space-y-2 w-fit">
-        {renderBlockSection()}
+        <BlockSection
+          node={node}
+          config={config}
+          setConfig={setConfig}
+          toolSchema={toolSchema}
+          templateAutocomplete={templateAutocomplete}
+          validationErrors={validationErrors}
+          useStructuredOutput={useStructuredOutput}
+          setUseStructuredOutput={setUseStructuredOutput}
+          structuredOutputSchema={structuredOutputSchema}
+          onStructuredOutputSchemaChange={handleStructuredOutputSchemaChange}
+        />
         {saveButton}
       </div>
     );
@@ -463,7 +604,18 @@ export function BlockConfigPanel({
   return (
     <Card className="w-fit">
       <CardContent className="p-4 space-y-2 w-fit">
-        {renderBlockSection()}
+        <BlockSection
+          node={node}
+          config={config}
+          setConfig={setConfig}
+          toolSchema={toolSchema}
+          templateAutocomplete={templateAutocomplete}
+          validationErrors={validationErrors}
+          useStructuredOutput={useStructuredOutput}
+          setUseStructuredOutput={setUseStructuredOutput}
+          structuredOutputSchema={structuredOutputSchema}
+          onStructuredOutputSchemaChange={handleStructuredOutputSchemaChange}
+        />
         {saveButton}
       </CardContent>
     </Card>

@@ -39,6 +39,7 @@ import { useConnectionValidation } from '../../../hooks/useConnectionValidation'
 /**
  * Extract tool names from workflow nodes
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function getToolNamesFromNodes(nodes: Node<WorkflowNodeData>[]): string[] {
   return nodes
     .filter((node) => node.data.type === 'tool')
@@ -68,6 +69,7 @@ interface WorkflowCanvasProps {
   readOnly?: boolean;
 }
 
+// eslint-disable-next-line max-lines-per-function
 export function WorkflowCanvas({
   previewGraph = null,
   onNodeDoubleClick,

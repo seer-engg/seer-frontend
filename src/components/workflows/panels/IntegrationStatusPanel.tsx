@@ -11,6 +11,7 @@ import { useToolsStore } from '@/stores/toolsStore';
 import { cn } from '@/lib/utils';
 import { getToolNamesFromNodes } from '../canvas/WorkflowCanvas';
 import type { WorkflowNodeData } from '../types';
+import { useWorkflowSave } from '@/hooks/useWorkflowSave';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -62,7 +63,8 @@ interface IntegrationInfo {
   toolCount: number;
 }
 
-const INTEGRATION_META: Record<IntegrationType, { displayName: string; icon: React.ReactNode }> = {
+// eslint-disable-next-line react-refresh/only-export-components
+export const INTEGRATION_META: Record<IntegrationType, { displayName: string; icon: React.ReactNode }> = {
   gmail: { displayName: 'Gmail', icon: <Mail className="w-4 h-4" /> },
   google_drive: { displayName: 'Google Drive', icon: <FolderOpen className="w-4 h-4" /> },
   google_sheets: { displayName: 'Google Sheets', icon: <FolderOpen className="w-4 h-4" /> },
@@ -73,6 +75,7 @@ const INTEGRATION_META: Record<IntegrationType, { displayName: string; icon: Rea
   supabase: { displayName: 'Supabase', icon: <Database className="w-4 h-4" /> },
 };
 
+// eslint-disable-next-line max-lines-per-function
 export function IntegrationStatusPanel({
   usedToolNames,
   nodes,
@@ -86,6 +89,7 @@ export function IntegrationStatusPanel({
   const isLoading = useToolsStore((state) => state.toolsLoading);
   const connectIntegration = useToolsStore((state) => state.connectIntegration);
   const refresh = useToolsStore((state) => state.refreshIntegrationTools);
+  const { saveWorkflow, hasWorkflow } = useWorkflowSave();
 
   // Extract tool names from nodes if not provided
   const toolNamesFromNodes = useMemo(() => {
@@ -158,12 +162,15 @@ export function IntegrationStatusPanel({
     const toolsForType = toolsWithStatus.filter(
       t => t.integrationType === type && effectiveToolNames.includes(t.tool.name)
     );
-    
+
     if (toolsForType.length === 0) {
       console.error(`[IntegrationStatusPanel] No tools found for integration type ${type} in workflow. Cannot connect without specific tool names.`);
       return;
     }
-    
+
+    if (hasWorkflow) {
+      await saveWorkflow();
+    }
     const toolNames = toolsForType.map(t => t.tool.name);
     const redirectUrl = await connectIntegration(type, { toolNames });
     if (redirectUrl) {
@@ -376,79 +383,6 @@ export function IntegrationStatusPanel({
   );
 }
 
-/**
- * Compact inline status badge for a single integration
- */
-export function IntegrationBadge({
-  type,
-  toolNames,
-  showConnect = true,
-  className
-}: {
-  type: IntegrationType;
-  toolNames?: string[];
-  showConnect?: boolean;
-  className?: string;
-}) {
-  // Phase 2: Direct store access instead of wrapper hook
-  // Phase 2: Direct store access instead of wrapper hook - FIXED: Individual selectors
-  const isIntegrationConnected = useToolsStore((state) => state.isIntegrationConnected);
-  const connectIntegration = useToolsStore((state) => state.connectIntegration);
-  const isLoading = useToolsStore((state) => state.toolsLoading);
-  const isConnected = isIntegrationConnected(type);
-  const meta = INTEGRATION_META[type];
-
-  if (!meta) return null;
-
-  const handleConnect = async () => {
-    if (!toolNames || toolNames.length === 0) {
-      console.error(`[IntegrationBadge] Cannot connect ${type} without explicit tool names. Pass toolNames prop.`);
-      return;
-    }
-    
-    const redirectUrl = await connectIntegration(type, { toolNames });
-    if (redirectUrl) {
-      window.location.href = redirectUrl;
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <Badge variant="secondary" className={cn('animate-pulse', className)}>
-        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-        {meta.displayName}
-      </Badge>
-    );
-  }
-
-  if (isConnected) {
-    return (
-      <Badge
-        variant="secondary"
-        className={cn(
-          'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-          className
-        )}
-      >
-        <CheckCircle2 className="w-3 h-3 mr-1" />
-        {meta.displayName}
-      </Badge>
-    );
-  }
-
-  return (
-    <Badge
-      variant="secondary"
-      className={cn(
-        'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 cursor-pointer hover:bg-amber-500/20',
-        className
-      )}
-      onClick={showConnect ? handleConnect : undefined}
-    >
-      <AlertTriangle className="w-3 h-3 mr-1" />
-      {meta.displayName}
-      {showConnect && <ExternalLink className="w-3 h-3 ml-1" />}
-    </Badge>
-  );
-}
+// Re-export IntegrationBadge for backward compatibility
+export { IntegrationBadge } from './IntegrationBadge';
 

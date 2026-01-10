@@ -112,5 +112,6 @@ export function UserSchemaEditor({
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export { createEmptySchema } from './utils';
 export type { SchemaEditorMode, SchemaField } from './types';

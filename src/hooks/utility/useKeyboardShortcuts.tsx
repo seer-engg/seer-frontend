@@ -52,43 +52,54 @@ export function KeyboardShortcutProvider({ children }: { children: React.ReactNo
     });
   }, []);
 
+  const getModifierState = (event: KeyboardEvent) => ({
+    ctrl: event.ctrlKey || event.metaKey,
+    shift: event.shiftKey,
+    alt: event.altKey,
+  });
+
+  const getRequiredModifiers = (modifiers?: KeyboardShortcut['modifiers']) => ({
+    ctrl: Boolean(modifiers?.ctrl || modifiers?.meta),
+    shift: Boolean(modifiers?.shift),
+    alt: Boolean(modifiers?.alt),
+  });
+
+  const checkModifiers = useCallback((
+    event: KeyboardEvent,
+    requiredModifiers?: KeyboardShortcut['modifiers']
+  ): boolean => {
+    const pressed = getModifierState(event);
+    const needed = getRequiredModifiers(requiredModifiers);
+
+    // All required modifiers must be pressed
+    if (needed.ctrl && !pressed.ctrl) return false;
+    if (needed.shift && !pressed.shift) return false;
+    if (needed.alt && !pressed.alt) return false;
+
+    // No extra modifiers should be pressed
+    if (!needed.ctrl && pressed.ctrl) return false;
+    if (!needed.shift && pressed.shift) return false;
+    if (!needed.alt && pressed.alt) return false;
+
+    return true;
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Skip if typing in input, textarea, or contenteditable
       const target = event.target as HTMLElement;
       if (target.matches('input, textarea, [contenteditable="true"]')) {
         return;
       }
 
-      // Find matching shortcut
       for (const [, shortcut] of shortcuts) {
         if (shortcut.enabled === false) continue;
 
         const key = event.key.toLowerCase();
         const shortcutKey = shortcut.key.toLowerCase();
 
-        // Check if key matches
         if (key !== shortcutKey) continue;
 
-        // Check modifiers
-        const ctrlPressed = event.ctrlKey || event.metaKey;
-        const shiftPressed = event.shiftKey;
-        const altPressed = event.altKey;
-
-        const needsCtrl = shortcut.modifiers?.ctrl || shortcut.modifiers?.meta;
-        const needsShift = shortcut.modifiers?.shift;
-        const needsAlt = shortcut.modifiers?.alt;
-
-        const modifiersMatch =
-          (!needsCtrl || ctrlPressed) &&
-          (!needsShift || shiftPressed) &&
-          (!needsAlt || altPressed) &&
-          // Ensure extra modifiers aren't pressed when not needed
-          (needsCtrl || !ctrlPressed) &&
-          (needsShift || !shiftPressed) &&
-          (needsAlt || !altPressed);
-
-        if (modifiersMatch) {
+        if (checkModifiers(event, shortcut.modifiers)) {
           event.preventDefault();
           shortcut.handler();
           break;
@@ -98,7 +109,7 @@ export function KeyboardShortcutProvider({ children }: { children: React.ReactNo
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts]);
+  }, [shortcuts, checkModifiers]);
 
   const value = useMemo(
     () => ({
@@ -116,6 +127,7 @@ export function KeyboardShortcutProvider({ children }: { children: React.ReactNo
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useKeyboardShortcut(definition: ShortcutDefinition) {
   const context = useContext(KeyboardShortcutContext);
 
@@ -126,18 +138,10 @@ export function useKeyboardShortcut(definition: ShortcutDefinition) {
   useEffect(() => {
     const id = context.registerShortcut(definition);
     return () => context.unregisterShortcut(id);
-  }, [
-    definition.key,
-    definition.enabled,
-    definition.handler,
-    definition.modifiers?.ctrl,
-    definition.modifiers?.meta,
-    definition.modifiers?.shift,
-    definition.modifiers?.alt,
-    context,
-  ]);
+  }, [definition, context]);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useShortcuts() {
   const context = useContext(KeyboardShortcutContext);
   if (!context) return [];
