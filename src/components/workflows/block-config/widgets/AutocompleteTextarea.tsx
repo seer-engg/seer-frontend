@@ -2,7 +2,7 @@ import { useRef, type RefObject } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { VariableAutocompleteDropdown } from './VariableAutocompleteDropdown';
 import type { TemplateAutocompleteControls } from '../types';
-import type { AutocompleteContext } from '../hooks/useTemplateAutocomplete';
+import type { AutocompleteContext } from '../../../../hooks/useTemplateAutocomplete';
 
 export interface AutocompleteTextareaProps {
   id: string;

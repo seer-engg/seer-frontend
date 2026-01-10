@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { useTemplateAutocomplete } from './hooks/useTemplateAutocomplete';
+import { useTemplateAutocomplete } from '../../../hooks/useTemplateAutocomplete';
 
 export interface ResourcePickerConfig {
   resource_type: string;

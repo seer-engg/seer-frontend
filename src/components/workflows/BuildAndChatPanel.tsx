@@ -13,8 +13,8 @@ import { UnifiedBuildPanel } from './build-and-chat/build/UnifiedBuildPanel';
 import { ChatPanel } from './build-and-chat/chat/ChatPanel';
 import { ExecutionsPanel } from './build-and-chat/executions/ExecutionsPanel';
 import type { SessionsStatus } from './build-and-chat/chat/types';
-import { useChatMessages } from './build-and-chat/hooks/useChatMessages';
-import { useChatSessions } from './build-and-chat/hooks/useChatSessions';
+import { useChatMessages } from '../../hooks/useChatMessages';
+import { useChatSessions } from '../../hooks/useChatSessions';
 import type {
   BuildAndChatPanelProps,
   ChatMessage,

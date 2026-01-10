@@ -30,7 +30,6 @@ import { ToolBlockNode } from './blocks/ToolBlockNode';
 import { LLMBlockNode } from './blocks/LLMBlockNode';
 import { IfElseBlockNode } from './blocks/IfElseBlockNode';
 import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
-import { TriggerBlockNode } from './blocks/TriggerBlockNode';
 import { useCanvasStore } from '@/stores';
 import { useCanvasDragDrop } from '../../hooks/useCanvasDragDrop';
 import { useConnectionValidation } from '../../hooks/useConnectionValidation';
@@ -53,7 +52,6 @@ const nodeTypes: NodeTypes = {
   llm: LLMBlockNode,
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
-  trigger: TriggerBlockNode,
 };
 
 interface WorkflowCanvasProps {

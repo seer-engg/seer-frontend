@@ -25,12 +25,12 @@ import { KeymapDialog } from '@/components/KeymapDialog';
 import { GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
 import { useCanvasStore, useUIStore } from '@/stores';
 import { normalizeEdges, normalizeNodes } from '@/lib/workflow-normalization';
-import { useTriggerOptions } from './workflows/hooks/useTriggerOptions';
-import { useWorkflowSync } from './workflows/hooks/useWorkflowSync';
-import { WorkflowInputDialog } from './workflows/components/WorkflowInputDialog';
-import { useWorkflowActions } from './workflows/hooks/useWorkflowActions';
-import { useNodeActions } from './workflows/hooks/useNodeActions';
-import { useTriggerHandlers } from './workflows/hooks/useTriggerHandlers';
+import { useTriggerOptions } from '@/hooks/useTriggerOptions';
+import { useWorkflowSync } from '@/hooks/useWorkflowSync';
+import { WorkflowInputDialog } from '../components/workflows/WorkflowInputDialog';
+import { useWorkflowActions } from '@/hooks/useWorkflowActions';
+import { useNodeActions } from '@/hooks/useNodeActions';
+import { useTriggerHandlers } from '@/hooks/useTriggerHandlers';
 
 const parseProviderConnectionId = (raw?: string | null): number | null => {
   if (!raw) {

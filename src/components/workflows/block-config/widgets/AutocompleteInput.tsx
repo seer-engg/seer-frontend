@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { VariableAutocompleteDropdown } from './VariableAutocompleteDropdown';
 import type { TemplateAutocompleteControls } from '../types';
-import type { AutocompleteContext } from '../hooks/useTemplateAutocomplete';
+import type { AutocompleteContext } from '../../../../hooks/useTemplateAutocomplete';
 
 export interface AutocompleteInputProps {
   id: string;
