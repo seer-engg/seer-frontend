@@ -1,9 +1,17 @@
 import type { Node } from '@xyflow/react';
-import type { WorkflowNodeData, TriggerCatalogEntry } from '@/components/workflows/types';
+import type { WorkflowNodeData, TriggerCatalogEntry, TriggerDraftMeta } from '@/components/workflows/types';
 import type { BlockSelectionPayload } from '@/types/block-selection';
 import type { InputDef } from '@/types/workflow-spec';
 import { withDefaultBlockConfig as withDefaults, generateNodeId } from '@/lib/workflow-nodes';
 import { GMAIL_TRIGGER_KEY } from '@/components/workflows/triggers/constants';
+import { buildDefaultBindingState } from '@/components/workflows/triggers/utils';
+
+/**
+ * Generate a unique draft ID for new trigger nodes.
+ */
+function generateDraftId(): string {
+  return `draft-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+}
 
 export interface TriggerNodeCreationParams {
   triggerKey: string;
@@ -40,6 +48,14 @@ export function createTriggerNode(params: TriggerNodeCreationParams): Node<Workf
     };
   }
 
+  // Create draft metadata for new trigger nodes (required for saving)
+  const initialBindings = buildDefaultBindingState(workflowInputsDef);
+  const draft: TriggerDraftMeta = {
+    id: generateDraftId(),
+    triggerKey,
+    initialBindings,
+  };
+
   return {
     id: generateNodeId('trigger'),
     type: 'trigger',
@@ -55,6 +71,7 @@ export function createTriggerNode(params: TriggerNodeCreationParams): Node<Workf
         workflowInputs: workflowInputsDef,
         handlers: {} as Record<string, (data: unknown) => void>,
         integration: Object.keys(integrationMeta).length ? integrationMeta : undefined,
+        draft,
       },
     },
   };

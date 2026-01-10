@@ -63,17 +63,29 @@ export function workflowSpecToGraph(spec: WorkflowSpec): WorkflowGraphData {
 }
 
 function buildWorkflowNodes(graph: WorkflowGraphData): WorkflowNode[] {
-  const ctx = createGraphContext(graph);
+  // Filter out trigger nodes - they represent workflow entry points (webhooks, schedules, etc.)
+  // and are stored separately in the workflow metadata, not as executable workflow nodes.
+  const executableNodes = graph.nodes.filter((node) => node.data?.type !== 'trigger');
+  const filteredGraph: WorkflowGraphData = {
+    nodes: executableNodes,
+    edges: graph.edges.filter(
+      (edge) =>
+        executableNodes.some((n) => n.id === edge.source) &&
+        executableNodes.some((n) => n.id === edge.target),
+    ),
+  };
+
+  const ctx = createGraphContext(filteredGraph);
   const visited = new Set<string>();
   const result: WorkflowNode[] = [];
 
-  const rootIds = findRootNodeIds(graph.nodes, ctx);
+  const rootIds = findRootNodeIds(filteredGraph.nodes, ctx);
   rootIds.forEach((rootId) => {
     result.push(...buildLinearChain(rootId, ctx, visited));
   });
 
   // Catch any remaining nodes that might not be reachable from a root
-  graph.nodes.forEach((node) => {
+  filteredGraph.nodes.forEach((node) => {
     if (!visited.has(node.id)) {
       result.push(...buildLinearChain(node.id, ctx, visited));
     }

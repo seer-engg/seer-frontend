@@ -9,7 +9,7 @@ import { WebhookDetailsSection } from '../triggers/WebhookTriggerConfig';
 import { GmailDetailsSection } from '../triggers/GmailTriggerConfig';
 import { DynamicTriggerConfigForm } from '../triggers/DynamicTriggerConfigForm';
 import { UserSchemaEditor } from '../triggers/UserSchemaEditor';
-import { WorkflowInputManager, BindingSection } from './BaseTriggerNode';
+import { WorkflowInputManager } from './BaseTriggerNode';
 import type { InputDef } from '@/types/workflow-spec';
 import type { BindingState } from '../../../triggers/utils';
 import type { QuickOption } from './BaseTriggerNode';
@@ -264,16 +264,6 @@ function ExpandedConfigSection({
         setInputDraft={setInputDraft}
         handleCreateWorkflowInput={handleCreateWorkflowInput}
         handleRemoveWorkflowInput={handleRemoveWorkflowInput}
-      />
-      <BindingSection
-        hasInputs={hasInputs}
-        canManageInputs={canManageInputs}
-        workflowInputEntries={workflowInputEntries}
-        bindingState={bindingState}
-        handleBindingModeChange={handleBindingModeChange}
-        handleBindingValueChange={handleBindingValueChange}
-        bindingQuickInsert={bindingQuickInsert}
-        quickOptions={quickOptions}
       />
     </div>
   );
