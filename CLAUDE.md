@@ -85,7 +85,7 @@ All UI components follow consistent patterns documented in `.claude/rules/`:
 - Prefer minimal design without icons for labels and counts
 - Use subtle backgrounds: `bg-emerald-500/10 text-emerald-600 border-emerald-500/20`
 - Reserve icon-based badges for critical status indicators only
-- Reference: `src/components/workflows/build-and-chat/build/CategoryBadge.tsx`
+- Reference: `src/components/workflows/build/CategoryBadge.tsx`
 
 **Button Components:**
 - Use CVA-based variants: default, destructive, outline, secondary, ghost, link, brand

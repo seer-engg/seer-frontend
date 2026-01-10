@@ -21,7 +21,7 @@ Use this pattern for labels, counts, and non-critical indicators:
 - Fixed heights: `h-4` or `h-5`
 - Use `variant="outline"` or `variant="secondary"`
 
-**Reference:** `src/components/workflows/build-and-chat/build/CategoryBadge.tsx:10-32`
+**Reference:** `src/components/workflows/build/CategoryBadge.tsx:10-34`
 
 **Examples:**
 
@@ -57,7 +57,7 @@ Only use icon-based badges for critical status indicators:
 - Authentication state
 - Critical errors or warnings
 
-**Reference:** `src/components/workflows/blocks/ToolBlockNode.tsx:156-180`
+**Reference:** `src/components/workflows/blocks/ToolBlockNode.tsx:126-151`
 
 **Example:**
 

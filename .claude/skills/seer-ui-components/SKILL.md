@@ -30,9 +30,9 @@ Always reference existing implementations before creating or modifying component
 - `src/components/ui/input.tsx` - Input component with consistent styling
 
 **Reference implementations:**
-- `src/components/workflows/build-and-chat/build/CategoryBadge.tsx:10-32` - Preferred minimal badge pattern with semantic colors
-- `src/components/workflows/blocks/ToolBlockNode.tsx:127-148` - Status badges with icons (critical indicators only)
-- `src/components/workflows/build-and-chat/build/ToolsSection.tsx:106-108` - Count badges
+- `src/components/workflows/build/CategoryBadge.tsx:10-34` - Preferred minimal badge pattern with semantic colors
+- `src/components/workflows/blocks/ToolBlockNode.tsx:126-151` - Status badges with icons (critical indicators only)
+- `src/components/workflows/build/ToolsSection.tsx:106-108` - Count badges
 
 ### 2. Apply Design System Patterns
 
@@ -171,7 +171,7 @@ Test in both light and dark modes before finalizing.
 
 ### Preferred Badge Pattern
 
-**Reference:** `src/components/workflows/build-and-chat/build/CategoryBadge.tsx` and `src/components/workflows/blocks/ToolBlockNode.tsx`
+**Reference:** `src/components/workflows/build/CategoryBadge.tsx` and `src/components/workflows/blocks/ToolBlockNode.tsx`
 
 **Characteristics:**
 - No icons (minimal design)
@@ -183,7 +183,7 @@ Test in both light and dark modes before finalizing.
 
 ### Status Badge Pattern (Use Sparingly)
 
-**Reference:** `src/components/workflows/blocks/ToolBlockNode.tsx:127-148`
+**Reference:** `src/components/workflows/blocks/ToolBlockNode.tsx:126-151`
 
 Only use icons for:
 - Connection status

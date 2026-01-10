@@ -10,7 +10,7 @@ This Skill helps you work with React Flow (@xyflow/react) for building the workf
 
 ## Core React Flow Architecture
 
-### 1. **WorkflowCanvas Component** (`src/components/workflows/WorkflowCanvas.tsx`)
+### 1. **WorkflowCanvas Component** (`src/components/workflows/canvas/WorkflowCanvas.tsx`)
 
 The main canvas component that orchestrates React Flow.
 
@@ -183,7 +183,7 @@ export const MyBlockNode = memo(function MyBlockNode(props: NodeProps<MyBlockNod
 
 ### Step 2: Register the Node Type
 
-Add the new node type to `WorkflowCanvas.tsx`:
+Add the new node type to `canvas/WorkflowCanvas.tsx`:
 
 ```tsx
 import { MyBlockNode } from './blocks/MyBlockNode';
@@ -430,7 +430,7 @@ python -m api.main
 
 | File | Purpose | When to Modify |
 |------|---------|----------------|
-| `src/components/workflows/WorkflowCanvas.tsx` | Main canvas component | Adding global canvas features |
+| `src/components/workflows/canvas/WorkflowCanvas.tsx` | Main canvas component | Adding global canvas features |
 | `src/components/workflows/blocks/BaseBlockNode.tsx` | Base block component | Changing common block behavior |
 | `src/components/workflows/blocks/*.tsx` | Custom block nodes | Adding/modifying specific block types |
 | `src/stores/canvasStore.ts` | Canvas state management | Adding canvas state or actions |

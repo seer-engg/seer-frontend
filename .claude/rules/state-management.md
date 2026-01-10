@@ -142,7 +142,7 @@ function IntegrationList({ integrations }: { integrations: Integration[] }) {
 ✅ **After - Zustand Store (Actual Pattern from Codebase):**
 
 ```tsx
-// Already exists: src/stores/integrationStore.ts
+// Already exists: src/stores/toolsStore.ts
 export const useToolsStore = create<IntegrationStore>((set) => ({
   integrations: [],
   fetchIntegrations: async () => {
