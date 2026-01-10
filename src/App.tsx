@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/general/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
+import { ExecutionTrace } from "./pages/ExecutionTrace";
 import PublicForm from "./pages/PublicForm";
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
@@ -86,6 +87,16 @@ const App = () => (
                 <ProtectedRoute>
                   <SeerLayout>
                     <Workflows />
+                  </SeerLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/executions/:runId"
+              element={
+                <ProtectedRoute>
+                  <SeerLayout>
+                    <ExecutionTrace />
                   </SeerLayout>
                 </ProtectedRoute>
               }

@@ -31,3 +31,40 @@ export interface RunStatusResponse {
   last_error?: string | null;
 }
 
+export interface WorkflowNodeTrace {
+  node_id: string;
+  node_type: string;
+  inputs?: JsonObject | null;
+  output?: unknown;
+  timestamp?: string;
+  output_key?: string;
+  tool_name?: string;
+  model?: string;
+  error?: string;
+}
+
+export interface RunHistoryEntry {
+  run_id: string;
+  workflow_id: string | null;
+  status: RunStatus;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  inputs?: JsonObject | null;
+  output?: JsonObject | null;
+  nodes: WorkflowNodeTrace[];
+  execution_graph?: {
+    nodes: Array<{ id: string; type: string; label: string; position?: { x: number; y: number } }>;
+    edges: Array<{ source: string; target: string; label?: string }>;
+  };
+}
+
+export interface RunHistoryResponse {
+  run_id: string;
+  history: RunHistoryEntry[];
+}
+
+export interface ExecutionNavigationState {
+  workflowId?: string | null;
+  workflowName?: string | null;
+}

@@ -3,14 +3,14 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import type { Query } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { CheckCircle, XCircle, Loader2, Clock, AlertCircle, Play, ExternalLink } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { backendApiClient } from '@/lib/api-client';
+import { useWorkflowStore } from '@/stores/workflowStore';
 
 import { useRunStatusPolling } from './useRunStatusPolling';
 import type { RunStatus, WorkflowRunListResponse, WorkflowRunSummary } from './types';
@@ -63,8 +63,102 @@ function calculateDuration(startedAt?: string | null, finishedAt?: string | null
   return `${minutes}m ${remainingSeconds}s`;
 }
 
+function PanelHeader({ title, count }: { title: string; count?: number }) {
+  return (
+    <div className="h-14 border-b border-border flex items-center justify-between px-4 bg-card shrink-0">
+      <h3 className="text-sm font-medium">{title}</h3>
+      {count !== undefined && <span className="text-xs text-muted-foreground">{count} runs</span>}
+    </div>
+  );
+}
+
+function NoWorkflowState() {
+  return (
+    <div className="flex flex-col h-full">
+      <PanelHeader title="Executions" />
+      <div className="flex items-center justify-center flex-1 text-muted-foreground">
+        <p className="text-sm">Select a workflow to view executions</p>
+      </div>
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="flex flex-col h-full">
+      <PanelHeader title="Executions" />
+      <div className="flex items-center justify-center flex-1">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    </div>
+  );
+}
+
+function ErrorState() {
+  return (
+    <div className="flex flex-col h-full">
+      <PanelHeader title="Executions" />
+      <div className="flex items-center justify-center flex-1 text-muted-foreground">
+        <p className="text-sm">Failed to load executions</p>
+      </div>
+    </div>
+  );
+}
+
+function EmptyExecutionsState() {
+  return (
+    <div className="flex items-center justify-center flex-1">
+      <div className="text-center space-y-3 p-6">
+        <div className="w-12 h-12 mx-auto bg-muted rounded-full flex items-center justify-center">
+          <Play className="w-5 h-5 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="text-sm font-medium">No executions yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Run this workflow to see execution history
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExecutionItem({ run, onClick }: { run: WorkflowRunSummary; onClick: () => void }) {
+  const duration = calculateDuration(run.started_at, run.finished_at);
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left p-3 rounded-md border bg-card hover:bg-accent transition-colors group"
+    >
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {getStatusIcon(run.status)}
+          {getStatusBadge(run.status)}
+        </div>
+        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      </div>
+      <div className="space-y-1">
+        <p className="text-xs font-mono text-muted-foreground truncate">{run.run_id}</p>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{format(new Date(run.created_at), 'MMM d, h:mm a')}</span>
+          {duration && (
+            <>
+              <span>•</span>
+              <span>{duration}</span>
+            </>
+          )}
+        </div>
+        {run.error && <p className="text-xs text-destructive line-clamp-1">{run.error}</p>}
+      </div>
+    </button>
+  );
+}
+
 export function ExecutionsPanel({ workflowId }: ExecutionsPanelProps) {
   const navigate = useNavigate();
+  const workflow = useWorkflowStore((state) =>
+    state.workflows.find((w) => w.id === workflowId)
+  );
 
   const { data, isLoading, isError } = useQuery<WorkflowRunListResponse>({
     queryKey: ['workflow-runs', workflowId],
@@ -79,7 +173,6 @@ export function ExecutionsPanel({ workflowId }: ExecutionsPanelProps) {
       query: Query<WorkflowRunListResponse, Error, WorkflowRunListResponse, readonly unknown[]>
     ) => {
       const response = query.state.data;
-      // Poll if any run is still running
       const hasRunning = response?.runs?.some(
         (run) => run.status === 'running' || run.status === 'queued'
       );
@@ -88,112 +181,29 @@ export function ExecutionsPanel({ workflowId }: ExecutionsPanelProps) {
   });
 
   const runs: WorkflowRunSummary[] = data?.runs ?? [];
+  useRunStatusPolling({ workflowId, runs });
 
-  useRunStatusPolling({
-    workflowId,
-    runs,
-  });
+  const handleRunClick = (runId: string) => {
+    navigate(`/executions/${runId}`, {
+      state: { workflowId, workflowName: workflow?.name || 'Workflow' },
+    });
+  };
 
-  if (!workflowId) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="h-14 border-b border-border flex items-center px-4 bg-card shrink-0">
-          <h3 className="text-sm font-medium">Executions</h3>
-        </div>
-        <div className="flex items-center justify-center flex-1 text-muted-foreground">
-          <p className="text-sm">Select a workflow to view executions</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="h-14 border-b border-border flex items-center px-4 bg-card shrink-0">
-          <h3 className="text-sm font-medium">Executions</h3>
-        </div>
-        <div className="flex items-center justify-center flex-1 text-muted-foreground">
-          <Loader2 className="w-5 h-5 animate-spin" />
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="h-14 border-b border-border flex items-center px-4 bg-card shrink-0">
-          <h3 className="text-sm font-medium">Executions</h3>
-        </div>
-        <div className="flex items-center justify-center flex-1 text-muted-foreground">
-          <p className="text-sm">Failed to load executions</p>
-        </div>
-      </div>
-    );
-  }
+  if (!workflowId) return <NoWorkflowState />;
+  if (isLoading) return <LoadingState />;
+  if (isError) return <ErrorState />;
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="h-14 border-b border-border flex items-center justify-between px-4 bg-card shrink-0">
-        <h3 className="text-sm font-medium">Executions</h3>
-        <span className="text-xs text-muted-foreground">{runs.length} runs</span>
-      </div>
-
+      <PanelHeader title="Executions" count={runs.length} />
       {runs.length === 0 ? (
-        <div className="flex items-center justify-center flex-1">
-          <div className="text-center space-y-3 p-6">
-            <div className="w-12 h-12 mx-auto bg-muted rounded-full flex items-center justify-center">
-              <Play className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">No executions yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Run this workflow to see execution history
-              </p>
-            </div>
-          </div>
-        </div>
+        <EmptyExecutionsState />
       ) : (
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
-            {runs.map((run) => {
-              const duration = calculateDuration(run.started_at, run.finished_at);
-              return (
-                <button
-                  key={run.run_id}
-                  onClick={() => navigate(`/workflows/${workflowId}/traces/${run.run_id}`)}
-                  className="w-full text-left p-3 rounded-md border bg-card hover:bg-accent transition-colors group"
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {getStatusIcon(run.status)}
-                      {getStatusBadge(run.status)}
-                    </div>
-                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-mono text-muted-foreground truncate">
-                      {run.run_id}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{format(new Date(run.created_at), 'MMM d, h:mm a')}</span>
-                      {duration && (
-                        <>
-                          <span>•</span>
-                          <span>{duration}</span>
-                        </>
-                      )}
-                    </div>
-                    {run.error && (
-                      <p className="text-xs text-destructive line-clamp-1">
-                        {run.error}
-                      </p>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+            {runs.map((run) => (
+              <ExecutionItem key={run.run_id} run={run} onClick={() => handleRunClick(run.run_id)} />
+            ))}
           </div>
         </ScrollArea>
       )}
