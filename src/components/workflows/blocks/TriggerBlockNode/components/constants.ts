@@ -24,17 +24,3 @@ export const QUICK_OPTIONS_BY_KIND: Record<Exclude<TriggerKind, 'webhook'>, { la
   cron: CRON_QUICK_OPTIONS,
   supabase: SUPABASE_QUICK_OPTIONS,
 };
-
-export const SUPABASE_PROJECT_PICKER_CONFIG = {
-  resource_type: 'supabase_binding',
-  endpoint: '/api/integrations/supabase/resources/bindings',
-  display_field: 'display_name',
-  value_field: 'id',
-  search_enabled: true,
-} as const;
-
-export const SUPABASE_EVENT_LABELS = {
-  INSERT: 'INSERT – Row created',
-  UPDATE: 'UPDATE – Row modified',
-  DELETE: 'DELETE – Row removed',
-} as const;

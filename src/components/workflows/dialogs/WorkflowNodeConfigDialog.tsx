@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { BlockConfigPanel } from '../panels/BlockConfigPanel';
-import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions, ToolBlockConfig } from '../types';
+import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions } from '../types';
 import type { InputDef } from '@/types/workflow-spec';
 import { backendApiClient } from '@/lib/api-client';
 import { ToolMetadata } from '../block-config';
@@ -22,6 +22,7 @@ import {
   validateForLoopConfig,
   type ValidationResult,
 } from '../block-config/validation';
+import { ToolBlockConfig } from '@/components/workflows/block-config/types';
 
 interface WorkflowNodeConfigDialogProps {
   open: boolean;

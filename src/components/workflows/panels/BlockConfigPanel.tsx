@@ -21,9 +21,10 @@ import {
   ForLoopBlockSection,
   ToolMetadata,
 } from '../block-config';
-import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions, ToolBlockConfig } from '../types';
+import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions } from '../types';
 import { backendApiClient } from '@/lib/api-client';
 import type { InputDef, JsonObject } from '@/types/workflow-spec';
+import { ToolBlockConfig } from '@/components/workflows/block-config/types';
 
 interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;

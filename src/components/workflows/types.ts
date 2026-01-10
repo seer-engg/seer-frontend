@@ -26,15 +26,6 @@ export interface FunctionBlockSchema {
   config_schema: Record<string, unknown>;
   tags?: string[] | null;
 }
-
-export interface ToolBlockConfig extends Record<string, unknown> {
-  tool_name?: string;
-  toolName?: string; // Legacy support
-  connection_id?: string;
-  arguments?: Record<string, unknown>;
-  params?: Record<string, unknown>;
-}
-
 export interface TriggerNodeHandlers {
   update?: (subscriptionId: number, payload: TriggerSubscriptionUpdateRequest) => Promise<void>;
   toggle?: (subscriptionId: number, enabled: boolean) => Promise<void>;
@@ -85,6 +76,8 @@ export interface TriggerNodeMeta {
   };
   draft?: TriggerDraftMeta;
 }
+
+import { ToolBlockConfig } from '@/components/workflows/block-config/types';
 
 export interface WorkflowNodeData extends Record<string, unknown> {
   type: CanvasNodeType;

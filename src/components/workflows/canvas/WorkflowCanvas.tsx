@@ -23,7 +23,8 @@ import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
 import { WorkflowCanvasContext } from './workflow-canvas-context';
 import { FloatingActions } from '@/components/general/FloatingActions';
-import { WorkflowNodeData, WorkflowEdge, ToolBlockConfig, DroppedBlockData } from '../types';
+import { WorkflowNodeData, WorkflowEdge, DroppedBlockData } from '../types';
+import { ToolBlockConfig } from '@/components/workflows/block-config/types';
 
 // Import custom node types
 import { ToolBlockNode } from '../blocks/ToolBlockNode';

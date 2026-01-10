@@ -6,7 +6,7 @@
 
 // Main canvas
 export { WorkflowCanvas, getToolNamesFromNodes } from './canvas/WorkflowCanvas';
-export type { BlockType, WorkflowNodeData, ToolBlockConfig } from './types';
+export type { BlockType, WorkflowNodeData} from './types';
 
 export { IntegrationStatusPanel, IntegrationBadge } from './panels/IntegrationStatusPanel';
 

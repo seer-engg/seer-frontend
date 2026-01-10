@@ -8,9 +8,10 @@ import { Handle, Position, NodeProps, type Node } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
 
-type WorkflowNode = Node<WorkflowNodeData>;
+type CanvasNode = Node<WorkflowNodeData>;
 
-interface BaseBlockNodeProps extends NodeProps<WorkflowNode> {
+// these base block node props and interfaces are not used by any node ???
+interface BaseBlockNodeProps extends NodeProps<CanvasNode> {
   icon?: React.ReactNode;
   color?: string;
   handles?: {
