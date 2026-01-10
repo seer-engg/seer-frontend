@@ -1,4 +1,4 @@
-import { History, Loader2 } from 'lucide-react';
+import { History, Loader2, Play, Tag } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface WorkflowLifecycleBarProps {
   lifecycleStatus?: WorkflowLifecycleStatus | null;
@@ -68,19 +73,6 @@ function VersionsDropdownContent({
 
   return (
     <DropdownMenuContent align="end" className="w-56">
-      {lifecycleStatus && (
-        <>
-          <DropdownMenuLabel className="flex items-center gap-2 text-[11px]">
-            <Badge variant="outline" className="h-4 px-1">
-              {renderVersionLabel('Latest', lifecycleStatus.latestVersion)}
-            </Badge>
-            <Badge variant={lifecycleStatus.publishedVersion ? 'default' : 'outline'} className="h-4 px-1">
-              {renderVersionLabel('Published', lifecycleStatus.publishedVersion)}
-            </Badge>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-        </>
-      )}
       {isVersionsLoading && (
         <DropdownMenuItem disabled>
           <Loader2 className="mr-2 h-3 w-3 animate-spin" />
@@ -108,52 +100,45 @@ function VersionsDropdownContent({
   );
 }
 
-export function WorkflowLifecycleBar({
+function VersionsButton({
   lifecycleStatus,
-  onRunClick,
-  onPublishClick,
-  isExecuting,
-  isPublishing,
-  canRun = true,
-  canPublish = false,
-  publishDisabledReason,
-  runDisabledReason,
   versionOptions,
   onVersionRestore,
   isVersionsLoading,
   isRestoringVersion,
   versionRestoreDisabledReason,
-}: WorkflowLifecycleBarProps) {
+}: Pick<
+  WorkflowLifecycleBarProps,
+  | 'lifecycleStatus'
+  | 'versionOptions'
+  | 'onVersionRestore'
+  | 'isVersionsLoading'
+  | 'isRestoringVersion'
+  | 'versionRestoreDisabledReason'
+>) {
   const hasVersionOptions = Boolean(versionOptions && versionOptions.length > 0);
-  const versionButtonDisabled = !hasVersionOptions || isVersionsLoading || isRestoringVersion;
+  const isDisabled = !hasVersionOptions || isVersionsLoading || isRestoringVersion;
 
   return (
-    <div className="bg-card/95 backdrop-blur border rounded-full shadow-xl px-2 py-1.5 flex items-center gap-1.5">
+    <Tooltip>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-muted-foreground h-7 px-2.5 text-[11px]"
-            disabled={versionButtonDisabled}
-            title={
-              versionRestoreDisabledReason ??
-              (!hasVersionOptions ? 'Run tests to create checkpoint versions' : undefined)
-            }
-          >
-            {isRestoringVersion ? (
-              <>
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                Restoring…
-              </>
-            ) : (
-              <>
-                <History className="mr-1 h-3 w-3" />
-                Versions
-              </>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon" variant="ghost" className="h-8 w-8" disabled={isDisabled} aria-label="Version History">
+              {isRestoringVersion ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={8}>
+          <div className="flex flex-col gap-1">
+            <p className="font-medium text-sm">Version History</p>
+            {isDisabled && (versionRestoreDisabledReason || !hasVersionOptions) && (
+              <p className="text-xs text-muted-foreground">
+                {versionRestoreDisabledReason ?? 'Run tests to create checkpoint versions'}
+              </p>
             )}
-          </Button>
-        </DropdownMenuTrigger>
+          </div>
+        </TooltipContent>
         <VersionsDropdownContent
           lifecycleStatus={lifecycleStatus}
           isVersionsLoading={isVersionsLoading}
@@ -161,26 +146,113 @@ export function WorkflowLifecycleBar({
           onVersionRestore={onVersionRestore}
         />
       </DropdownMenu>
-      <Button
-        onClick={onRunClick}
-        disabled={!canRun || isExecuting}
-        size="sm"
-        variant="default"
-        className="h-7 px-2.5 text-[11px]"
-        title={runDisabledReason}
-      >
-        {isExecuting ? 'Testing…' : 'Run'}
-      </Button>
-      <Button
-        onClick={onPublishClick}
-        disabled={!canPublish || isPublishing}
-        size="sm"
-        variant="default"
-        className="h-7 px-2.5 text-[11px]"
-        title={publishDisabledReason}
-      >
-        {isPublishing ? 'Publishing…' : 'Publish'}
-      </Button>
+    </Tooltip>
+  );
+}
+
+function RunButton({
+  onRunClick,
+  isExecuting,
+  canRun,
+  runDisabledReason,
+}: Pick<WorkflowLifecycleBarProps, 'onRunClick' | 'isExecuting' | 'canRun' | 'runDisabledReason'>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          onClick={onRunClick}
+          disabled={!canRun || isExecuting}
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8"
+          aria-label="Test Workflow"
+        >
+          {isExecuting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={8}>
+        <div className="flex flex-col gap-1">
+          <p className="font-medium text-sm">{isExecuting ? 'Testing Workflow' : 'Test Workflow'}</p>
+          {(!canRun && runDisabledReason) || !isExecuting ? (
+            <p className="text-xs text-muted-foreground">{runDisabledReason ?? 'Run a test execution'}</p>
+          ) : null}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function PublishButton({
+  onPublishClick,
+  isPublishing,
+  canPublish,
+  publishDisabledReason,
+}: Pick<WorkflowLifecycleBarProps, 'onPublishClick' | 'isPublishing' | 'canPublish' | 'publishDisabledReason'>) {
+  return (
+    <Tooltip>
+      <DropdownMenu>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              disabled={!canPublish || isPublishing}
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label="Publish Workflow"
+            >
+              {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={8}>
+          <div className="flex flex-col gap-1">
+            <p className="font-medium text-sm">{isPublishing ? 'Publishing' : 'Publish Workflow'}</p>
+            {(!canPublish && publishDisabledReason) || !isPublishing ? (
+              <p className="text-xs text-muted-foreground">{publishDisabledReason ?? 'Create a production version'}</p>
+            ) : null}
+          </div>
+        </TooltipContent>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              onPublishClick();
+            }}
+          >
+            <div className="flex flex-col gap-0.5 text-xs">
+              <span className="font-medium text-foreground">Publish Version</span>
+              <span className="text-muted-foreground text-[10px]">Create new production release</span>
+            </div>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </Tooltip>
+  );
+}
+
+export function WorkflowLifecycleBar(props: WorkflowLifecycleBarProps) {
+  return (
+    <div className="bg-card/95 backdrop-blur border rounded-full shadow-xl px-1 py-1 flex items-center gap-0.5">
+      <VersionsButton
+        lifecycleStatus={props.lifecycleStatus}
+        versionOptions={props.versionOptions}
+        onVersionRestore={props.onVersionRestore}
+        isVersionsLoading={props.isVersionsLoading}
+        isRestoringVersion={props.isRestoringVersion}
+        versionRestoreDisabledReason={props.versionRestoreDisabledReason}
+      />
+      <RunButton
+        onRunClick={props.onRunClick}
+        isExecuting={props.isExecuting}
+        canRun={props.canRun}
+        runDisabledReason={props.runDisabledReason}
+      />
+      <PublishButton
+        onPublishClick={props.onPublishClick}
+        isPublishing={props.isPublishing}
+        canPublish={props.canPublish}
+        publishDisabledReason={props.publishDisabledReason}
+      />
     </div>
   );
 }
