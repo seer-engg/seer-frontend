@@ -7,7 +7,7 @@ import { Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getToolLogoUrl } from '@/lib/logo-utils';
 
-import type { UnifiedItem } from '../types';
+import type { UnifiedItem } from '../buildtypes';
 
 interface UnifiedBuildItemProps {
   item: UnifiedItem;

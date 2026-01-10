@@ -10,7 +10,6 @@ import {
   BlockSectionProps,
   TemplateAutocompleteControls,
 } from '../types';
-import { FormField } from '../widgets/FormField';
 import { DynamicFormField } from '../widgets/DynamicFormField';
 import type { ToolParamDefinition } from '../widgets/ParamInputFactory';
 

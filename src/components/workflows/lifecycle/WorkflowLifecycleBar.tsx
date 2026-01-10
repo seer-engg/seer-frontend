@@ -2,7 +2,7 @@ import { History, Loader2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { WorkflowLifecycleStatus } from '@/components/workflows/build-and-chat/types';
+import type { WorkflowLifecycleStatus } from '@/components/workflows/buildtypes';
 import type { WorkflowVersionListItem } from '@/types/workflow-spec';
 import {
   DropdownMenu,

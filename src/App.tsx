@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
-import ProtectedRoute from "./components/ProtectedRoute";
+import ProtectedRoute from "./components/general/ProtectedRoute";
 import { SeerLayout } from "./components/seer/SeerLayout";
 import Workflows from "./pages/Workflows";
 import PublicForm from "./pages/PublicForm";
@@ -14,7 +14,7 @@ import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { getStoredSignupSource } from "./utils/utm-tracker";
 import { KeyboardShortcutProvider } from "@/hooks/useKeyboardShortcuts";
-import { StoreInitializer } from "@/components/StoreInitializer";
+import { StoreInitializer } from "@/components/general/StoreInitializer";
 
 
 

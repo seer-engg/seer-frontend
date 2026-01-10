@@ -12,7 +12,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Send } from 'lucide-react';
 
-import type { ModelInfo } from '../types';
+import type { ModelInfo } from '../buildtypes';
 import { useChatStore } from '@/stores';
 
 interface ChatInputProps {

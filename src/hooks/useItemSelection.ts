@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { UnifiedItem } from '@/components/workflows/build-and-chat/types';
+import type { UnifiedItem } from '@/components/workflows/buildtypes';
 
 export function useItemSelection(
   onBlockSelect?: (block: { type: string; label: string; config?: Record<string, unknown> }) => void

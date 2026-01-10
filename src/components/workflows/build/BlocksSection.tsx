@@ -1,7 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-import type { BuiltInBlock } from '../types';
+import type { BuiltInBlock } from '../buildtypes';
 
 interface BlocksSectionProps {
   blocks: BuiltInBlock[];

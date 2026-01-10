@@ -12,7 +12,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { getIntegrationTypeIcon, getIntegrationTypeLabel } from '../utils';
-import type { Tool } from '../types';
+import type { Tool } from '../buildtypes';
 
 interface ToolsSectionProps {
   tools: Tool[];

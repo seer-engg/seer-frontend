@@ -1,5 +1,5 @@
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { WorkflowProposalPreview } from '@/components/workflows/build-and-chat/types';
+import type { WorkflowProposalPreview } from '@/components/workflows/buildtypes';
 import { createStore } from './createStore';
 
 const storage = createJSONStorage(() => ({

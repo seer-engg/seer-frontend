@@ -8,7 +8,7 @@ import {
   type SupabaseEventType,
   SUPABASE_EVENT_TYPES,
 } from '../../../triggers/utils';
-import { ResourcePicker } from '../../../ResourcePicker';
+import { ResourcePicker } from '../../../dialogs/ResourcePicker';
 
 const SUPABASE_PROJECT_PICKER_CONFIG = {
   resource_type: 'supabase_binding',

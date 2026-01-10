@@ -1,6 +1,6 @@
 import { Node } from '@xyflow/react';
 import { createContext, useContext } from 'react';
-import { WorkflowEdge, WorkflowNodeData } from './types';
+import { WorkflowEdge, WorkflowNodeData } from '../types';
 
 export interface WorkflowCanvasContextValue {
   nodes: Node<WorkflowNodeData>[];

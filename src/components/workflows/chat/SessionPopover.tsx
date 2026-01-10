@@ -3,7 +3,7 @@ import { Clock, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-import type { ChatSession } from '../types';
+import type { ChatSession } from '../buildtypes';
 
 interface SessionPopoverProps {
   open: boolean;

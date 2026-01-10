@@ -20,8 +20,8 @@ import {
   IfElseBlockSection,
   ForLoopBlockSection,
   ToolMetadata,
-} from './block-config';
-import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions, ToolBlockConfig } from './types';
+} from '../block-config';
+import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions, ToolBlockConfig } from '../types';
 import { backendApiClient } from '@/lib/api-client';
 import type { InputDef, JsonObject } from '@/types/workflow-spec';
 

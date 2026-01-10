@@ -27,7 +27,7 @@ import { GmailSVG } from '@/components/icons/gmail';
 import { GoogleDriveSVG } from '@/components/icons/googledrive';
 import { GoogleSheetsSVG } from '@/components/icons/googlesheets';
 import { GitHubSVG } from '@/components/icons/github';
-import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
+import { WorkflowNodeSummary } from './NodeSummary';
 
 /**
  * Get icon for integration type

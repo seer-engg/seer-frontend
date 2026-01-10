@@ -11,7 +11,7 @@ import { useCanvasStore, useUIStore } from '@/stores';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useToolsStore } from '@/stores/toolsStore';
 import { useTriggersStore } from '@/stores/triggersStore';
-import { createTriggerNode, createRegularBlockNode } from '../components/workflows/nodeCreation';
+import { createTriggerNode, createRegularBlockNode } from '../components/workflows/canvas/nodeCreation';
 
 /**
  * Consolidated node actions hook that combines:

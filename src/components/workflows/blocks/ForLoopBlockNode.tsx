@@ -3,7 +3,7 @@ import { Repeat } from 'lucide-react';
 import { Handle, Position, NodeProps, type Node } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
-import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
+import { WorkflowNodeSummary } from './NodeSummary';
 import { BaseBlockNode } from './BaseBlockNode';
 
 type WorkflowNode = Node<WorkflowNodeData>;

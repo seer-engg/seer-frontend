@@ -1,15 +1,13 @@
 import * as React from 'react';
 import { useMemo } from 'react';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
 import { FormField } from './FormField';
 import { AutocompleteInput } from './AutocompleteInput';
 import { AutocompleteTextarea } from './AutocompleteTextarea';
-import { ResourcePicker } from '@/components/workflows/ResourcePicker';
+import { ResourcePicker } from '@/components/workflows/dialogs/ResourcePicker';
 import type { TemplateAutocompleteControls } from '../types';
 import type { ResourcePickerConfig } from '../types';
 

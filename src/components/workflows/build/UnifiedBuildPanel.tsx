@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { BUILT_IN_BLOCKS } from '../constants';
-import type { BuiltInBlock, Tool } from '../types';
+import type { BuiltInBlock, Tool } from '../buildtypes';
 import type { TriggerListOption } from './TriggerSection';
 import { UnifiedBuildItem } from './UnifiedBuildItem';
 import { useUnifiedItems } from '@/hooks/useUnifiedItems';

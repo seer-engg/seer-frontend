@@ -1,10 +1,9 @@
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 
-import { StructuredOutputEditor } from '@/components/workflows/StructuredOutputEditor';
+import { StructuredOutputEditor } from '@/components/workflows/editors/StructuredOutputEditor';
 
 import { LlmBlockConfig, BlockSectionProps } from '../types';
-import { FormField } from '../widgets/FormField';
 import { DynamicFormField } from '../widgets/DynamicFormField';
 
 interface LlmBlockSectionProps extends BlockSectionProps<LlmBlockConfig> {

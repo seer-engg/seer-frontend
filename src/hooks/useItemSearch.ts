@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { UnifiedItem } from '@/components/workflows/build-and-chat/types';
+import type { UnifiedItem } from '@/components/workflows/buildtypes';
 
 /**
  * Filter items by search query

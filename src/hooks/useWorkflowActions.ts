@@ -7,7 +7,7 @@ import { toast } from '@/components/ui/sonner';
 import { BackendAPIError } from '@/lib/api-client';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useCanvasStore, useUIStore } from '@/stores';
-import { handleDraftConflict } from '../components/workflows/conflictHandler';
+import { handleDraftConflict } from '../components/workflows/canvas/conflictHandler';
 import { normalizeNodes, normalizeEdges } from '@/lib/workflow-normalization';
 import { useToolsStore } from '@/stores/toolsStore';
 

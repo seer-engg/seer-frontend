@@ -2,7 +2,7 @@ import { useAuth, RedirectToSignIn } from "@clerk/clerk-react";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { clearSignupSource } from "../utils/utm-tracker";
+import { clearSignupSource } from "../../utils/utm-tracker";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

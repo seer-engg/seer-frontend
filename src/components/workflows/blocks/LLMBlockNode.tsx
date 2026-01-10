@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import { NodeProps } from '@xyflow/react';
 import { WorkflowNodeData } from '../types';
-import { WorkflowNodeSummary } from '../WorkflowNodeSummary';
+import { WorkflowNodeSummary } from './NodeSummary';
 import { BaseBlockNode } from './BaseBlockNode';
 
 export const LLMBlockNode = memo(function LLMBlockNode(

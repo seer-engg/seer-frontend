@@ -15,23 +15,6 @@ export function parseNumericInput(
 }
 
 /**
- * Generate input ID for a parameter
- */
-export function getParamInputId(paramName: string): string {
-  return `param-${paramName}`;
-}
-
-/**
- * Validate parameter value using optional validator function
- */
-export function validateParamValue(
-  value: unknown,
-  validator?: (v: unknown) => boolean
-): boolean {
-  return validator ? validator(value) : true;
-}
-
-/**
  * Safe JSON parse with fallback
  */
 export function safeJSONParse(value: string): unknown {

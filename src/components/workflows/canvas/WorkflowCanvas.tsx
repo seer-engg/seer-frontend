@@ -22,17 +22,17 @@ import {
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
 import { WorkflowCanvasContext } from './workflow-canvas-context';
-import { FloatingActions } from '@/components/FloatingActions';
-import { WorkflowNodeData, WorkflowEdge, ToolBlockConfig, DroppedBlockData } from './types';
+import { FloatingActions } from '@/components/general/FloatingActions';
+import { WorkflowNodeData, WorkflowEdge, ToolBlockConfig, DroppedBlockData } from '../types';
 
 // Import custom node types
-import { ToolBlockNode } from './blocks/ToolBlockNode';
-import { LLMBlockNode } from './blocks/LLMBlockNode';
-import { IfElseBlockNode } from './blocks/IfElseBlockNode';
-import { ForLoopBlockNode } from './blocks/ForLoopBlockNode';
+import { ToolBlockNode } from '../blocks/ToolBlockNode';
+import { LLMBlockNode } from '../blocks/LLMBlockNode';
+import { IfElseBlockNode } from '../blocks/IfElseBlockNode';
+import { ForLoopBlockNode } from '../blocks/ForLoopBlockNode';
 import { useCanvasStore } from '@/stores';
-import { useCanvasDragDrop } from '../../hooks/useCanvasDragDrop';
-import { useConnectionValidation } from '../../hooks/useConnectionValidation';
+import { useCanvasDragDrop } from '../../../hooks/useCanvasDragDrop';
+import { useConnectionValidation } from '../../../hooks/useConnectionValidation';
 
 /**
  * Extract tool names from workflow nodes

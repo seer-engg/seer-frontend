@@ -1,8 +1,8 @@
 import { useMemo, createElement } from 'react';
-import type { UnifiedItem, BuiltInBlock, Tool } from '@/components/workflows/build-and-chat/types';
-import type { TriggerListOption } from '@/components/workflows/build-and-chat/build/TriggerSection';
+import type { UnifiedItem, BuiltInBlock, Tool } from '@/components/workflows/buildtypes';
+import type { TriggerListOption } from '@/components/workflows/build/TriggerSection';
 import { TRIGGER_ICON_BY_KEY } from '@/components/workflows/triggers/constants';
-import { getIntegrationTypeIcon } from '@/components/workflows/build-and-chat/utils';
+import { getIntegrationTypeIcon } from '@/components/workflows/utils';
 
 /**
  * Transform all data sources (blocks, triggers, tools) into unified items

@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 
-import type { ChatMessage } from '@/components/workflows/build-and-chat/types';
+import type { ChatMessage } from '@/components/workflows/buildtypes';
 
 import { createStore } from './createStore';
 

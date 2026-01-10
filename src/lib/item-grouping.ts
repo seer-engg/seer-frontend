@@ -1,4 +1,4 @@
-import type { UnifiedItem, ItemType } from '@/components/workflows/build-and-chat/types';
+import type { UnifiedItem, ItemType } from '@/components/workflows/buildtypes';
 
 export interface ItemGroup {
   type: ItemType;

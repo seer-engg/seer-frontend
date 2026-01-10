@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { TriggerListOption } from '@/components/workflows/build-and-chat/build/TriggerSection';
+import type { TriggerListOption } from '@/components/workflows/build/TriggerSection';
 import type { TriggerCatalogEntry } from '@/types/triggers';
 import {
   FORM_TRIGGER_KEY,

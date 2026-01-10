@@ -2,7 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { backendApiClient } from '@/lib/api-client';
 
-import type { ChatSession } from '../components/workflows/build-and-chat/types';
+import type { ChatSession } from '../components/workflows/buildtypes';
 
 export function useChatSessions(workflowId: string | null) {
   return useInfiniteQuery<ChatSession[]>({

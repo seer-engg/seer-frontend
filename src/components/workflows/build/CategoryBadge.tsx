@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
-import type { ItemType } from '../types';
+import type { ItemType } from '../buildtypes';
 
 interface CategoryBadgeProps {
   type: ItemType;

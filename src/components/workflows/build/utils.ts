@@ -1,4 +1,4 @@
-import type { ItemType } from '../types';
+import type { ItemType } from '../buildtypes';
 
 export function getLayoutClass(type: ItemType): string {
   if (type === 'block') {

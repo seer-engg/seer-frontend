@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { backendApiClient } from '@/lib/api-client';
-import { getDisplayableAssistantMessage } from '../components/workflows/build-and-chat/utils';
+import { getDisplayableAssistantMessage } from '../components/workflows/utils';
 
-import type { ChatMessage, WorkflowProposal } from '../components/workflows/build-and-chat/types';
+import type { ChatMessage, WorkflowProposal } from '../components/workflows/buildtypes';
 
 type SessionMessageResponse = {
   id: number;

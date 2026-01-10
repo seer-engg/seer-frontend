@@ -9,12 +9,12 @@ import { toast } from '@/components/ui/sonner';
 import { backendApiClient, BackendAPIError } from '@/lib/api-client';
 import { workflowSpecToGraph } from '@/lib/workflow-graph';
 
-import { UnifiedBuildPanel } from './build-and-chat/build/UnifiedBuildPanel';
-import { ChatPanel } from './build-and-chat/chat/ChatPanel';
-import { ExecutionsPanel } from './build-and-chat/executions/ExecutionsPanel';
-import type { SessionsStatus } from './build-and-chat/chat/types';
-import { useChatMessages } from '../../hooks/useChatMessages';
-import { useChatSessions } from '../../hooks/useChatSessions';
+import { UnifiedBuildPanel } from '../build/UnifiedBuildPanel';
+import { ChatPanel } from '../chat/ChatPanel';
+import { ExecutionsPanel } from '../executions/ExecutionsPanel';
+import type { SessionsStatus } from '../chat/types';
+import { useChatMessages } from '../../../hooks/useChatMessages';
+import { useChatSessions } from '../../../hooks/useChatSessions';
 import type {
   BuildAndChatPanelProps,
   ChatMessage,
@@ -24,8 +24,8 @@ import type {
   WorkflowProposal,
   WorkflowProposalActionResponse,
   BuiltInBlock,
-} from './build-and-chat/types';
-import { filterSystemPrompt, getDisplayableAssistantMessage } from './build-and-chat/utils';
+} from '../buildtypes';
+import { filterSystemPrompt, getDisplayableAssistantMessage } from '../utils';
 import { useCanvasStore, useChatStore, useToolsStore, useUIStore } from '@/stores';
 import type { JsonObject } from '@/types/workflow-spec';
 

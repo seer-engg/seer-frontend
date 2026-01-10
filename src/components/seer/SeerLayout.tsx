@@ -1,4 +1,4 @@
-import { OnboardingTour } from "@/components/OnboardingTour";
+import { OnboardingTour } from "@/components/general/OnboardingTour";
 
 export function SeerLayout({ children }: { children: React.ReactNode }) {
   return (

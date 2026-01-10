@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { ClerkProvider } from '@clerk/clerk-react'
-import { PostHogProvider } from './components/PostHogProvider'
+import { PostHogProvider } from './components/general/PostHogProvider.tsx'
 import { captureUTMParams } from './utils/utm-tracker'
 
 // Import your Publishable Key

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-import type { ChatSession, ModelInfo } from '../types';
+import type { ChatSession, ModelInfo } from '../buildtypes';
 import { ChatHeader } from './ChatHeader';
 import { ChatInput } from './ChatInput';
 import { MessagesList } from './MessagesList';

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 
 import { cn } from '@/lib/utils';
 
-import type { ChatMessage } from '../types';
+import type { ChatMessage } from '../buildtypes';
 
 interface MessageBubbleProps {
   message: ChatMessage;

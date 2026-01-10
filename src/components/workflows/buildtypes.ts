@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { Node } from '@xyflow/react';
 
-import { WorkflowEdge, WorkflowNodeData } from '../types';
-import { DroppedBlockData } from '../types';
+import { WorkflowEdge, WorkflowNodeData } from './types';
+import { DroppedBlockData } from './types';
 import type { TriggerListOption } from './build/TriggerSection';
 import type { JsonObject, WorkflowSpec, WorkflowVersionSummary } from '@/types/workflow-spec';
 

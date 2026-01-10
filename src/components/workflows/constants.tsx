@@ -2,7 +2,7 @@ import React from 'react';
 import { Code, GitBranch, Repeat, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-import type { BuiltInBlock } from './types';
+import type { BuiltInBlock } from './buildtypes';
 
 const BLOCK_ICON_COMPONENTS: Record<string, LucideIcon> = {
   llm: Sparkles,

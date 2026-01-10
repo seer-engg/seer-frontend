@@ -9,8 +9,8 @@ import { Node } from '@xyflow/react';
 import { IntegrationType } from '@/lib/integrations/client';
 import { useToolsStore } from '@/stores/toolsStore';
 import { cn } from '@/lib/utils';
-import { getToolNamesFromNodes } from './WorkflowCanvas';
-import type { WorkflowNodeData } from './types';
+import { getToolNamesFromNodes } from '../canvas/WorkflowCanvas';
+import type { WorkflowNodeData } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {

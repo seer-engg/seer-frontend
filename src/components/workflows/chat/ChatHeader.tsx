@@ -1,5 +1,5 @@
 import { SessionPopover } from './SessionPopover';
-import type { ChatSession } from '../types';
+import type { ChatSession } from '../buildtypes';
 import type { SessionsStatus } from './types';
 import { useChatStore } from '@/stores';
 
