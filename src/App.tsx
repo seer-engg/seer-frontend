@@ -13,7 +13,7 @@ import PublicForm from "./pages/PublicForm";
 import './App.css'
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { getStoredSignupSource } from "./utils/utm-tracker";
-import { KeyboardShortcutProvider } from "@/hooks/useKeyboardShortcuts";
+import { KeyboardShortcutProvider } from "@/hooks/utility/useKeyboardShortcuts";
 import { StoreInitializer } from "@/components/general/StoreInitializer";
 
 

@@ -14,10 +14,10 @@ export type { WorkflowListItem, WorkflowModel } from '@/stores/workflowStore';
 
 
 // UI hooks
-export { useToast } from './use-toast';
-export { useMobile } from './use-mobile';
-export { useMediaQuery } from './useMediaQuery';
-export { useQueryState } from './useQueryState';
+export { useToast } from './utility/use-toast';
+export { useMobile } from './utility/use-mobile';
+export { useMediaQuery } from './utility/useMediaQuery';
+export { useQueryState } from './utility/useQueryState';
 export {useConnectionValidation} from './useConnectionValidation';
 export {useCanvasDragDrop} from './useCanvasDragDrop';
 

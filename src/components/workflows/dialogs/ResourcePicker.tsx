@@ -34,7 +34,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { backendApiClient, bindSupabaseProject, bindSupabaseProjectManual } from '@/lib/api-client';
 import type { IntegrationResource } from '@/lib/api-client';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/utility/use-toast';
 import { useToolsStore } from '@/stores/toolsStore';
 
 type JsonRecord = Record<string, unknown>;

@@ -6,7 +6,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Kbd } from '@/components/ui/kbd';
-import { useShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useShortcuts } from '@/hooks/utility/useKeyboardShortcuts';
 
 interface KeymapDialogProps {
   open: boolean;

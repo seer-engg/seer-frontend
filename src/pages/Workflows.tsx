@@ -20,7 +20,7 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { toast } from '@/components/ui/sonner';
 import { backendApiClient } from '@/lib/api-client';
 import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/constants';
-import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
+import { useKeyboardShortcut } from '@/hooks/utility/useKeyboardShortcuts';
 import { KeymapDialog } from '@/components/general/KeymapDialog';
 import { GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
 import { useCanvasStore, useUIStore } from '@/stores';
