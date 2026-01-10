@@ -1,4 +1,11 @@
 import { ParameterSchema } from './SchemaFormField';
+import { JsonValue } from '@/types/workflow-spec';
+import {
+  LlmBlockConfig,
+  ToolBlockConfig,
+  IfElseBlockConfig,
+  ForLoopBlockConfig,
+} from './types';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -6,14 +13,13 @@ export interface ValidationResult {
 }
 
 export function validateSchemaValue(
-  value: any,
+  value: JsonValue | string | undefined,
   schema: ParameterSchema,
   required: boolean
 ): string | null {
   // Check required fields
-  if (required && (value === undefined || value === null || value === '')) {
-    return 'This field is required';
-  }
+  const requiredError = validateRequired(value, required);
+  if (requiredError) return requiredError;
 
   // Skip validation for empty optional fields
   if (!required && (value === undefined || value === null || value === '')) {
@@ -23,104 +29,44 @@ export function validateSchemaValue(
   const type = schema.type || 'string';
 
   // Type-specific validation
+  let typeError: string | null = null;
   switch (type) {
     case 'integer':
-      if (typeof value === 'string' && value.trim() !== '') {
-        if (!/^-?\d+$/.test(value.trim())) {
-          return 'Must be a valid integer';
-        }
-        value = parseInt(value.trim(), 10);
-      }
-      if (typeof value === 'number') {
-        if (!Number.isInteger(value)) {
-          return 'Must be an integer (no decimals)';
-        }
-        if (schema.minimum !== undefined && value < schema.minimum) {
-          return `Must be at least ${schema.minimum}`;
-        }
-        if (schema.maximum !== undefined && value > schema.maximum) {
-          return `Must be at most ${schema.maximum}`;
-        }
-      }
+      typeError = validateInteger(value, schema);
       break;
-
     case 'number':
-      if (typeof value === 'string' && value.trim() !== '') {
-        if (!/^-?\d+(\.\d+)?$/.test(value.trim())) {
-          return 'Must be a valid number';
-        }
-        value = parseFloat(value.trim());
-      }
-      if (typeof value === 'number') {
-        if (isNaN(value)) {
-          return 'Must be a valid number';
-        }
-        if (schema.minimum !== undefined && value < schema.minimum) {
-          return `Must be at least ${schema.minimum}`;
-        }
-        if (schema.maximum !== undefined && value > schema.maximum) {
-          return `Must be at most ${schema.maximum}`;
-        }
-      }
+      typeError = validateNumber(value, schema);
       break;
-
     case 'array':
-      if (typeof value === 'string') {
-        try {
-          const parsed = JSON.parse(value);
-          if (!Array.isArray(parsed)) {
-            return 'Must be a valid JSON array';
-          }
-        } catch {
-          return 'Must be a valid JSON array';
-        }
-      } else if (!Array.isArray(value)) {
-        return 'Must be an array';
-      }
+      typeError = validateArray(value);
       break;
-
     case 'object':
-      if (typeof value === 'string') {
-        try {
-          const parsed = JSON.parse(value);
-          if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
-            return 'Must be a valid JSON object';
-          }
-        } catch {
-          return 'Must be a valid JSON object';
-        }
-      } else if (typeof value !== 'object' || Array.isArray(value) || value === null) {
-        return 'Must be an object';
-      }
+      typeError = validateObject(value);
       break;
-
     case 'boolean':
-      if (typeof value !== 'boolean') {
-        return 'Must be true or false';
-      }
+      typeError = validateBoolean(value);
       break;
   }
+
+  if (typeError) return typeError;
 
   // Enum validation
-  if (schema.enum && schema.enum.length > 0) {
-    if (!schema.enum.includes(String(value))) {
-      return `Must be one of: ${schema.enum.join(', ')}`;
-    }
-  }
-
-  return null; // No errors
+  return validateEnum(value, schema);
 }
 
 export function validateToolConfig(
-  config: Record<string, any>,
+  config: ToolBlockConfig,
   paramSchema: Record<string, ParameterSchema>,
   requiredParams: string[]
 ): ValidationResult {
   const errors: Record<string, string> = {};
 
+  // Type-safe access to params (handle both legacy and new names)
+  const params = (config.params || config.arguments) as Record<string, JsonValue> | undefined;
+
   // Validate each parameter
   for (const [paramName, schema] of Object.entries(paramSchema)) {
-    const value = config.params?.[paramName];
+    const value = params?.[paramName];
     const required = requiredParams.includes(paramName);
     const error = validateSchemaValue(value, schema, required);
 
@@ -129,8 +75,9 @@ export function validateToolConfig(
     }
   }
 
-  // Check for missing required tool_name
-  if (!config.tool_name) {
+  // Check for missing required tool_name (handle legacy toolName)
+  const toolName = config.tool_name || config.toolName;
+  if (!toolName) {
     errors['__tool_name'] = 'Tool name is required';
   }
 
@@ -140,7 +87,7 @@ export function validateToolConfig(
   };
 }
 
-export function validateLlmConfig(config: Record<string, any>): ValidationResult {
+export function validateLlmConfig(config: LlmBlockConfig): ValidationResult {
   const errors: Record<string, string> = {};
 
   if (!config.user_prompt || config.user_prompt.trim() === '') {
@@ -161,7 +108,7 @@ export function validateLlmConfig(config: Record<string, any>): ValidationResult
     }
   }
 
-  if (config.structured_output && !config.output_schema) {
+  if (config.structured_output && !config.response_format?.json_schema?.schema) {
     errors['output_schema'] = 'Output schema is required when using structured output';
   }
 
@@ -171,7 +118,7 @@ export function validateLlmConfig(config: Record<string, any>): ValidationResult
   };
 }
 
-export function validateIfElseConfig(config: Record<string, any>): ValidationResult {
+export function validateIfElseConfig(config: IfElseBlockConfig): ValidationResult {
   const errors: Record<string, string> = {};
 
   if (!config.condition || config.condition.trim() === '') {
@@ -184,19 +131,22 @@ export function validateIfElseConfig(config: Record<string, any>): ValidationRes
   };
 }
 
-export function validateForLoopConfig(config: Record<string, any>): ValidationResult {
+export function validateForLoopConfig(config: ForLoopBlockConfig): ValidationResult {
   const errors: Record<string, string> = {};
 
-  if (!config.array_variable || config.array_variable.trim() === '') {
+  // Handle both legacy and new property names
+  const arrayVar = config.array_variable || config.array_var;
+  if (!arrayVar || arrayVar.trim() === '') {
     errors['array_variable'] = 'Array variable is required';
   }
 
-  if (!config.item_var || config.item_var.trim() === '') {
+  const itemVar = config.item_var || config.item_variable;
+  if (!itemVar || itemVar.trim() === '') {
     errors['item_var'] = 'Item variable name is required';
   }
 
   // Validate variable names are valid identifiers
-  if (config.item_var && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(config.item_var)) {
+  if (itemVar && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(itemVar)) {
     errors['item_var'] = 'Must be a valid variable name (letters, numbers, underscores)';
   }
 
@@ -208,4 +158,123 @@ export function validateForLoopConfig(config: Record<string, any>): ValidationRe
     isValid: Object.keys(errors).length === 0,
     errors,
   };
+}
+
+// Helper validation functions
+
+function validateRequired(
+  value: JsonValue | string | undefined,
+  required: boolean
+): string | null {
+  if (required && (value === undefined || value === null || value === '')) {
+    return 'This field is required';
+  }
+  return null;
+}
+
+function validateInteger(
+  value: JsonValue | string | undefined,
+  schema: ParameterSchema
+): string | null {
+  let numValue = value;
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    if (!/^-?\d+$/.test(value.trim())) {
+      return 'Must be a valid integer';
+    }
+    numValue = parseInt(value.trim(), 10);
+  }
+
+  if (typeof numValue === 'number') {
+    if (!Number.isInteger(numValue)) {
+      return 'Must be an integer (no decimals)';
+    }
+    if (schema.minimum !== undefined && numValue < schema.minimum) {
+      return `Must be at least ${schema.minimum}`;
+    }
+    if (schema.maximum !== undefined && numValue > schema.maximum) {
+      return `Must be at most ${schema.maximum}`;
+    }
+  }
+
+  return null;
+}
+
+function validateNumber(
+  value: JsonValue | string | undefined,
+  schema: ParameterSchema
+): string | null {
+  let numValue = value;
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    if (!/^-?\d+(\.\d+)?$/.test(value.trim())) {
+      return 'Must be a valid number';
+    }
+    numValue = parseFloat(value.trim());
+  }
+
+  if (typeof numValue === 'number') {
+    if (isNaN(numValue)) {
+      return 'Must be a valid number';
+    }
+    if (schema.minimum !== undefined && numValue < schema.minimum) {
+      return `Must be at least ${schema.minimum}`;
+    }
+    if (schema.maximum !== undefined && numValue > schema.maximum) {
+      return `Must be at most ${schema.maximum}`;
+    }
+  }
+
+  return null;
+}
+
+function validateArray(value: JsonValue | string | undefined): string | null {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (!Array.isArray(parsed)) {
+        return 'Must be a valid JSON array';
+      }
+    } catch {
+      return 'Must be a valid JSON array';
+    }
+  } else if (!Array.isArray(value)) {
+    return 'Must be an array';
+  }
+  return null;
+}
+
+function validateObject(value: JsonValue | string | undefined): string | null {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+        return 'Must be a valid JSON object';
+      }
+    } catch {
+      return 'Must be a valid JSON object';
+    }
+  } else if (typeof value !== 'object' || Array.isArray(value) || value === null) {
+    return 'Must be an object';
+  }
+  return null;
+}
+
+function validateBoolean(value: JsonValue | string | undefined): string | null {
+  if (typeof value !== 'boolean') {
+    return 'Must be true or false';
+  }
+  return null;
+}
+
+function validateEnum(
+  value: JsonValue | string | undefined,
+  schema: ParameterSchema
+): string | null {
+  if (schema.enum && schema.enum.length > 0) {
+    if (!schema.enum.includes(String(value))) {
+      return `Must be one of: ${schema.enum.join(', ')}`;
+    }
+  }
+  return null;
 }
