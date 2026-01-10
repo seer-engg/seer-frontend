@@ -71,7 +71,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
 
 
 
-  const viewProps = {
+  const viewProps: import('./components/TriggerBlockNodeView').TriggerBlockNodeViewProps = {
     selected,
     descriptor,
     subscription,
@@ -110,7 +110,7 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     isLoading,
   } as const;
 
-  return <TriggerBlockNodeView {...(viewProps as any)} />;
+  return <TriggerBlockNodeView {...viewProps} />;
 });
 
 // Removed passthrough wrapper to simplify component

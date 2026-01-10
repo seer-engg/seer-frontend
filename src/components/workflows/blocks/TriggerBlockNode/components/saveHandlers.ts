@@ -1,16 +1,18 @@
 import { toast } from '@/components/ui/sonner';
 import type { WorkflowNodeData } from '../../../types';
+import type { BindingState } from '../../../triggers/utils';
+import type { JsonObject, JsonValue } from '@/types/workflow-spec';
 
 type SaveDraftPayload = {
   mode: 'draft';
   draftId: string;
-  body: { triggerKey: string; bindings: any; providerConfig?: Record<string, any> };
+  body: { triggerKey: string; bindings: BindingState; providerConfig?: Record<string, unknown> };
 };
 
 type SaveSubscriptionPayload = {
   mode: 'subscription';
   subscriptionId: number;
-  body: { bindings: Record<string, any>; provider_config?: Record<string, any> };
+  body: { bindings: Record<string, JsonValue>; provider_config?: JsonObject };
 };
 
 export type SavePayload = SaveDraftPayload | SaveSubscriptionPayload;

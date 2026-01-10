@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useReactFlow, type Node } from '@xyflow/react';
-import type { WorkflowNodeData } from '../components/workflows/types';
+import type { WorkflowNodeData, DroppedBlockData } from '../components/workflows/types';
 
 type SetNodes = (
   nodes:
@@ -12,7 +12,7 @@ interface UseCanvasDragDropParams {
   readOnly?: boolean;
   setNodes: SetNodes;
   onNodeDrop?: (
-    blockData: { type: string; label: string; config?: any },
+    blockData: DroppedBlockData,
     position: { x: number; y: number },
   ) => void;
 }

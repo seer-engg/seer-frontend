@@ -28,7 +28,13 @@ export function WorkflowImportDialog({
   const [importTriggers, setImportTriggers] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<any | null>(null);
+  type WorkflowExportPreview = {
+    version?: string;
+    workflow: { name: string; description?: string; spec: { nodes?: unknown[] } };
+    triggers?: unknown[];
+    metadata?: { exported_at?: string };
+  };
+  const [preview, setPreview] = useState<WorkflowExportPreview | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];

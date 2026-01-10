@@ -58,16 +58,16 @@ export function useQueryState<T>(
   }
 
   const setValue = useCallback(
-    (nextValue: SetStateAction<any>) => {
+    (nextValue: SetStateAction<T | string | null>) => {
       const newParams = new URLSearchParams(searchParams);
-      const current = value as any;
-      const resolved = resolveValue(nextValue, current);
+      const current = value as unknown as T | string | null;
+      const resolved = resolveValue(nextValue, current as T | string | null);
 
       let serialized: string | null | undefined;
       if (isParserConfig(arg)) {
         serialized = arg.serialize(resolved as T);
       } else {
-        serialized = resolved;
+        serialized = resolved as string | null;
       }
 
       if (serialized === null || serialized === undefined || serialized === "") {
@@ -81,7 +81,7 @@ export function useQueryState<T>(
     [arg, key, searchParams, setSearchParams, value],
   );
 
-  return [value as any, setValue];
+  return [value as unknown as T, setValue as unknown as (value: SetStateAction<T>) => void];
 }
 
 export const parseAsBoolean = {

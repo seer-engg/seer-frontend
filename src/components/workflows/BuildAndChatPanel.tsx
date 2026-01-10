@@ -27,6 +27,7 @@ import type {
 } from './build-and-chat/types';
 import { filterSystemPrompt, getDisplayableAssistantMessage } from './build-and-chat/utils';
 import { useCanvasStore, useChatStore, useToolsStore, useUIStore } from '@/stores';
+import type { JsonObject } from '@/types/workflow-spec';
 
 export function BuildAndChatPanel({
   onBlockSelect,
@@ -90,7 +91,7 @@ export function BuildAndChatPanel({
         description: t.description,
         provider: t.provider ?? undefined,
         integration_type: (t.integration_type as string | undefined) ?? undefined,
-        output_schema: (t.output_schema as Record<string, any> | null) ?? null,
+        output_schema: (t.output_schema as JsonObject | null) ?? null,
       })),
     [rawTools],
   );
@@ -158,7 +159,7 @@ export function BuildAndChatPanel({
         thread_id?: string;
         thinking?: string[];
         interrupt_required?: boolean;
-        interrupt_data?: Record<string, any>;
+        interrupt_data?: JsonObject;
       }>(`/api/workflow-agent/${workflowId}/chat`, {
         method: 'POST',
         body: JSON.stringify({

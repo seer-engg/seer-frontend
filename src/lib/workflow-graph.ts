@@ -3,6 +3,8 @@ import type { Node } from '@xyflow/react';
 import { getNodeAlias, sanitizeAlias } from '@/components/workflows/block-config/helpers/nodeAlias';
 import type { WorkflowEdge, WorkflowNodeData } from '@/components/workflows/types';
 import type { JsonObject, JsonValue, WorkflowNode, WorkflowSpec } from '@/types/workflow-spec';
+import type { RawNode, RawEdge } from '@/types/workflow-api';
+import { isRawNode, isRawEdge } from '@/types/workflow-api';
 
 export interface WorkflowGraphData {
   nodes: Node<WorkflowNodeData>[];
@@ -402,29 +404,29 @@ function sanitizeNodeData(data: WorkflowNodeData | undefined): JsonObject {
 }
 
 function deserializeGraph(serialized: JsonObject): WorkflowGraphData {
-  const nodes = Array.isArray(serialized.nodes)
-    ? serialized.nodes.map((node: any) => {
-        return {
-          id: String(node.id),
-          type: node.type,
-          position: node.position ?? { x: 0, y: 0 },
-          data: node.data ?? {},
-        };
-      })
-    : [];
+  const rawNodes = Array.isArray(serialized.nodes) ? serialized.nodes : [];
+  const nodes = rawNodes
+    .filter((n): n is RawNode => isRawNode(n))
+    .map((node) => ({
+      id: String(node.id),
+      type: String(node.type),
+      position: node.position ?? { x: 0, y: 0 },
+      data: (node.data ?? {}) as Record<string, unknown>,
+    }));
 
-  const edges = Array.isArray(serialized.edges)
-    ? serialized.edges.map((edge: any) => ({
-        id: String(edge.id),
-        source: String(edge.source),
-        target: String(edge.target),
-        sourceHandle: edge.sourceHandle,
-        targetHandle: edge.targetHandle,
-        data: edge.data ?? undefined,
-      }))
-    : [];
+  const rawEdges = Array.isArray(serialized.edges) ? serialized.edges : [];
+  const edges = rawEdges
+    .filter((e): e is RawEdge => isRawEdge(e))
+    .map((edge) => ({
+      id: String(edge.id ?? `${edge.source}-${edge.target}`),
+      source: String(edge.source),
+      target: String(edge.target),
+      sourceHandle: (edge as RawEdge).sourceHandle ?? null,
+      targetHandle: (edge as RawEdge).targetHandle ?? null,
+      data: ((edge as RawEdge).data as unknown) as WorkflowEdge['data'] ?? undefined,
+    }));
 
-  return { nodes, edges };
+  return { nodes: nodes as FlowNode[], edges: edges as WorkflowEdge[] };
 }
 
 function buildGraphFromSpec(spec: WorkflowSpec): WorkflowGraphData {
@@ -622,7 +624,9 @@ function convertTemplateString(value: string, direction: TemplateDirection = 'to
 }
 
 function getSpecNodeInputs(specNode: WorkflowNode): Record<string, JsonValue> | undefined {
-  const rawInputs = (specNode as any).in ?? (specNode as any).in_;
+  // Only Task/Tool/LLM nodes have inputs; they expose either `in` or legacy `in_`
+  const withInputs = specNode as Partial<{ in: unknown; in_: unknown }>;
+  const rawInputs = (withInputs.in ?? withInputs.in_);
   if (isRecord(rawInputs)) {
     return rawInputs as Record<string, JsonValue>;
   }

@@ -128,7 +128,7 @@ function ParamField({
           [paramName]: val,
         }));
       }}
-      def={paramDef as any}
+      def={paramDef}
       provider={toolProvider}
       dependsOnValues={dependsOnValues}
       templateAutocomplete={templateAutocomplete}

@@ -22,6 +22,7 @@ export type DynamicFieldDef = {
   enum?: unknown[];
   minimum?: number;
   maximum?: number;
+  multiline?: boolean;
   [key: string]: unknown;
 };
 
@@ -190,7 +191,7 @@ export function DynamicFormField({
     }
 
     // Default: string/text
-    const isMultiline = (fieldDef as any)?.multiline === true;
+    const isMultiline = fieldDef?.multiline === true;
     if (isMultiline) {
       return (
         <AutocompleteTextarea

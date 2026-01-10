@@ -17,19 +17,19 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 export interface ParameterSchema {
   type?: string; // 'string', 'integer', 'number', 'boolean', 'array', 'object'
   description?: string;
-  default?: any;
+  default?: import('@/types/workflow-spec').JsonValue;
   enum?: string[]; // For select dropdowns
   minimum?: number;
   maximum?: number;
   required?: boolean;
-  [key: string]: any; // Allow additional schema properties
+  [key: string]: unknown; // Allow additional schema properties
 }
 
 export interface SchemaFormFieldProps {
   name: string;
   schema: ParameterSchema;
-  value: any;
-  onChange: (value: any) => void;
+  value: import('@/types/workflow-spec').JsonValue;
+  onChange: (value: import('@/types/workflow-spec').JsonValue) => void;
   required?: boolean;
   compact?: boolean; // Use ultra-compact spacing
   className?: string;
@@ -69,7 +69,7 @@ export function SchemaFormField({
   const handleBlur = () => setTouched(true);
 
   const handleChange = useCallback(
-    (newValue: any) => {
+    (newValue: import('@/types/workflow-spec').JsonValue) => {
       onChange(newValue);
     },
     [onChange]

@@ -12,6 +12,7 @@ import {
   buildBindingsPayload,
   validateSupabaseConfig,
 } from '../../../triggers/utils';
+import type { JsonObject, JsonValue } from '@/types/workflow-spec';
 
 export type TriggerConfigState =
   | { kind: 'gmail'; config: ReturnType<typeof useGmailConfig>['gmailConfig']; setConfig: ReturnType<typeof useGmailConfig>['setGmailConfig'] }
@@ -79,20 +80,20 @@ export const useTriggerConfig = (
         body: {
           triggerKey: string;
           bindings: BindingState;
-          providerConfig?: Record<string, any>;
+          providerConfig?: Record<string, JsonValue>;
         };
       }
     | {
         mode: 'subscription';
         subscriptionId: number;
         body: {
-          bindings: Record<string, any>;
-          provider_config?: Record<string, any>;
+          bindings: Record<string, JsonValue>;
+          provider_config?: JsonObject;
         };
       }
     | null => {
     // Build provider config by kind
-    let providerConfig: Record<string, any> | undefined;
+    let providerConfig: Record<string, JsonValue> | undefined;
     if (state.kind === 'gmail') {
       providerConfig = serializeGmailConfig(state.config);
     } else if (state.kind === 'cron') {

@@ -52,6 +52,6 @@ export function getOAuthScope(provider: ProviderType, level: ScopeLevel): string
  */
 export function validateOAuthScope(provider: ProviderType, scope: string): boolean {
   const validScopes = Object.values(OAUTH_SCOPES[provider]);
-  return validScopes.includes(scope as any);
+  return (validScopes as readonly string[]).includes(scope);
 }
 

@@ -21,9 +21,9 @@ import {
   ForLoopBlockSection,
   ToolMetadata,
 } from './block-config';
-import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions } from './types';
+import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions, ToolBlockConfig } from './types';
 import { backendApiClient } from '@/lib/api-client';
-import type { InputDef } from '@/types/workflow-spec';
+import type { InputDef, JsonObject } from '@/types/workflow-spec';
 
 interface BlockConfigPanelProps {
   node: Node<WorkflowNodeData> | null;
@@ -41,7 +41,7 @@ interface BlockConfigPanelProps {
   workflowInputs?: Record<string, InputDef>;
   showSaveButton?: boolean; // Explicitly control save button visibility (default: auto-detect)
   validationErrors?: Record<string, string>; // Validation errors from parent
-  onChange?: (config: Record<string, any>, oauthScope?: string) => void; // Notify parent of local changes (for button enable, not for parent state update)
+  onChange?: (config: ToolBlockConfig, oauthScope?: string) => void; // Notify parent of local changes (for button enable, not for parent state update)
 }
 
 export function BlockConfigPanel({
@@ -58,11 +58,11 @@ export function BlockConfigPanel({
   validationErrors = {},
   onChange,
 }: BlockConfigPanelProps) {
-  const [config, setConfig] = useState<Record<string, any>>({});
+  const [config, setConfig] = useState<ToolBlockConfig>({});
   const [oauthScope, setOAuthScope] = useState<string | undefined>();
   const [inputRefs, setInputRefs] = useState<Record<string, string>>({});
   const [useStructuredOutput, setUseStructuredOutput] = useState(false);
-  const [structuredOutputSchema, setStructuredOutputSchema] = useState<Record<string, any> | undefined>();
+  const [structuredOutputSchema, setStructuredOutputSchema] = useState<JsonObject | undefined>();
   const lastSyncedNodeStateRef = useRef<{ nodeId: string | null; signature: string }>({
     nodeId: null,
     signature: '',
@@ -188,7 +188,7 @@ export function BlockConfigPanel({
   }, [node]);
 
   const handleStructuredOutputSchemaChange = useCallback(
-    (schema?: Record<string, any>) => {
+    (schema?: JsonObject) => {
       setStructuredOutputSchema(schema);
       setConfig(prev => {
         if (schema) {
@@ -241,7 +241,7 @@ export function BlockConfigPanel({
       const originalConfig = node.data.config || {};
       
       // Build merged config, always preserving fields if present in latestConfig
-      const mergedConfig: Record<string, any> = {
+      const mergedConfig: ToolBlockConfig = {
         ...originalConfig,
         ...latestConfig,
         input_refs: latestInputRefs,
@@ -301,7 +301,7 @@ export function BlockConfigPanel({
           const originalConfig = originalNode.data.config || {};
           
           // Build merged config, always preserving fields if present
-          const mergedConfig: Record<string, any> = {
+          const mergedConfig: ToolBlockConfig = {
             ...originalConfig,
             ...configRef.current,
             input_refs: inputRefsRef.current,
@@ -349,7 +349,7 @@ export function BlockConfigPanel({
       const originalConfig = node.data.config || {};
       
       // Build merged config, always preserving fields if present
-      const mergedConfig: Record<string, any> = {
+      const mergedConfig: ToolBlockConfig = {
         ...originalConfig,
         ...config,
         input_refs: inputRefs,

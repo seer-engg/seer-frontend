@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
 import { BlockConfigPanel } from './BlockConfigPanel';
-import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions } from './types';
+import { WorkflowEdge, WorkflowNodeData, WorkflowNodeUpdateOptions, ToolBlockConfig } from './types';
 import type { InputDef } from '@/types/workflow-spec';
 import { backendApiClient } from '@/lib/api-client';
 import { ToolMetadata } from './block-config';
@@ -49,7 +49,7 @@ export function WorkflowNodeConfigDialog({
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // Track local edits from BlockConfigPanel (for change detection and autosave)
-  const [localConfig, setLocalConfig] = useState<Record<string, any> | null>(null);
+  const [localConfig, setLocalConfig] = useState<ToolBlockConfig | null>(null);
   const [localOauthScope, setLocalOauthScope] = useState<string | undefined>(undefined);
 
   // Track original node for comparison
@@ -187,7 +187,7 @@ export function WorkflowNodeConfigDialog({
 
   // Handle local config changes from BlockConfigPanel
   const handleLocalConfigChange = useCallback(
-    (config: Record<string, any>, oauthScope?: string) => {
+    (config: ToolBlockConfig, oauthScope?: string) => {
       // BlockConfigPanel includes input_refs in the merged config, but we need to extract it
       // to compare properly with the original node config
       const { input_refs, ...configWithoutRefs } = config;
@@ -201,7 +201,7 @@ export function WorkflowNodeConfigDialog({
       });
 
       // Store the config WITHOUT input_refs (input_refs are handled separately by BlockConfigPanel)
-      setLocalConfig(configWithoutRefs);
+      setLocalConfig(configWithoutRefs as ToolBlockConfig);
       setLocalOauthScope(oauthScope);
     },
     [node]

@@ -1,3 +1,4 @@
+import type { JsonObject } from '@/types/workflow-spec';
 export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 export interface WorkflowRunSummary {
@@ -6,8 +7,8 @@ export interface WorkflowRunSummary {
   created_at: string;
   started_at?: string | null;
   finished_at?: string | null;
-  inputs?: Record<string, any> | null;
-  output?: Record<string, any> | null;
+  inputs?: JsonObject | null;
+  output?: JsonObject | null;
   error?: string | null;
 }
 

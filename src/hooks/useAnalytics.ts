@@ -41,7 +41,7 @@ export const useAnalytics = () => {
     })
   }
 
-  const trackFeatureUsed = (feature: string, metadata?: Record<string, any>) => {
+  const trackFeatureUsed = (feature: string, metadata?: Record<string, unknown>) => {
     if (!posthog.__loaded) return
 
     posthog.capture('feature_used', {

@@ -86,7 +86,7 @@ export function LlmBlockSection({
         description="Instructions that set the AI's behavior and context"
         value={config.system_prompt || ''}
         onChange={value => setConfig(prev => ({ ...prev, system_prompt: value as string }))}
-        def={{ type: 'string', multiline: true } as any}
+        def={{ type: 'string', multiline: true }}
         templateAutocomplete={templateAutocomplete}
         rows={4}
         className="max-h-[120px] overflow-y-auto"
@@ -100,7 +100,7 @@ export function LlmBlockSection({
         required
         value={config.user_prompt || ''}
         onChange={value => setConfig(prev => ({ ...prev, user_prompt: value as string }))}
-        def={{ type: 'string', multiline: true } as any}
+        def={{ type: 'string', multiline: true }}
         templateAutocomplete={templateAutocomplete}
         rows={4}
         className="max-h-[120px] overflow-y-auto"

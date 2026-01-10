@@ -19,7 +19,7 @@ export function IfElseBlockSection({
         value={config.condition || ''}
         onChange={value => setConfig(prev => ({ ...prev, condition: value as string }))}
         placeholder="e.g., {{alias.output}} > 0"
-        def={{ type: 'string', multiline: false } as any}
+        def={{ type: 'string', multiline: false }}
         templateAutocomplete={templateAutocomplete}
         className="font-mono"
         error={validationErrors['condition']}

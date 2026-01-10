@@ -96,6 +96,9 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   triggerMeta?: TriggerNodeMeta;
 }
 
+// Minimal payload used when creating/dropping a new block onto the canvas
+export type DroppedBlockData = Pick<WorkflowNodeData, 'type' | 'label' | 'config'>;
+
 export interface WorkflowNodeUpdateOptions {
   /**
    * When true, the caller expects the graph to be persisted immediately

@@ -2,8 +2,9 @@ import type { ReactNode } from 'react';
 import { Node } from '@xyflow/react';
 
 import { WorkflowEdge, WorkflowNodeData } from '../types';
+import { DroppedBlockData } from '../types';
 import type { TriggerListOption } from './build/TriggerSection';
-import type { WorkflowSpec, WorkflowVersionSummary } from '@/types/workflow-spec';
+import type { JsonObject, WorkflowSpec, WorkflowVersionSummary } from '@/types/workflow-spec';
 
 export interface Tool {
   name: string;
@@ -12,7 +13,7 @@ export interface Tool {
   slug?: string;
   provider?: string;
   integration_type?: string;
-  output_schema?: Record<string, any> | null;
+  output_schema?: JsonObject | null;
 }
 
 export interface BuiltInBlock {
@@ -41,9 +42,9 @@ export interface WorkflowProposal {
   summary: string;
   status: 'pending' | 'accepted' | 'rejected';
   spec: WorkflowSpec;
-  preview_graph?: Record<string, any> | null;
-  applied_graph?: Record<string, any> | null;
-  metadata?: Record<string, any> | null;
+  preview_graph?: JsonObject | null;
+  applied_graph?: JsonObject | null;
+  metadata?: JsonObject | null;
   decided_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -75,7 +76,7 @@ export interface ChatMessage {
   timestamp: Date;
   model?: string;
   interruptRequired?: boolean;
-  interruptData?: Record<string, any>;
+  interruptData?: JsonObject;
 }
 
 export interface ChatSession {
@@ -96,7 +97,7 @@ export interface ModelInfo {
 }
 
 export interface BuildAndChatPanelProps {
-  onBlockSelect?: (block: { type: string; label: string; config?: any }) => void;
+  onBlockSelect?: (block: DroppedBlockData) => void;
   workflowId: string | null;
   onWorkflowGraphSync?: (graph?: WorkflowGraphPayload | null) => void;
   functionBlocks?: BuiltInBlock[];

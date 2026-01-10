@@ -28,7 +28,7 @@ export function ForLoopBlockSection({
           });
         }}
         placeholder="e.g., {{blockAlias.output}}"
-        def={{ type: 'string' } as any}
+        def={{ type: 'string' }}
         templateAutocomplete={templateAutocomplete}
         className="font-mono"
         error={validationErrors['array_variable']}
@@ -50,7 +50,7 @@ export function ForLoopBlockSection({
         value={config.item_var || 'item'}
         onChange={value => setConfig(prev => ({ ...prev, item_var: String(value) }))}
         placeholder="e.g., email"
-        def={{ type: 'string' } as any}
+        def={{ type: 'string' }}
         templateAutocomplete={templateAutocomplete}
         error={validationErrors['item_var']}
       />

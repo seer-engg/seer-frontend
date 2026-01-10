@@ -1,12 +1,9 @@
 import type { TemplateAutocompleteControls } from '../types';
 import { DynamicFormField } from './DynamicFormField';
+import type { DynamicFieldDef } from './DynamicFormField';
 
-export interface ToolParamDefinition {
-  type?: string;
-  description?: string;
+export interface ToolParamDefinition extends DynamicFieldDef {
   required?: boolean;
-  enum?: unknown[];
-  [key: string]: unknown;
 }
 
 export interface ParamInputFactoryProps {
@@ -34,7 +31,7 @@ export function ParamInputFactory({
       description={paramDef.description as string | undefined}
       value={value}
       onChange={onChange}
-      def={paramDef as any}
+      def={paramDef}
       templateAutocomplete={templateAutocomplete}
     />
   );

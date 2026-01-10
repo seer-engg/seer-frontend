@@ -17,16 +17,13 @@ import {
   applyEdgeChanges,
   type NodeChange,
   type EdgeChange,
+  type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
 import { WorkflowCanvasContext } from './workflow-canvas-context';
 import { FloatingActions } from '@/components/FloatingActions';
-import {
-  WorkflowNodeData,
-  WorkflowEdge,
-  ToolBlockConfig,
-} from './types';
+import { WorkflowNodeData, WorkflowEdge, ToolBlockConfig, DroppedBlockData } from './types';
 
 // Import custom node types
 import { ToolBlockNode } from './blocks/ToolBlockNode';
@@ -51,7 +48,7 @@ export function getToolNamesFromNodes(nodes: Node<WorkflowNodeData>[]): string[]
     .filter(Boolean);
 }
 
-const nodeTypes = {
+const nodeTypes: NodeTypes = {
   tool: ToolBlockNode,
   llm: LLMBlockNode,
   if_else: IfElseBlockNode,
@@ -63,7 +60,7 @@ interface WorkflowCanvasProps {
   previewGraph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] } | null;
   onNodeDoubleClick?: (node: Node<WorkflowNodeData>) => void;
   onNodeDrop?: (
-    blockData: { type: string; label: string; config?: any },
+    blockData: DroppedBlockData,
     position: { x: number; y: number },
   ) => void;
   className?: string;
@@ -199,7 +196,7 @@ export function WorkflowCanvas({
         <ReactFlow
           nodes={renderedNodes}
           edges={workflowEdges}
-          nodeTypes={nodeTypes as any}
+          nodeTypes={nodeTypes}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={readOnly ? undefined : onConnect}

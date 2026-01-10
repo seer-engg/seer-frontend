@@ -138,7 +138,7 @@ function collectSchemaPaths(schema: unknown, prefix = ''): Set<string> {
   return paths;
 }
 
-function isSchemaRecord(value: unknown): value is Record<string, any> {
+function isSchemaRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

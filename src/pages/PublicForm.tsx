@@ -24,13 +24,13 @@ interface FormConfig {
   fields: FormField[];
   submit_button_text: string;
   success_message: string;
-  styling?: Record<string, any>;
+  styling?: Record<string, unknown>;
 }
 
 export default function PublicForm() {
   const { suffix } = useParams<{ suffix: string }>();
   const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);

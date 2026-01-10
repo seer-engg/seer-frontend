@@ -166,7 +166,7 @@ export function buildDefaultBindings(workflowInputs: Record<string, InputDef>): 
 }
 
 export function buildGmailConfigFromProviderConfig(
-  providerConfig?: Record<string, any> | null,
+  providerConfig?: Record<string, unknown> | null,
 ): GmailConfigState {
   if (!providerConfig) {
     return makeDefaultGmailConfig();
@@ -206,7 +206,7 @@ export function serializeGmailConfig(state: GmailConfigState): Record<string, Js
 }
 
 export function buildSupabaseConfigFromProviderConfig(
-  providerConfig?: Record<string, any> | null,
+  providerConfig?: Record<string, unknown> | null,
 ): SupabaseConfigState {
   if (!providerConfig) {
     return makeDefaultSupabaseConfig();
@@ -278,7 +278,7 @@ export const makeDefaultCronConfig = (): CronConfigState => ({
 });
 
 export function buildCronConfigFromProviderConfig(
-  providerConfig?: Record<string, any> | null,
+  providerConfig?: Record<string, unknown> | null,
 ): CronConfigState {
   if (!providerConfig) {
     return makeDefaultCronConfig();
