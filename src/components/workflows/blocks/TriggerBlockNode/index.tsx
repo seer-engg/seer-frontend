@@ -1,37 +1,33 @@
 import { memo } from 'react';
 import type { Node as FlowNode, NodeProps } from '@xyflow/react';
 
-import type { WorkflowNodeData } from '../../types';
-import { WEBHOOK_TRIGGER_KEY } from '../../triggers/constants';
+import type { WorkflowNodeData, TriggerNodeMeta } from '../../types';
 import { useBaseTrigger } from './components/useBaseTrigger';
 import { TriggerBlockNodeView } from './components/TriggerBlockNodeView';
 import { saveTrigger } from './components/saveHandlers';
 import { useTriggerConfig } from './triggers/useTriggerConfig';
-import { QUICK_OPTIONS_BY_KIND } from './components/constants';
 
 type WorkflowNode = FlowNode<WorkflowNodeData>;
 
-export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected }: NodeProps<WorkflowNode>) {
-  const triggerMeta = data.triggerMeta;
-  const baseTriggerResult = triggerMeta ? useBaseTrigger(triggerMeta) : null;
-
-  if (!triggerMeta) {
-    return (
-      <div className="rounded-lg border-2 border-destructive/40 bg-card p-4 text-sm text-muted-foreground">
-        Trigger metadata unavailable
-      </div>
-    );
-  }
-
+/**
+ * Inner component that uses hooks - only rendered when triggerMeta exists.
+ */
+function TriggerBlockNodeInner({
+  triggerMeta,
+  selected,
+}: {
+  triggerMeta: TriggerNodeMeta;
+  selected?: boolean;
+}) {
   const { subscription, descriptor, handlers, integration, draft } = triggerMeta;
   const triggerKey = subscription?.trigger_key ?? draft?.triggerKey ?? '';
 
+  const baseTriggerResult = useBaseTrigger(triggerMeta);
   const { kind: triggerKind, state: configState, quickOptions, isLoading, buildSavePayload } = useTriggerConfig(
     triggerKey,
     triggerMeta,
   );
 
-  // Destructure hook results
   const {
     bindingState,
     isExpanded,
@@ -56,20 +52,13 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
     handleBindingModeChange,
     handleBindingValueChange,
     bindingQuickInsert,
-    buildBindingsPayload,
   } = baseTriggerResult;
-
-  const isWebhookTrigger = triggerKind === 'webhook' && triggerKey === WEBHOOK_TRIGGER_KEY;
 
   const handleSave = () => {
     const payload = buildSavePayload({ bindingState, subscription, draft });
     if (!payload || !handlers) return;
     saveTrigger({ payload, handlers, setIsSaving });
   };
-
-
-
-
 
   const viewProps: import('./components/TriggerBlockNodeView').TriggerBlockNodeViewProps = {
     selected,
@@ -106,12 +95,26 @@ export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected 
       handleDelete,
     },
     config: configState,
-    quickOptions: quickOptions ?? (triggerKind === 'webhook' ? [] : QUICK_OPTIONS_BY_KIND[triggerKind] ?? []),
+    quickOptions,
     isLoading,
   } as const;
 
   return <TriggerBlockNodeView {...viewProps} />;
+}
+
+/**
+ * Outer component that handles the null case for triggerMeta.
+ */
+export const TriggerBlockNode = memo(function TriggerBlockNode({ data, selected }: NodeProps<WorkflowNode>) {
+  const triggerMeta = data.triggerMeta;
+
+  if (!triggerMeta) {
+    return (
+      <div className="rounded-lg border-2 border-destructive/40 bg-card p-4 text-sm text-muted-foreground">
+        Trigger metadata unavailable
+      </div>
+    );
+  }
+
+  return <TriggerBlockNodeInner triggerMeta={triggerMeta} selected={selected} />;
 });
-
-// Removed passthrough wrapper to simplify component
-

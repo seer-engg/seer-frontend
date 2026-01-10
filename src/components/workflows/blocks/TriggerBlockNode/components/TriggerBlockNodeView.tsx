@@ -1,18 +1,19 @@
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTemplateAutocomplete } from '@/hooks/useTemplateAutocomplete';
 import type { WorkflowNodeData } from '../../../types';
+import type { TriggerDescriptor } from '@/types/triggers';
 import { TriggerHeader } from './TriggerHeader';
 import { TriggerActions } from './TriggerActions';
 import { WebhookDetailsSection } from '../triggers/WebhookTriggerConfig';
-import { GmailDetailsSection, GmailConfigForm } from '../triggers/GmailTriggerConfig';
-import { CronDetailsSection, CronConfigForm } from '../triggers/CronTriggerConfig';
-import { SupabaseConfigForm } from '../triggers/SupabaseTriggerConfig';
+import { GmailDetailsSection } from '../triggers/GmailTriggerConfig';
+import { DynamicTriggerConfigForm } from '../triggers/DynamicTriggerConfigForm';
+import { UserSchemaEditor } from '../triggers/UserSchemaEditor';
 import { WorkflowInputManager, BindingSection } from './BaseTriggerNode';
 import type { InputDef } from '@/types/workflow-spec';
 import type { BindingState } from '../../../triggers/utils';
 import type { QuickOption } from './BaseTriggerNode';
-import type { TriggerKind } from './constants';
-import type { TriggerConfigState } from '../triggers/useTriggerConfig';
+import type { TriggerKind, TriggerConfigState } from '../triggers/useTriggerConfig';
 
 export interface TriggerBlockNodeViewProps {
   selected?: boolean;
@@ -79,8 +80,10 @@ export function TriggerBlockNodeView(props: TriggerBlockNodeViewProps) {
     actions,
     config,
     quickOptions,
-    isLoading,
   } = props;
+
+  // Minimal template autocomplete for trigger configs (triggers don't typically need template variables)
+  const templateAutocomplete = useTemplateAutocomplete([]);
 
   return (
     <div
@@ -100,8 +103,10 @@ export function TriggerBlockNodeView(props: TriggerBlockNodeViewProps) {
 
       <div className="mt-3 space-y-3">
         {triggerKind === 'webhook' && <WebhookDetailsSection subscription={subscription} />}
-        {triggerKind === 'gmail' && <GmailDetailsSection integration={integration} />}        
-        {triggerKind === 'cron' && config.kind === 'cron' && <CronDetailsSection cronConfig={config.config} />}
+        {triggerKind === 'gmail' && <GmailDetailsSection integration={integration} />}
+        {triggerKind === 'cron' && config.kind === 'dynamic' && (
+          <CronDetailsSectionFromConfig configValues={config.configValues} />
+        )}
 
         <button
           type="button"
@@ -116,6 +121,8 @@ export function TriggerBlockNodeView(props: TriggerBlockNodeViewProps) {
           <ExpandedConfigSection
             triggerKind={triggerKind}
             config={config}
+            descriptor={descriptor}
+            templateAutocomplete={templateAutocomplete}
             canManageInputs={base.canManageInputs}
             showInputsEditor={base.showInputsEditor}
             setShowInputsEditor={base.setShowInputsEditor}
@@ -147,27 +154,47 @@ export function TriggerBlockNodeView(props: TriggerBlockNodeViewProps) {
   );
 }
 
-function ExpandedConfigSection({
-  triggerKind,
-  config,
-  canManageInputs,
-  showInputsEditor,
-  setShowInputsEditor,
-  workflowInputEntries,
-  isSavingWorkflowInput,
-  inputDraft,
-  setInputDraft,
-  handleCreateWorkflowInput,
-  handleRemoveWorkflowInput,
-  hasInputs,
-  bindingState,
-  handleBindingModeChange,
-  handleBindingValueChange,
-  bindingQuickInsert,
-  quickOptions,
-}: {
+/**
+ * Shows cron details from dynamic config values.
+ */
+function CronDetailsSectionFromConfig({ configValues }: { configValues: Record<string, unknown> }) {
+  const cronExpression = String(configValues.cron_expression ?? '');
+  const timezone = String(configValues.timezone ?? 'UTC');
+  const description = configValues.description ? String(configValues.description) : undefined;
+
+  if (!cronExpression) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-dashed p-3 space-y-2 bg-muted/40">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <Calendar className="h-4 w-4" />
+        Schedule configuration
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-xs text-muted-foreground">Expression</p>
+        <code className="text-xs block">{cronExpression}</code>
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-xs text-muted-foreground">Timezone</p>
+        <p className="text-xs font-medium">{timezone}</p>
+      </div>
+      {description && (
+        <div className="space-y-1.5 pt-1.5 border-t border-dashed border-border/60">
+          <p className="text-xs text-muted-foreground">Description</p>
+          <p className="text-xs">{description}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ExpandedConfigSectionProps {
   triggerKind: TriggerKind;
   config: TriggerConfigState;
+  descriptor?: TriggerDescriptor;
+  templateAutocomplete: ReturnType<typeof useTemplateAutocomplete>;
   canManageInputs: boolean;
   showInputsEditor: boolean;
   setShowInputsEditor: (show: boolean | ((prev: boolean) => boolean)) => void;
@@ -183,23 +210,50 @@ function ExpandedConfigSection({
   handleBindingValueChange: (inputName: string, value: string) => void;
   bindingQuickInsert: (inputName: string, value: string) => void;
   quickOptions: QuickOption[];
-}) {
+}
+
+function ExpandedConfigSection({
+  triggerKind,
+  config,
+  descriptor,
+  templateAutocomplete,
+  canManageInputs,
+  showInputsEditor,
+  setShowInputsEditor,
+  workflowInputEntries,
+  isSavingWorkflowInput,
+  inputDraft,
+  setInputDraft,
+  handleCreateWorkflowInput,
+  handleRemoveWorkflowInput,
+  hasInputs,
+  bindingState,
+  handleBindingModeChange,
+  handleBindingValueChange,
+  bindingQuickInsert,
+  quickOptions,
+}: ExpandedConfigSectionProps) {
   return (
     <div className="space-y-4">
-      {triggerKind === 'gmail' && config.kind === 'gmail' && (
-        <GmailConfigForm gmailConfig={config.config} setGmailConfig={config.setConfig} />
-      )}
-      {triggerKind === 'cron' && config.kind === 'cron' && (
-        <CronConfigForm cronConfig={config.config} setCronConfig={config.setConfig} />
-      )}
-      {triggerKind === 'supabase' && config.kind === 'supabase' && (
-        <SupabaseConfigForm
-          supabaseConfig={config.config}
-          setSupabaseConfig={config.setConfig}
-          handleSupabaseResourceChange={config.handleSupabaseResourceChange}
-          handleSupabaseEventChange={config.handleSupabaseEventChange}
+      {/* Dynamic config form for triggers with config_schema */}
+      {config.kind === 'dynamic' && descriptor?.config_schema && (
+        <DynamicTriggerConfigForm
+          configSchema={descriptor.config_schema}
+          configValues={config.configValues}
+          onConfigChange={config.setConfigValue}
+          provider={descriptor.provider}
+          templateAutocomplete={templateAutocomplete}
         />
       )}
+
+      {/* User schema editor for webhook/form triggers */}
+      {config.kind === 'webhook' && (triggerKind === 'webhook' || triggerKind === 'form') && (
+        <UserSchemaEditor
+          schema={config.userSchema}
+          onChange={config.setUserSchema}
+        />
+      )}
+
       <WorkflowInputManager
         canManageInputs={canManageInputs}
         showInputsEditor={showInputsEditor}

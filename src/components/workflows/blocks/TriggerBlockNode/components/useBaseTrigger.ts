@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InputDef } from '@/types/workflow-spec';
 import type { WorkflowNodeData } from '../../../types';
 import {
@@ -7,6 +7,11 @@ import {
   buildDefaultBindingState,
   deriveBindingStateFromSubscription,
 } from '../../../triggers/utils';
+import {
+  extractInputsFromEventSchema,
+  mergeWorkflowInputs,
+  hasFlexibleDataSchema,
+} from '../../../triggers/schema-utils';
 import {
   copyToClipboard,
   createWorkflowInput,
@@ -144,7 +149,7 @@ const useTriggerActions = (
 };
 
 export const useBaseTrigger = (triggerMeta: NonNullable<WorkflowNodeData['triggerMeta']>) => {
-  const { subscription, workflowInputs, handlers, draft } = triggerMeta;
+  const { subscription, workflowInputs, handlers, draft, descriptor } = triggerMeta;
   const isDraft = !subscription;
 
   const [bindingState, setBindingState] = useState<BindingState>(() =>
@@ -155,6 +160,9 @@ export const useBaseTrigger = (triggerMeta: NonNullable<WorkflowNodeData['trigge
   const [isExpanded, setIsExpanded] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Track if we've already auto-populated for this trigger to avoid repeated updates
+  const hasAutoPopulatedRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (subscription) {
       setBindingState(deriveBindingStateFromSubscription(workflowInputs, subscription));
@@ -164,6 +172,46 @@ export const useBaseTrigger = (triggerMeta: NonNullable<WorkflowNodeData['trigge
       setBindingState(buildDefaultBindingState(workflowInputs));
     }
   }, [subscription, workflowInputs, draft?.initialBindings]);
+
+  // Auto-populate workflow inputs from event_schema when a draft trigger is selected
+  useEffect(() => {
+    // Only auto-populate for drafts with a descriptor that has a fixed schema
+    if (!isDraft || !descriptor?.event_schema || !handlers?.updateWorkflowInputs) {
+      return;
+    }
+
+    // Don't auto-populate for triggers with flexible schemas (webhook/form)
+    if (hasFlexibleDataSchema(descriptor.event_schema)) {
+      return;
+    }
+
+    // Only auto-populate once per trigger key to avoid overwriting user changes
+    const triggerKey = draft?.triggerKey ?? '';
+    if (hasAutoPopulatedRef.current === triggerKey) {
+      return;
+    }
+
+    const incomingInputs = extractInputsFromEventSchema(descriptor.event_schema);
+    if (Object.keys(incomingInputs).length === 0) {
+      return;
+    }
+
+    const merged = mergeWorkflowInputs(workflowInputs, incomingInputs);
+    const newInputCount = Object.keys(merged).length - Object.keys(workflowInputs).length;
+
+    // Only update if there are new inputs to add
+    if (newInputCount > 0) {
+      hasAutoPopulatedRef.current = triggerKey;
+      handlers.updateWorkflowInputs(merged).then(() => {
+        // Also update binding state with defaults for the new inputs
+        const newBindings = buildDefaultBindingState(merged);
+        setBindingState((prev) => ({ ...newBindings, ...prev }));
+      });
+    } else {
+      // Mark as done even if no new inputs were added
+      hasAutoPopulatedRef.current = triggerKey;
+    }
+  }, [isDraft, descriptor?.event_schema, handlers, workflowInputs, draft?.triggerKey]);
 
   const inputsEditor = useWorkflowInputsEditor(triggerMeta, setBindingState);
   const bindingHandlers = useBindingHandlers(setBindingState);

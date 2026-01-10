@@ -155,3 +155,10 @@ When working on this project:
 - TypeScript patterns: See `.claude/rules/typescript-patterns.md`
 - State management: See `.claude/rules/state-management.md`
 - Auto-applied patterns: See `.claude/skills/seer-ui-components/SKILL.md`
+
+## Decision Tree: Where Should a Type Live?
+Is the type used in 3+ components across different subdirectories?
+  ├─ YES → Place in root-level types.ts or buildtypes.ts
+  └─ NO → Is it used in 2+ files within same subdirectory?
+      ├─ YES → Place in subdirectory-level types.ts
+      └─ NO → Keep in component file where it's used
