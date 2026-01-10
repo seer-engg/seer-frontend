@@ -141,9 +141,9 @@ export function OnboardingTour({ onRestart }: OnboardingTourProps) {
 
   // Expose restart function globally for Settings page
   useEffect(() => {
-    (window as any).restartOnboardingTour = restartTour;
+    window.restartOnboardingTour = restartTour;
     return () => {
-      delete (window as any).restartOnboardingTour;
+      delete window.restartOnboardingTour;
     };
   }, [restartTour]);
 
@@ -224,10 +224,4 @@ export function OnboardingTour({ onRestart }: OnboardingTourProps) {
   );
 }
 
-// Export restart function for use in Settings page
-export const restartOnboardingTour = () => {
-  if ((window as any).restartOnboardingTour) {
-    (window as any).restartOnboardingTour();
-  }
-};
 

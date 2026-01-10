@@ -80,20 +80,12 @@ export function IntegrationStatusPanel({
   compact = false,
   className,
 }: IntegrationStatusPanelProps) {
-  // Phase 2: Direct store access instead of wrapper hook
-  const {
-    toolsWithStatus,
-    isLoading,
-    connectedIntegrations,
-    connectIntegration,
-    refresh,
+
   // Phase 2: Direct store access instead of wrapper hook - FIXED: Individual selectors
   const toolsWithStatus = useToolsStore((state) => state.toolsWithStatus);
   const isLoading = useToolsStore((state) => state.toolsLoading);
-  const connectedIntegrations = useToolsStore((state) => state.connectedIntegrations);
   const connectIntegration = useToolsStore((state) => state.connectIntegration);
   const refresh = useToolsStore((state) => state.refreshIntegrationTools);
-  );
 
   // Extract tool names from nodes if not provided
   const toolNamesFromNodes = useMemo(() => {
