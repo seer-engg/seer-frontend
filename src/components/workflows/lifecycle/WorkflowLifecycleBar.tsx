@@ -53,6 +53,61 @@ const formatHistoryLabel = (version: WorkflowVersionListItem): string => {
   return `v${versionNumber}${qualifiers.length ? ` · ${qualifiers.join(' · ')}` : ''}`;
 };
 
+function VersionsDropdownContent({
+  lifecycleStatus,
+  isVersionsLoading,
+  versionOptions,
+  onVersionRestore,
+}: {
+  lifecycleStatus?: WorkflowLifecycleStatus | null;
+  isVersionsLoading?: boolean;
+  versionOptions?: WorkflowVersionListItem[];
+  onVersionRestore?: (versionId: number) => void;
+}) {
+  const hasVersionOptions = Boolean(versionOptions && versionOptions.length > 0);
+
+  return (
+    <DropdownMenuContent align="end" className="w-56">
+      {lifecycleStatus && (
+        <>
+          <DropdownMenuLabel className="flex items-center gap-2 text-[11px]">
+            <Badge variant="outline" className="h-4 px-1">
+              {renderVersionLabel('Latest', lifecycleStatus.latestVersion)}
+            </Badge>
+            <Badge variant={lifecycleStatus.publishedVersion ? 'default' : 'outline'} className="h-4 px-1">
+              {renderVersionLabel('Published', lifecycleStatus.publishedVersion)}
+            </Badge>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+        </>
+      )}
+      {isVersionsLoading && (
+        <DropdownMenuItem disabled>
+          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+          Loading versions…
+        </DropdownMenuItem>
+      )}
+      {!isVersionsLoading && hasVersionOptions ? (
+        versionOptions!.map((version) => (
+          <DropdownMenuItem
+            key={version.version_id}
+            onSelect={(event) => {
+              event.preventDefault();
+              onVersionRestore?.(version.version_id);
+            }}
+          >
+            <div className="flex flex-col gap-0.5 text-xs">
+              <span className="font-medium text-foreground">{formatHistoryLabel(version)}</span>
+            </div>
+          </DropdownMenuItem>
+        ))
+      ) : (
+        !isVersionsLoading && <DropdownMenuItem disabled>No versions available yet</DropdownMenuItem>
+      )}
+    </DropdownMenuContent>
+  );
+}
+
 export function WorkflowLifecycleBar({
   lifecycleStatus,
   onRunClick,
@@ -73,99 +128,59 @@ export function WorkflowLifecycleBar({
   const versionButtonDisabled = !hasVersionOptions || isVersionsLoading || isRestoringVersion;
 
   return (
-    <div className="bg-card/95 backdrop-blur border rounded-full shadow-xl px-4 py-2 flex items-center gap-4 text-xs text-muted-foreground">
-      {lifecycleStatus ? (
-        <div className="flex items-center gap-2 text-[11px]">
-          <Badge variant="outline">{renderVersionLabel('Latest', lifecycleStatus.latestVersion)}</Badge>
-          <Badge variant={lifecycleStatus.publishedVersion ? 'default' : 'outline'}>
-            {renderVersionLabel('Published', lifecycleStatus.publishedVersion)}
-          </Badge>
-        </div>
-      ) : (
-        <span>No workflow selected</span>
-      )}
-      <div className="flex items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-muted-foreground"
-              disabled={versionButtonDisabled}
-              title={
-                versionRestoreDisabledReason ??
-                (!hasVersionOptions ? 'Run tests to create checkpoint versions' : undefined)
-              }
-            >
-              {isRestoringVersion ? (
-                <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  Restoring…
-                </>
-              ) : (
-                <>
-                  <History className="mr-1 h-3 w-3" />
-                  Versions
-                </>
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>
-              Draft revision
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {isVersionsLoading && (
-              <DropdownMenuItem disabled>
-                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                Loading versions…
-              </DropdownMenuItem>
-            )}
-            {!isVersionsLoading && hasVersionOptions ? (
-              versionOptions!.map((version) => (
-                <DropdownMenuItem
-                  key={version.version_id}
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    onVersionRestore?.(version.version_id);
-                  }}
-                >
-                  <div className="flex flex-col gap-0.5 text-xs">
-                    <span className="font-medium text-foreground">{formatHistoryLabel(version)}</span>
-                    {/* {version.created_from_draft_revision && (
-                      <span className="text-muted-foreground">
-                        Draft rev {version.created_from_draft_revision}
-                      </span>
-                    )} */}
-                  </div>
-                </DropdownMenuItem>
-              ))
+    <div className="bg-card/95 backdrop-blur border rounded-full shadow-xl px-2 py-1.5 flex items-center gap-1.5">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-muted-foreground h-7 px-2.5 text-[11px]"
+            disabled={versionButtonDisabled}
+            title={
+              versionRestoreDisabledReason ??
+              (!hasVersionOptions ? 'Run tests to create checkpoint versions' : undefined)
+            }
+          >
+            {isRestoringVersion ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                Restoring…
+              </>
             ) : (
-              !isVersionsLoading && (
-                <DropdownMenuItem disabled>No versions available yet</DropdownMenuItem>
-              )
+              <>
+                <History className="mr-1 h-3 w-3" />
+                Versions
+              </>
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          onClick={onRunClick}
-          disabled={!canRun || isExecuting}
-          size="sm"
-          variant="default"
-          title={runDisabledReason}
-        >
-          {isExecuting ? 'Testing…' : 'Test Run'}
-        </Button>
-        <Button
-          onClick={onPublishClick}
-          disabled={!canPublish || isPublishing}
-          size="sm"
-          variant="default"
-          title={publishDisabledReason}
-        >
-          {isPublishing ? 'Publishing…' : 'Publish'}
-        </Button>
-      </div>
+          </Button>
+        </DropdownMenuTrigger>
+        <VersionsDropdownContent
+          lifecycleStatus={lifecycleStatus}
+          isVersionsLoading={isVersionsLoading}
+          versionOptions={versionOptions}
+          onVersionRestore={onVersionRestore}
+        />
+      </DropdownMenu>
+      <Button
+        onClick={onRunClick}
+        disabled={!canRun || isExecuting}
+        size="sm"
+        variant="default"
+        className="h-7 px-2.5 text-[11px]"
+        title={runDisabledReason}
+      >
+        {isExecuting ? 'Testing…' : 'Run'}
+      </Button>
+      <Button
+        onClick={onPublishClick}
+        disabled={!canPublish || isPublishing}
+        size="sm"
+        variant="default"
+        className="h-7 px-2.5 text-[11px]"
+        title={publishDisabledReason}
+      >
+        {isPublishing ? 'Publishing…' : 'Publish'}
+      </Button>
     </div>
   );
 }
