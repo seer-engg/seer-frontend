@@ -25,6 +25,7 @@ import { WorkflowCanvasContext } from './workflow-canvas-context';
 import { FloatingActions } from '@/components/general/FloatingActions';
 import { WorkflowNodeData, WorkflowEdge, DroppedBlockData } from '../types';
 import { ToolBlockConfig } from '@/components/workflows/block-config/types';
+import { TriggerBlockNode } from '../blocks/TriggerBlockNode';
 
 // Import custom node types
 import { ToolBlockNode } from '../blocks/ToolBlockNode';
@@ -53,6 +54,7 @@ const nodeTypes: NodeTypes = {
   llm: LLMBlockNode,
   if_else: IfElseBlockNode,
   for_loop: ForLoopBlockNode,
+  trigger: TriggerBlockNode,
 };
 
 interface WorkflowCanvasProps {
