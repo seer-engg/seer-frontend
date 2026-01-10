@@ -88,7 +88,6 @@ export function LlmBlockSection({
         def={{ type: 'string', multiline: true }}
         templateAutocomplete={templateAutocomplete}
         rows={4}
-        className="max-h-[120px] overflow-y-auto"
         error={validationErrors['system_prompt']}
       />
 
@@ -102,7 +101,6 @@ export function LlmBlockSection({
         def={{ type: 'string', multiline: true }}
         templateAutocomplete={templateAutocomplete}
         rows={4}
-        className="max-h-[120px] overflow-y-auto"
         error={validationErrors['user_prompt']}
       />
 
