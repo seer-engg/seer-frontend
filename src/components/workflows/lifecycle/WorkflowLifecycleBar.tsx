@@ -1,6 +1,5 @@
 import { History, Loader2, Play, Tag } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { WorkflowLifecycleStatus } from '@/components/workflows/buildtypes';
 import type { WorkflowVersionListItem } from '@/types/workflow-spec';
@@ -8,8 +7,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -34,18 +31,6 @@ interface WorkflowLifecycleBarProps {
   isRestoringVersion?: boolean;
   versionRestoreDisabledReason?: string;
 }
-
-const renderVersionLabel = (
-  label: string,
-  version?: WorkflowLifecycleStatus['latestVersion'],
-): string => {
-  if (!version) {
-    return `${label}: —`;
-  }
-  const versionNumber = version.version_number ?? version.version_id;
-  // const statusSuffix = version.status ? ` (${version.status.toLowerCase()})` : '';
-  return `${label}: v${versionNumber}`;
-};
 
 const formatHistoryLabel = (version: WorkflowVersionListItem): string => {
   const versionNumber = version.version_number ?? version.version_id;

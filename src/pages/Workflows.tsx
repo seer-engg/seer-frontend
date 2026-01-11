@@ -182,11 +182,12 @@ function buildCanvasProps(params: {
   isPublishing: boolean; isRestoringVersion: boolean; canRun: boolean; canPublish: boolean;
   publishDisabledReason: string; runDisabledReason: string; isImportDialogOpen: boolean;
   handleCanvasNodeDoubleClick: (id: string) => void; handleNodeDrop: (e: unknown) => void;
-  handleExecute: (fields: unknown) => void; handlePublish: () => void; handleRestoreVersion: (versionId: string) => void;
+  handleExecute: (fields: unknown) => { needsInput: boolean } | void; handlePublish: () => void;
+  handleRestoreVersion: (versionId: string) => void;
   handleLoadWorkflow: (id: string) => void; handleDeleteWorkflow: (id: string) => void;
   handleRenameWorkflow: (id: string, name: string) => void; handleNewWorkflow: () => void;
   handleExportWorkflow: (id: string) => void; setImportDialogOpen: (open: boolean) => void;
-  handleImportWorkflow: (file: File) => void; inputFields: unknown;
+  handleImportWorkflow: (file: File) => void; inputFields: unknown; setInputDialogOpen: (open: boolean) => void;
 }) {
   const {
     selectedWorkflowId, previewGraph, proposalPreview, lifecycleStatus, workflows, isLoadingWorkflows,
@@ -194,14 +195,20 @@ function buildCanvasProps(params: {
     canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
     handleCanvasNodeDoubleClick, handleNodeDrop, handleExecute, handlePublish, handleRestoreVersion,
     handleLoadWorkflow, handleDeleteWorkflow, handleRenameWorkflow, handleNewWorkflow, handleExportWorkflow,
-    setImportDialogOpen, handleImportWorkflow, inputFields,
+    setImportDialogOpen, handleImportWorkflow, inputFields, setInputDialogOpen,
   } = params;
   return {
     selectedWorkflowId, previewGraph, proposalPreview, lifecycleStatus, workflows, isLoadingWorkflows,
     workflowVersions, isLoadingWorkflowVersions, isExecuting, isPublishing, isRestoringVersion,
     canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
     onNodeDoubleClick: handleCanvasNodeDoubleClick, onNodeDrop: handleNodeDrop,
-    onRunClick: () => handleExecute(inputFields), onPublishClick: handlePublish,
+    onRunClick: () => {
+      const result = handleExecute(inputFields);
+      if (result?.needsInput) {
+        setInputDialogOpen(true);
+      }
+    },
+    onPublishClick: handlePublish,
     onVersionRestore: handleRestoreVersion, onLoadWorkflow: handleLoadWorkflow,
     onDeleteWorkflow: handleDeleteWorkflow, onRenameWorkflow: handleRenameWorkflow,
     onNewWorkflow: handleNewWorkflow, onExportWorkflow: handleExportWorkflow,
@@ -310,7 +317,7 @@ export default function Workflows() {
     canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
     handleCanvasNodeDoubleClick, handleNodeDrop, handleExecute, handlePublish, handleRestoreVersion,
     handleLoadWorkflow, handleDeleteWorkflow, handleRenameWorkflow, handleNewWorkflow, handleExportWorkflow,
-    setImportDialogOpen, handleImportWorkflow, inputFields,
+    setImportDialogOpen, handleImportWorkflow, inputFields, setInputDialogOpen,
   });
 
   const chatProps = buildChatProps({
