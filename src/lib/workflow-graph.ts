@@ -177,45 +177,42 @@ function createToolNode(node: FlowNode): WorkflowNode {
   };
 }
 
-function createLlmNode(node: FlowNode): WorkflowNode {
-  const config = node.data?.config ?? {};
-  const model = config.model || 'gpt-5-mini';
+function parseNumericConfig(value: unknown): number | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return Number(value);
+  return undefined;
+}
+
+function buildLlmPrompt(config: Record<string, unknown>, nodeLabel: string): string {
   const systemPrompt = convertTemplateString(config.system_prompt || '');
   const rawUserPrompt = config.user_prompt || '';
   const userPrompt =
-    rawUserPrompt && rawUserPrompt !== DEFAULT_LLM_USER_PROMPT
-      ? convertTemplateString(rawUserPrompt)
-      : '';
+    rawUserPrompt && rawUserPrompt !== DEFAULT_LLM_USER_PROMPT ? convertTemplateString(rawUserPrompt) : '';
 
   const promptParts = [systemPrompt, userPrompt].filter(Boolean);
   if (promptParts.length === 0) {
-    throw new Error(`LLM block '${node.data?.label ?? node.id}' requires a prompt.`);
+    throw new Error(`LLM block '${nodeLabel}' requires a prompt.`);
   }
 
-  const prompt = promptParts.join('\n\n').trim();
+  return promptParts.join('\n\n').trim();
+}
+
+function buildLlmOutputSchema(config: Record<string, unknown>) {
+  const inlineSchema = buildInlineSchemaSpec(config.output_schema);
+  return inlineSchema ? { mode: 'json' as const, schema: inlineSchema } : { mode: 'text' as const };
+}
+
+function createLlmNode(node: FlowNode): WorkflowNode {
+  const config = node.data?.config ?? {};
+  const model = config.model || 'gpt-5-mini';
+  const prompt = buildLlmPrompt(config, node.data?.label ?? node.id);
 
   const inputRefs = isRecord(config.input_refs)
     ? (convertTemplateStrings(config.input_refs, 'toCompiler') as Record<string, JsonValue>)
     : {};
 
-  const inlineSchema = buildInlineSchemaSpec(config.output_schema);
-  const outputSchema = inlineSchema
-    ? { mode: 'json' as const, schema: inlineSchema }
-    : { mode: 'text' as const };
-
-  const temperature =
-    typeof config.temperature === 'number'
-      ? config.temperature
-      : typeof config.temperature === 'string'
-        ? Number(config.temperature)
-        : undefined;
-
-  const maxTokens =
-    typeof config.max_tokens === 'number'
-      ? config.max_tokens
-      : typeof config.max_tokens === 'string'
-        ? Number(config.max_tokens)
-        : undefined;
+  const temperature = parseNumericConfig(config.temperature);
+  const maxTokens = parseNumericConfig(config.max_tokens);
 
   return {
     id: node.id,
@@ -224,7 +221,7 @@ function createLlmNode(node: FlowNode): WorkflowNode {
     prompt,
     in: inputRefs,
     out: deriveOutName(node),
-    output: outputSchema,
+    output: buildLlmOutputSchema(config),
     temperature: Number.isFinite(temperature) ? temperature : undefined,
     max_tokens: Number.isFinite(maxTokens) ? maxTokens : undefined,
   };
@@ -322,6 +319,26 @@ function deriveOutName(node: FlowNode): string | undefined {
   return alias || undefined;
 }
 
+function compareNodesByTarget(
+  a: WorkflowEdge,
+  b: WorkflowEdge,
+  nodeById: Map<string, FlowNode>,
+): number {
+  const nodeA = nodeById.get(a.target) ?? ({ position: { x: 0, y: 0 } } as FlowNode);
+  const nodeB = nodeById.get(b.target) ?? ({ position: { x: 0, y: 0 } } as FlowNode);
+  return compareNodes(nodeA, nodeB);
+}
+
+function compareNodesBySource(
+  a: WorkflowEdge,
+  b: WorkflowEdge,
+  nodeById: Map<string, FlowNode>,
+): number {
+  const nodeA = nodeById.get(a.source) ?? ({ position: { x: 0, y: 0 } } as FlowNode);
+  const nodeB = nodeById.get(b.source) ?? ({ position: { x: 0, y: 0 } } as FlowNode);
+  return compareNodes(nodeA, nodeB);
+}
+
 function createGraphContext(graph: WorkflowGraphData): GraphContext {
   const nodeById = new Map<string, FlowNode>();
   graph.nodes.forEach((node) => {
@@ -341,41 +358,36 @@ function createGraphContext(graph: WorkflowGraphData): GraphContext {
     incoming.set(edge.target, targetEdges);
   });
 
-  const edgeSorter = (a: WorkflowEdge, b: WorkflowEdge) =>
-    compareNodes(
-      nodeById.get(a.target) ?? ({ position: { x: 0, y: 0 } } as FlowNode),
-      nodeById.get(b.target) ?? ({ position: { x: 0, y: 0 } } as FlowNode),
-    );
-
   outgoing.forEach((edges, key) => {
-    outgoing.set(key, edges.sort(edgeSorter));
+    outgoing.set(key, edges.sort((a, b) => compareNodesByTarget(a, b, nodeById)));
   });
   incoming.forEach((edges, key) => {
-    incoming.set(key, edges.sort((a, b) => {
-      const sourceA = nodeById.get(a.source);
-      const sourceB = nodeById.get(b.source);
-      return compareNodes(
-        sourceA ?? ({ position: { x: 0, y: 0 } } as FlowNode),
-        sourceB ?? ({ position: { x: 0, y: 0 } } as FlowNode),
-      );
-    }));
+    incoming.set(key, edges.sort((a, b) => compareNodesBySource(a, b, nodeById)));
   });
 
   return { nodeById, outgoing, incoming };
 }
 
+function getNodeY(node?: FlowNode): number {
+  return node?.position?.y ?? 0;
+}
+
+function getNodeX(node?: FlowNode): number {
+  return node?.position?.x ?? 0;
+}
+
+function getNodeId(node?: FlowNode): string {
+  return node?.id ?? '';
+}
+
 function compareNodes(a?: FlowNode, b?: FlowNode): number {
-  const ay = a?.position?.y ?? 0;
-  const by = b?.position?.y ?? 0;
-  if (ay !== by) {
-    return ay - by;
-  }
-  const ax = a?.position?.x ?? 0;
-  const bx = b?.position?.x ?? 0;
-  if (ax !== bx) {
-    return ax - bx;
-  }
-  return (a?.id ?? '').localeCompare(b?.id ?? '');
+  const yDiff = getNodeY(a) - getNodeY(b);
+  if (yDiff !== 0) return yDiff;
+
+  const xDiff = getNodeX(a) - getNodeX(b);
+  if (xDiff !== 0) return xDiff;
+
+  return getNodeId(a).localeCompare(getNodeId(b));
 }
 
 function getBranch(edge: WorkflowEdge): BranchLabel | undefined {
@@ -486,72 +498,80 @@ function mapSpecNodeType(specType: WorkflowNode['type']): WorkflowNodeData['type
   }
 }
 
+function buildToolNodeData(specNode: WorkflowNode): WorkflowNodeData {
+  const toolInputs = getSpecNodeInputs(specNode);
+  const toolOutputSchema =
+    specNode.expect_output?.mode === 'json' ? unwrapInlineSchema(specNode.expect_output.schema) : undefined;
+
+  return {
+    type: 'tool',
+    label: specNode.id,
+    config: {
+      tool_name: specNode.tool,
+      params: convertTemplateStrings(toolInputs ?? {}, 'toBuilder'),
+      ...(specNode.out && { out: specNode.out }),
+      ...(toolOutputSchema && { output_schema: toolOutputSchema }),
+    },
+  };
+}
+
+function buildLlmNodeData(specNode: WorkflowNode): WorkflowNodeData {
+  const llmInputs = getSpecNodeInputs(specNode);
+  const llmOutputSchema =
+    specNode.output?.mode === 'json' ? unwrapInlineSchema(specNode.output?.schema) : undefined;
+
+  return {
+    type: 'llm',
+    label: specNode.id,
+    config: {
+      model: specNode.model,
+      user_prompt: convertTemplateString(specNode.prompt, 'toBuilder'),
+      input_refs: convertTemplateStrings(llmInputs ?? {}, 'toBuilder'),
+      ...(specNode.out && { out: specNode.out }),
+      ...(llmOutputSchema && { output_schema: llmOutputSchema }),
+      temperature: specNode.temperature,
+      max_tokens: specNode.max_tokens,
+    },
+  };
+}
+
+function buildIfNodeData(specNode: WorkflowNode): WorkflowNodeData {
+  return {
+    type: 'if_else',
+    label: specNode.id,
+    config: {
+      condition: convertTemplateString(specNode.condition, 'toBuilder'),
+      ...(specNode.out && { out: specNode.out }),
+    },
+  };
+}
+
+function buildForEachNodeData(specNode: WorkflowNode): WorkflowNodeData {
+  return {
+    type: 'for_loop',
+    label: specNode.id,
+    config: {
+      array_mode: 'variable',
+      array_variable: convertTemplateString(specNode.items, 'toBuilder'),
+      item_var: specNode.item_var,
+      index_var: specNode.index_var,
+      ...(specNode.out && { out: specNode.out }),
+    },
+  };
+}
+
 function convertSpecNodeToData(specNode: WorkflowNode): WorkflowNodeData {
   switch (specNode.type) {
-    case 'tool': {
-      const toolInputs = getSpecNodeInputs(specNode);
-      const toolOutputSchema =
-        specNode.expect_output?.mode === 'json'
-          ? unwrapInlineSchema(specNode.expect_output.schema)
-          : undefined;
-      return {
-        type: 'tool',
-        label: specNode.id,
-        config: {
-          tool_name: specNode.tool,
-          params: convertTemplateStrings(toolInputs ?? {}, 'toBuilder'),
-          ...(specNode.out ? { out: specNode.out } : {}),
-          ...(toolOutputSchema ? { output_schema: toolOutputSchema } : {}),
-        },
-      };
-    }
-    case 'llm': {
-      const llmInputs = getSpecNodeInputs(specNode);
-      const llmOutputSchema =
-        specNode.output?.mode === 'json'
-          ? unwrapInlineSchema(specNode.output?.schema)
-          : undefined;
-      return {
-        type: 'llm',
-        label: specNode.id,
-        config: {
-          model: specNode.model,
-          user_prompt: convertTemplateString(specNode.prompt, 'toBuilder'),
-          input_refs: convertTemplateStrings(llmInputs ?? {}, 'toBuilder'),
-          ...(specNode.out ? { out: specNode.out } : {}),
-          ...(llmOutputSchema ? { output_schema: llmOutputSchema } : {}),
-          temperature: specNode.temperature,
-          max_tokens: specNode.max_tokens,
-        },
-      };
-    }
+    case 'tool':
+      return buildToolNodeData(specNode);
+    case 'llm':
+      return buildLlmNodeData(specNode);
     case 'if':
-      return {
-        type: 'if_else',
-        label: specNode.id,
-        config: {
-          condition: convertTemplateString(specNode.condition, 'toBuilder'),
-          ...(specNode.out ? { out: specNode.out } : {}),
-        },
-      };
+      return buildIfNodeData(specNode);
     case 'for_each':
-      return {
-        type: 'for_loop',
-        label: specNode.id,
-        config: {
-          array_mode: 'variable',
-          array_variable: convertTemplateString(specNode.items, 'toBuilder'),
-          item_var: specNode.item_var,
-          index_var: specNode.index_var,
-          ...(specNode.out ? { out: specNode.out } : {}),
-        },
-      };
+      return buildForEachNodeData(specNode);
     default:
-      return {
-        type: 'tool',
-        label: specNode.id,
-        config: {},
-      };
+      return { type: 'tool', label: specNode.id, config: {} };
   }
 }
 

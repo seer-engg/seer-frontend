@@ -139,6 +139,60 @@ export class BackendAPIClient {
     return `${this.getBaseUrl()}${normalized}`;
   }
 
+  private parseErrorPayload(responseBody: string): unknown {
+    if (!responseBody) return undefined;
+
+    try {
+      return JSON.parse(responseBody);
+    } catch {
+      return responseBody;
+    }
+  }
+
+  private extractErrorMessage(errorPayload: unknown, response: Response): string {
+    if (
+      typeof errorPayload === "object" &&
+      errorPayload !== null &&
+      "detail" in errorPayload &&
+      typeof (errorPayload as { detail?: unknown }).detail === "string"
+    ) {
+      return (errorPayload as { detail: string }).detail;
+    }
+    return response.statusText ?? `HTTP ${response.status}`;
+  }
+
+  private validateContentType(
+    contentType: string,
+    responseBody: string,
+    url: string,
+    status: number
+  ): void {
+    if (contentType.includes("application/json")) return;
+
+    if (responseBody.trim().startsWith("<!doctype") || responseBody.includes("<html")) {
+      throw new BackendAPIError(
+        `Received HTML instead of JSON from ${url}. Check backend availability.`,
+        status,
+        { url, contentType }
+      );
+    }
+
+    throw new BackendAPIError(
+      `Unsupported content type: ${contentType || "unknown"}`,
+      status,
+      { url, contentType, body: responseBody }
+    );
+  }
+
+  private addCacheControlHeaders(headers: Headers, method?: string): void {
+    const isGetRequest = method === 'GET' || !method;
+    if (isGetRequest && !headers.has('Cache-Control')) {
+      headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      headers.set("Pragma", "no-cache");
+      headers.set("Expires", "0");
+    }
+  }
+
   async request<T>(endpoint: string, options: BackendRequestInit = {}): Promise<T> {
     const url = this.toAbsoluteUrl(endpoint);
     const token = await this.getToken();
@@ -156,12 +210,7 @@ export class BackendAPIClient {
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
     }
-    // Add cache-control headers for GET requests to prevent HTTP-level caching
-    if ((restOptions.method === 'GET' || !restOptions.method) && !headers.has('Cache-Control')) {
-      headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
-      headers.set("Pragma", "no-cache");
-      headers.set("Expires", "0");
-    }
+    this.addCacheControlHeaders(headers, restOptions.method);
 
     const response = await fetch(url, {
       ...restOptions,
@@ -174,22 +223,8 @@ export class BackendAPIClient {
     const responseBody = await response.text();
 
     if (!response.ok) {
-      let errorPayload: unknown;
-      if (responseBody) {
-        try {
-          errorPayload = JSON.parse(responseBody);
-        } catch {
-          errorPayload = responseBody;
-        }
-      }
-      const detail =
-        typeof errorPayload === "object" &&
-        errorPayload !== null &&
-        "detail" in errorPayload &&
-        typeof (errorPayload as { detail?: unknown }).detail === "string"
-          ? (errorPayload as { detail: string }).detail
-          : undefined;
-      const message: string = detail ?? response.statusText ?? `HTTP ${response.status}`;
+      const errorPayload = this.parseErrorPayload(responseBody);
+      const message = this.extractErrorMessage(errorPayload, response);
       throw new BackendAPIError(message, response.status, errorPayload);
     }
 
@@ -197,20 +232,7 @@ export class BackendAPIClient {
       return undefined as T;
     }
 
-    if (!contentType.includes("application/json")) {
-      if (responseBody.trim().startsWith("<!doctype") || responseBody.includes("<html")) {
-        throw new BackendAPIError(
-          `Received HTML instead of JSON from ${url}. Check backend availability.`,
-          response.status,
-          { url, contentType },
-        );
-      }
-      throw new BackendAPIError(
-        `Unsupported content type: ${contentType || "unknown"}`,
-        response.status,
-        { url, contentType, body: responseBody },
-      );
-    }
+    this.validateContentType(contentType, responseBody, url, response.status);
 
     try {
       return JSON.parse(responseBody) as T;
@@ -218,7 +240,7 @@ export class BackendAPIClient {
       throw new BackendAPIError(
         "Failed to parse JSON response",
         response.status,
-        { url, rawBody: responseBody, error: error instanceof Error ? error.message : error },
+        { url, rawBody: responseBody, error: error instanceof Error ? error.message : error }
       );
     }
   }

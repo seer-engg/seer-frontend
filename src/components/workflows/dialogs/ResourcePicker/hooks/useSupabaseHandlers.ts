@@ -3,6 +3,7 @@ import type { IntegrationResource } from '@/lib/api-client';
 import type { UseToastReturn } from '@/hooks/utility/use-toast';
 import { bindOAuthProject, bindManualProject } from './supabaseBindingHelpers';
 import type { SupabaseManualFormState } from '../types';
+import { useWorkflowSave } from '@/hooks/useWorkflowSave';
 
 interface HandlerConfig {
   supabaseToolNames: string[];
@@ -69,8 +70,13 @@ async function executeManualBind(
 }
 
 export function useSupabaseHandlers(config: HandlerConfig) {
+  const { saveWorkflow, hasWorkflow } = useWorkflowSave();
+
   const handleConnectSupabase = useCallback(async () => {
     try {
+      if (hasWorkflow) {
+        await saveWorkflow();
+      }
       const toolNames = config.supabaseToolNames.length
         ? config.supabaseToolNames
         : ['supabase_table_query'];
@@ -85,7 +91,7 @@ export function useSupabaseHandlers(config: HandlerConfig) {
         variant: 'destructive',
       });
     }
-  }, [config]);
+  }, [config, hasWorkflow, saveWorkflow]);
 
   const handleBindProject = useCallback(
     async (

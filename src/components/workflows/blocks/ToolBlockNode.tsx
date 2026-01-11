@@ -4,54 +4,19 @@
  * Displays integration tool blocks with OAuth connection status.
  * Shows connect button for tools requiring authorization.
  */
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback } from 'react';
 import { Handle, Position, NodeProps, type Node as FlowNode } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { WorkflowNodeData } from '../types';
 import { useToolIntegration } from '@/hooks/useToolIntegration';
+import { useToolIntegrationStatus } from '@/hooks/useToolIntegrationStatus';
+import { useToolSummaryConfig } from '@/hooks/useToolSummaryConfig';
 import type { ToolMetadata } from '@/stores/toolsStore';
 import { backendApiClient } from '@/lib/api-client';
-import { 
-  Wrench, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Loader2,
-  ExternalLink,
-  Database,
-} from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { IntegrationType } from '@/lib/integrations/client';
-import { GmailSVG } from '@/components/icons/gmail';
-import { GoogleDriveSVG } from '@/components/icons/googledrive';
-import { GoogleSheetsSVG } from '@/components/icons/googlesheets';
-import { GitHubSVG } from '@/components/icons/github';
+import { useWorkflowSave } from '@/hooks/useWorkflowSave';
+import { ToolBlockNodeContent } from './ToolBlockNodeContent';
 import { WorkflowNodeSummary } from './NodeSummary';
-
-/**
- * Get icon for integration type
- */
-function getIntegrationIcon(integrationType: IntegrationType | null) {
-  const key = integrationType?.toLowerCase() ?? '';
-  switch (key) {
-    case 'gmail':
-      return <GmailSVG width={16} height={16} />;
-    case 'google_drive':
-    case 'googledrive':
-      return <GoogleDriveSVG width={16} height={16} />;
-    case 'google_sheets':
-    case 'googlesheets':
-      return <GoogleSheetsSVG width={16} height={16} />;
-    case 'github':
-    case 'pull_request':
-      return <GitHubSVG width={16} height={16} />;
-    case 'supabase':
-      return <Database className="w-4 h-4" />;
-    default:
-      return <Wrench className="w-4 h-4" />;
-  }
-}
 
 type WorkflowNode = FlowNode<WorkflowNodeData>;
 
@@ -80,128 +45,25 @@ export const ToolBlockNode = memo(function ToolBlockNode(
   
   // Get integration status for this tool
   const { status, isLoading, initiateAuth } = useToolIntegration(toolName);
+  const { saveWorkflow, hasWorkflow } = useWorkflowSave();
 
   // Handle connect button click
   const handleConnect = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent node selection
+    if (hasWorkflow) {
+      await saveWorkflow();
+    }
     const redirectUrl = await initiateAuth();
     if (redirectUrl) {
       window.location.href = redirectUrl;
     }
-  }, [initiateAuth]);
+  }, [initiateAuth, hasWorkflow, saveWorkflow]);
 
   // Determine integration status display
-  const { icon, statusBadge, needsAuth } = useMemo(() => {
-    if (!toolName || isLoading) {
-      return {
-        icon: <Wrench className="w-4 h-4 text-primary" />,
-        statusBadge: null,
-        needsAuth: false,
-      };
-    }
+  const { icon, statusBadge, needsAuth } = useToolIntegrationStatus(toolName, status, isLoading);
 
-    if (!status) {
-      return {
-        icon: <Wrench className="w-4 h-4 text-primary" />,
-        statusBadge: null,
-        needsAuth: false,
-      };
-    }
-
-    const intIcon = getIntegrationIcon(status.integrationType);
-
-    // No OAuth required
-    if (!status.integrationType) {
-      return {
-        icon: intIcon,
-        statusBadge: null,
-        needsAuth: false,
-      };
-    }
-
-    // Connected
-    if (status.isConnected) {
-      return {
-        icon: intIcon,
-        statusBadge: (
-          <Badge 
-            variant="secondary" 
-            className="flex items-center gap-1 text-[10px] px-1.5 py-0 h-5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-          >
-            <CheckCircle2 className="w-3 h-3" />
-          </Badge>
-        ),
-        needsAuth: false,
-      };
-    }
-
-    // Needs authorization
-    return {
-      icon: intIcon,
-      statusBadge: (
-        <Badge 
-          variant="secondary" 
-          className="flex items-center gap-1 text-[10px] px-1.5 py-0 h-5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-        >
-          <AlertTriangle className="w-3 h-3" />
-          Not connected
-        </Badge>
-      ),
-      needsAuth: true,
-    };
-  }, [toolName, status, isLoading]);
-
-  const paramsObject = useMemo(() => {
-    const params = data.config?.params;
-    if (!params || typeof params !== 'object') {
-      return null;
-    }
-    return params as Record<string, unknown>;
-  }, [data.config]);
-
-  const schemaParamDefaults = useMemo(() => {
-    const properties = toolSchema?.parameters?.properties;
-    if (!properties || typeof properties !== 'object') {
-      return null;
-    }
-    const defaults: Record<string, unknown> = {};
-    Object.entries(properties).forEach(([key, definition]) => {
-      if (
-        definition &&
-        typeof definition === 'object' &&
-        'default' in definition &&
-        (definition as { default?: unknown }).default !== undefined
-      ) {
-        defaults[key] = (definition as { default?: unknown }).default;
-      }
-    });
-    return Object.keys(defaults).length ? defaults : null;
-  }, [toolSchema]);
-
-  const paramsSummaryConfig = useMemo<Record<string, unknown> | null>(() => {
-    if (!paramsObject && !schemaParamDefaults) {
-      return null;
-    }
-    const summaryConfig: Record<string, unknown> = {
-      ...(schemaParamDefaults ?? {}),
-      ...(paramsObject ?? {}),
-    };
-    const labels = data.config?.__resourceLabels;
-    if (labels && typeof labels === 'object') {
-      summaryConfig.__resourceLabels = labels as Record<string, string>;
-    }
-    return summaryConfig;
-  }, [data.config, paramsObject, schemaParamDefaults]);
-
-  const summaryPriorityKeys = useMemo(() => {
-    const required = toolSchema?.parameters?.required ?? [];
-    const schemaProps = Object.keys(toolSchema?.parameters?.properties ?? {});
-    const optional = schemaProps.filter((key) => !required.includes(key));
-    const paramKeys = paramsObject ? Object.keys(paramsObject) : [];
-    const defaultKeys = schemaParamDefaults ? Object.keys(schemaParamDefaults) : [];
-    const orderedKeys = [...required, ...optional, ...paramKeys, ...defaultKeys];
-    return Array.from(new Set(orderedKeys));
-  }, [toolSchema, paramsObject, schemaParamDefaults]);
+  // Get summary configuration
+  const { paramsSummaryConfig, summaryPriorityKeys } = useToolSummaryConfig(data, toolSchema);
 
   return (
     <div
@@ -228,46 +90,14 @@ export const ToolBlockNode = memo(function ToolBlockNode(
       />
 
       {/* Block content */}
-      <div className="space-y-2">
-        {/* Icon, tool name, and status row */}
-        <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              'w-8 h-8 rounded flex items-center justify-center shrink-0',
-              needsAuth ? 'bg-amber-500/10' : 'bg-primary/10',
-            )}
-          >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-            ) : (
-              <div className={cn(needsAuth ? 'text-amber-600 dark:text-amber-400' : 'text-primary')}>
-                {icon}
-              </div>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{data.label}</p>
-          </div>
-          {statusBadge && (
-            <div className="flex items-center gap-2">
-              <div className="shrink-0">
-                {statusBadge}
-              </div>
-              {needsAuth && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
-                  onClick={handleConnect}
-                >
-                  Connect
-                  <ExternalLink className="w-3 h-3 ml-1" />
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <ToolBlockNodeContent
+        icon={icon}
+        isLoading={isLoading}
+        needsAuth={needsAuth}
+        label={data.label}
+        statusBadge={statusBadge}
+        handleConnect={handleConnect}
+      />
 
       <WorkflowNodeSummary
         config={paramsSummaryConfig}

@@ -1,4 +1,9 @@
 {
+  "env": {
+    "DESIGN_SYSTEM_COLORS": "src/index.css",
+    "UI_COMPONENTS": "src/components/ui",
+    "BADGE_REFERENCE": "src/components/workflows/ToolSelector.tsx"
+  },
   "permissions": {
     "allow": [
       "Read(**)",
@@ -7,11 +12,11 @@
       "Edit(src/pages/**)"
     ]
   },
-  "env": {
-    "DESIGN_SYSTEM_COLORS": "src/index.css",
-    "UI_COMPONENTS": "src/components/ui",
-    "BADGE_REFERENCE": "src/components/workflows/ToolSelector.tsx"
+  "enableAllProjectMcpServers": true,
+  "enabledPlugins": {
+    "serena@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true
   },
-  "outputStyle": "Explanatory",
-  "enableAllProjectMcpServers": true
+  "outputStyle": "Explanatory"
 }

@@ -62,7 +62,7 @@ export function useWorkflowActions() {
       resetSavedDataRef,
       invalidateWorkflowVersions: () => {}, // This will be handled by caller if needed
     });
-  }, [selectedWorkflowId, getWorkflow, setNodes, setEdges, functionBlocksMap]);
+  }, [selectedWorkflowId, getWorkflow, setNodes, setEdges, functionBlocksMap, setLastRunVersionId]);
 
   /**
    * Save or create workflow
@@ -122,6 +122,7 @@ export function useWorkflowActions() {
     setWorkflowName,
     navigate,
     handleDraftConflictCallback,
+    setLastRunVersionId,
   ]);
 
   /**
@@ -149,7 +150,7 @@ export function useWorkflowActions() {
         return false;
       }
     },
-    [selectedWorkflowId, executeWorkflow],
+    [selectedWorkflowId, executeWorkflow, setLastRunVersionId],
   );
 
   /**
@@ -224,7 +225,7 @@ export function useWorkflowActions() {
       toast.error('Failed to publish workflow');
       throw error;
     }
-  }, [selectedWorkflowId, lastRunVersionId, publishWorkflow]);
+  }, [selectedWorkflowId, lastRunVersionId, publishWorkflow, setLastRunVersionId]);
 
   /**
    * Restore workflow version
@@ -267,6 +268,7 @@ export function useWorkflowActions() {
       setEdges,
       functionBlocksMap,
       handleDraftConflictCallback,
+      setLastRunVersionId,
     ],
   );
 
@@ -431,6 +433,7 @@ export function useWorkflowActions() {
       setNodes,
       setEdges,
       functionBlocksMap,
+      setLastRunVersionId,
     ],
   );
 

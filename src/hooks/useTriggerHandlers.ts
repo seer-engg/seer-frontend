@@ -15,6 +15,7 @@ import { useTriggersStore } from '@/stores/triggersStore';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useToolsStore } from '@/stores/toolsStore';
 import type { TriggerDescriptor } from '@/types/triggers';
+import { useWorkflowSave } from './useWorkflowSave';
 
 // Stable empty object reference to avoid creating new objects in selectors
 // This prevents the "getSnapshot should be cached" error from Zustand
@@ -49,6 +50,7 @@ export function useTriggerHandlers({
   );
   const triggerCatalog = useTriggersStore((state) => state.triggerCatalog);
   const connectIntegration = useToolsStore((state) => state.connectIntegration);
+  const { saveWorkflow, hasWorkflow } = useWorkflowSave();
 
   // Phase 1: Use triggersStore instead of local state for draft triggers
   const addDraftTrigger = useTriggersStore((state) => state.addDraftTrigger);
@@ -146,6 +148,9 @@ export function useTriggerHandlers({
   const handleConnectGmail = useCallback(async () => {
     setIsConnectingGmail(true);
     try {
+      if (hasWorkflow) {
+        await saveWorkflow();
+      }
       const redirectUrl = await connectIntegration('gmail', { toolNames: gmailToolNames });
       if (redirectUrl) {
         window.location.href = redirectUrl;
@@ -160,7 +165,7 @@ export function useTriggerHandlers({
     } finally {
       setIsConnectingGmail(false);
     }
-  }, [connectIntegration, gmailToolNames]);
+  }, [connectIntegration, gmailToolNames, hasWorkflow, saveWorkflow]);
 
   return {
     draftTriggers,
