@@ -31,159 +31,128 @@ interface TriggerSectionProps {
   infoMessage?: string;
 }
 
+const TriggerHeader = () => <h3 className="text-sm font-medium text-left mb-2">Triggers</h3>;
+
+const LoadingState = () => (
+  <div>
+    <div className="mb-2 flex items-center justify-between">
+      <h3 className="text-sm font-medium text-left">Triggers</h3>
+      <span className="text-xs text-muted-foreground">Loading…</span>
+    </div>
+    <Skeleton className="h-24 w-full rounded-lg" />
+  </div>
+);
+
+const EmptyState = ({ state }: { state?: ReactNode }) => (
+  <div>
+    <TriggerHeader />
+    <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+      {state || 'No triggers available for this workspace yet.'}
+    </div>
+  </div>
+);
+
 export function TriggerSection({
   options,
   isLoading = false,
   emptyState,
   infoMessage,
 }: TriggerSectionProps) {
-  if (isLoading) {
-    return (
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-left">Triggers</h3>
-          <span className="text-xs text-muted-foreground">Loading…</span>
-        </div>
-        <Skeleton className="h-24 w-full rounded-lg" />
-      </div>
-    );
-  }
+  if (isLoading) return <LoadingState />;
+  if (!options.length) return <EmptyState state={emptyState} />;
 
-  if (!options.length) {
-    return (
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-left">Triggers</h3>
-        </div>
-        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          {emptyState || 'No triggers available for this workspace yet.'}
-        </div>
-      </div>
+  const TriggerCard = ({ option }: { option: TriggerListOption }) => {
+    const Icon = TRIGGER_ICON_BY_KEY[option.key];
+    const disabled = option.disabled ?? Boolean(option.disabledReason);
+
+    const handleDragStart = (e: React.DragEvent) => {
+      if (disabled) e.preventDefault();
+      else {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('application/reactflow', JSON.stringify({
+          type: 'trigger', triggerKey: option.key, title: option.title,
+        }));
+      }
+    };
+
+    const handleClick = () => {
+      if (!disabled && !option.isPrimaryActionLoading) option.onPrimaryAction?.();
+    };
+
+    const cardEl = (
+      <Card
+        key={option.key}
+        draggable={!disabled}
+        onDragStart={handleDragStart}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled}
+        onClick={handleClick}
+        onKeyDown={(e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && !disabled && !option.isPrimaryActionLoading) {
+            e.preventDefault();
+            option.onPrimaryAction?.();
+          }
+        }}
+        className={cn(
+          'border border-border/70 bg-background transition-colors',
+          disabled ? 'opacity-80 grayscale-[20%] cursor-not-allowed' : 'cursor-grab active:cursor-grabbing hover:border-primary/50',
+        )}
+      >
+        <CardContent className="flex flex-col gap-3 p-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="rounded-md bg-primary/10 p-2 text-primary">
+                {Icon ? <Icon className="h-4 w-4" /> : <span className="text-xs font-semibold">T</span>}
+              </div>
+              <p className="text-sm font-medium">{option.title}</p>
+            </div>
+            {option.badge && (
+              <Badge variant="outline" className={cn('text-[10px]',
+                option.status === 'ready' ? 'border-emerald-500/30 text-emerald-600' :
+                option.status === 'action-required' ? 'border-amber-500/40 text-amber-600' : '',
+              )}>
+                {option.badge}
+              </Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {option.secondaryActionLabel && option.onSecondaryAction && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={option.isSecondaryActionLoading}
+                onClick={(e) => { e.stopPropagation(); option.onSecondaryAction?.(); }}
+              >
+                {option.secondaryActionLabel}
+              </Button>
+            )}
+            {option.disabledReason && <span className="text-xs text-muted-foreground">{option.disabledReason}</span>}
+          </div>
+        </CardContent>
+      </Card>
     );
-  }
+
+    return option.description ? (
+      <Tooltip key={option.key}>
+        <TooltipTrigger asChild>{cardEl}</TooltipTrigger>
+        <TooltipContent className="max-w-xs text-sm">{option.description}</TooltipContent>
+      </Tooltip>
+    ) : (
+      cardEl
+    );
+  };
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-left">Triggers</h3>
-        </div>
-      </div>
+      <h3 className="text-sm font-medium text-left mb-2">Triggers</h3>
       {infoMessage && (
         <div className="mb-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground bg-muted/40">
           {infoMessage}
         </div>
       )}
       <div className="space-y-2">
-        {options.map((option) => {
-          const Icon = TRIGGER_ICON_BY_KEY[option.key];
-          const disabled = option.disabled ?? Boolean(option.disabledReason);
-          
-          const handleDragStart = (e: React.DragEvent) => {
-            if (disabled) {
-              e.preventDefault();
-              return;
-            }
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData(
-              'application/reactflow',
-              JSON.stringify({
-                type: 'trigger',
-                triggerKey: option.key,
-                title: option.title,
-              })
-            );
-          };
-
-          const cardContent = (
-            <Card
-              key={option.key}
-              draggable={!disabled}
-              onDragStart={handleDragStart}
-              role="button"
-              tabIndex={disabled ? -1 : 0}
-              aria-disabled={disabled}
-              onClick={() => {
-                if (disabled || option.isPrimaryActionLoading) {
-                  return;
-                }
-                option.onPrimaryAction?.();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  if (disabled || option.isPrimaryActionLoading) {
-                    return;
-                  }
-                  option.onPrimaryAction?.();
-                }
-              }}
-              className={cn(
-                'border border-border/70 bg-background transition-colors',
-                disabled 
-                  ? 'opacity-80 grayscale-[20%] cursor-not-allowed' 
-                  : 'cursor-grab active:cursor-grabbing hover:border-primary/50',
-              )}
-            >
-              <CardContent className="flex flex-col gap-3 p-1">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-md bg-primary/10 p-2 text-primary">
-                      {Icon ? <Icon className="h-4 w-4" /> : <span className="text-xs font-semibold">T</span>}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{option.title}</p>
-                    </div>
-                  </div>
-                  {option.badge && (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'text-[10px]',
-                        option.status === 'ready'
-                          ? 'border-emerald-500/30 text-emerald-600'
-                          : option.status === 'action-required'
-                            ? 'border-amber-500/40 text-amber-600'
-                            : null,
-                      )}
-                    >
-                      {option.badge}
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {option.secondaryActionLabel && option.onSecondaryAction && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={option.isSecondaryActionLoading}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        option.onSecondaryAction?.();
-                      }}
-                    >
-                      {option.secondaryActionLabel}
-                    </Button>
-                  )}
-                  {option.disabledReason && (
-                    <span className="text-xs text-muted-foreground">{option.disabledReason}</span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-
-          if (option.description) {
-            return (
-              <Tooltip key={option.key}>
-                <TooltipTrigger asChild>{cardContent}</TooltipTrigger>
-                <TooltipContent className="max-w-xs text-sm">{option.description}</TooltipContent>
-              </Tooltip>
-            );
-          }
-
-          return cardContent;
-        })}
+        {options.map((option) => <TriggerCard key={option.key} option={option} />)}
       </div>
     </div>
   );

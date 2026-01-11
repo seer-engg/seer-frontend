@@ -1,17 +1,13 @@
 /**
  * Floating Workflows Panel Component
- * 
+ *
  * Figma-style floating panel for workflow navigation.
  * Positioned over the canvas with nested menu structure.
  */
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Plus, FileEdit, Trash2, ChevronDown, ChevronUp, Upload, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -37,6 +33,13 @@ interface FloatingWorkflowsPanelProps {
   onImportWorkflow?: () => void;
 }
 
+const useRenameState = () => {
+  const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+  return { editingWorkflowId, editingName, isRenaming, setEditingWorkflowId, setEditingName, setIsRenaming };
+};
+
 export function FloatingWorkflowsPanel({
   workflows = [],
   isLoadingWorkflows = false,
@@ -45,229 +48,65 @@ export function FloatingWorkflowsPanel({
   onDeleteWorkflow,
   onRenameWorkflow,
   onNewWorkflow,
-  onCopyLink,
-  onDuplicateWorkflow,
   onExportWorkflow,
   onImportWorkflow,
 }: FloatingWorkflowsPanelProps) {
-  const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState<string>('');
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [copiedWorkflowId, setCopiedWorkflowId] = useState<string | null>(null);
+  const { editingWorkflowId, editingName, isRenaming, setEditingWorkflowId, setEditingName, setIsRenaming } = useRenameState();
   const [isExpanded, setIsExpanded] = useState(true);
 
-  const handleStartRename = (e: React.MouseEvent, workflow: WorkflowListRow) => {
-    e.stopPropagation();
-    setEditingWorkflowId(workflow.workflow_id);
-    setEditingName(workflow.name);
-  };
+  const resetRename = () => { setEditingWorkflowId(null); setEditingName(''); };
 
-  const handleCancelRename = () => {
-    setEditingWorkflowId(null);
-    setEditingName('');
-  };
-
-  const handleSaveRename = async (workflowId: string) => {
-    if (!onRenameWorkflow || !editingName.trim()) {
-      handleCancelRename();
-      return;
-    }
-
-    const trimmedName = editingName.trim();
-    if (trimmedName === workflows.find((w) => w.workflow_id === workflowId)?.name) {
-      handleCancelRename();
-      return;
-    }
-
+  const handleSaveRename = async (id: string) => {
+    if (!onRenameWorkflow || !editingName.trim()) { resetRename(); return; }
+    const trimmed = editingName.trim();
+    if (trimmed === workflows.find((w) => w.workflow_id === id)?.name) { resetRename(); return; }
     setIsRenaming(true);
-    try {
-      await onRenameWorkflow(workflowId, trimmedName);
-      setEditingWorkflowId(null);
-      setEditingName('');
-    } catch (error) {
-      console.error('Failed to rename workflow:', error);
-      // Keep editing state on error so user can retry
-    } finally {
-      setIsRenaming(false);
-    }
+    try { await onRenameWorkflow(id, trimmed); resetRename(); } catch (e) { console.error('Rename failed:', e); } finally { setIsRenaming(false); }
   };
 
-  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, workflowId: string) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleSaveRename(workflowId);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      handleCancelRename();
-    }
-  };
+  const PanelHeader = () => (
+    <div className="flex items-center justify-between px-4 py-3 border-b">
+      <div className="flex items-center gap-2">
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-6 w-6" title={isExpanded ? 'Collapse' : 'Expand'}>
+            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </CollapsibleTrigger>
+        <h3 className="text-sm font-semibold">Workflows</h3>
+      </div>
+      <div className="flex items-center gap-1">
+        {onImportWorkflow && <Button variant="ghost" size="icon" onClick={onImportWorkflow} className="h-6 w-6" title="Import"><Upload className="w-4 h-4" /></Button>}
+        {onNewWorkflow && <Button variant="ghost" size="icon" onClick={onNewWorkflow} className="h-6 w-6" title="New"><Plus className="w-4 h-4" /></Button>}
+      </div>
+    </div>
+  );
 
-  const handleCopyLink = (workflowId: string) => {
-    if (onCopyLink) {
-      onCopyLink(workflowId);
-    } else {
-      // Fallback: copy workflow ID to clipboard
-      navigator.clipboard.writeText(window.location.origin + `/workflows/${workflowId}`);
-      setCopiedWorkflowId(workflowId);
-      setTimeout(() => setCopiedWorkflowId(null), 2000);
-    }
-  };
-
-  const handleDuplicate = (workflowId: string) => {
-    if (onDuplicateWorkflow) {
-      onDuplicateWorkflow(workflowId);
-    }
-  };
-
-  const handleDelete = (e: React.MouseEvent, workflowId: string) => {
-    e.stopPropagation();
-    if (onDeleteWorkflow) {
-      onDeleteWorkflow(workflowId);
-    }
-  };
+  const WorkflowItem = ({ w }: { w: WorkflowListRow }) => (
+    <div key={w.workflow_id} className={cn('px-4 py-2 hover:bg-accent transition-colors cursor-pointer flex items-center justify-between group', selectedWorkflowId === w.workflow_id && 'bg-accent')} onClick={() => editingWorkflowId !== w.workflow_id && onLoadWorkflow?.(w)}>
+      <div className="flex-1 min-w-0 text-left">
+        {editingWorkflowId === w.workflow_id ? (
+          <Input value={editingName} onChange={(e) => setEditingName(e.target.value)} onBlur={() => handleSaveRename(w.workflow_id)} onKeyDown={(e) => { if (e.key === 'Enter') handleSaveRename(w.workflow_id); else if (e.key === 'Escape') resetRename(); }} className="h-7 text-sm" disabled={isRenaming} autoFocus onClick={(e) => e.stopPropagation()} />
+        ) : (
+          <div className="flex items-center gap-2"><p className="text-sm font-medium truncate">{w.name}</p><span className="text-xs text-muted-foreground">{new Date(w.updated_at).toLocaleDateString()}</span></div>
+        )}
+      </div>
+      {editingWorkflowId !== w.workflow_id && (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onExportWorkflow && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); onExportWorkflow(w.workflow_id); }} title="Export"><Download className="w-4 h-4" /></Button>}
+          {onRenameWorkflow && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setEditingWorkflowId(w.workflow_id); setEditingName(w.name); }} title="Rename"><FileEdit className="w-4 h-4" /></Button>}
+          {onDeleteWorkflow && <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteWorkflow(w.workflow_id); }} title="Delete"><Trash2 className="w-4 h-4" /></Button>}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="absolute top-4 left-4 z-50 w-[280px] bg-card border border-border rounded-lg shadow-lg backdrop-blur-sm">
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <div className="flex items-center gap-2">
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                title={isExpanded ? 'Collapse workflows' : 'Expand workflows'}
-              >
-                {isExpanded ? (
-                  <ChevronUp className="w-4 h-4" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
-                )}
-              </Button>
-            </CollapsibleTrigger>
-            <h3 className="text-sm font-semibold">Workflows</h3>
-          </div>
-          <div className="flex items-center gap-1">
-            {onImportWorkflow && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onImportWorkflow}
-                className="h-6 w-6"
-                title="Import workflow"
-              >
-                <Upload className="w-4 h-4" />
-              </Button>
-            )}
-            {onNewWorkflow && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onNewWorkflow}
-                className="h-6 w-6"
-                title="New workflow"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Workflows List */}
+        <PanelHeader />
         <CollapsibleContent>
           <div className="max-h-[400px] overflow-y-auto">
-        {isLoadingWorkflows ? (
-          <div className="text-sm text-muted-foreground text-left py-4 px-4">
-            Loading workflows...
-          </div>
-        ) : workflows.length === 0 ? (
-          <div className="text-sm text-muted-foreground text-left py-4 px-4">
-            No saved workflows yet
-          </div>
-        ) : (
-          <div className="py-2">
-            {workflows.map((workflow) => (
-              <div
-                key={workflow.workflow_id}
-                className={cn(
-                  'px-4 py-2 hover:bg-accent transition-colors cursor-pointer flex items-center justify-between group',
-                  selectedWorkflowId === workflow.workflow_id && 'bg-accent',
-                )}
-                onClick={() => {
-                  if (editingWorkflowId !== workflow.workflow_id && onLoadWorkflow) {
-                    onLoadWorkflow(workflow);
-                  }
-                }}
-              >
-                <div className="flex-1 min-w-0 text-left">
-                  {editingWorkflowId === workflow.workflow_id ? (
-                    <Input
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onBlur={() => handleSaveRename(workflow.workflow_id)}
-                      onKeyDown={(e) => handleRenameKeyDown(e, workflow.workflow_id)}
-                      className="h-7 text-sm"
-                      disabled={isRenaming}
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate">{workflow.name}</p>
-                      {/* <span className="text-xs text-muted-foreground">
-                        Rev {workflow.draft_revision ?? '—'}
-                      </span> */}
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(workflow.updated_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {editingWorkflowId !== workflow.workflow_id && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {onExportWorkflow && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onExportWorkflow(workflow.workflow_id);
-                        }}
-                        title="Export workflow"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {onRenameWorkflow && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => handleStartRename(e, workflow)}
-                        title="Rename workflow"
-                      >
-                        <FileEdit className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {onDeleteWorkflow && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-destructive hover:text-destructive"
-                        onClick={(e) => handleDelete(e, workflow.workflow_id)}
-                        title="Delete workflow"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+            {isLoadingWorkflows ? <div className="text-sm text-muted-foreground text-left py-4 px-4">Loading...</div> : !workflows.length ? <div className="text-sm text-muted-foreground text-left py-4 px-4">No saved workflows yet</div> : <div className="py-2">{workflows.map(w => <WorkflowItem key={w.workflow_id} w={w} />)}</div>}
           </div>
         </CollapsibleContent>
       </Collapsible>

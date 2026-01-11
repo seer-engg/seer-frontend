@@ -53,6 +53,91 @@ export interface TriggersStore {
   setDraftTriggers: (drafts: TriggerDraftMeta[]) => void;
 }
 
+const loadTriggerCatalogImpl = async (
+  set: (partial: Partial<TriggersStore>) => void,
+  get: () => TriggersStore,
+) => {
+  if (get().triggerCatalogLoading) {
+    return get().triggerCatalog;
+  }
+  set({ triggerCatalogLoading: true, triggerCatalogError: null });
+  try {
+    const triggers = await listTriggers();
+    set({
+      triggerCatalog: triggers,
+      triggerCatalogLoading: false,
+      triggerCatalogLoaded: true,
+    });
+    return triggers;
+  } catch (error) {
+    set({
+      triggerCatalogLoading: false,
+      triggerCatalogError: error instanceof Error ? error.message : 'Failed to load triggers',
+    });
+    throw error;
+  }
+};
+
+const loadTriggerSubscriptionsImpl = async (
+  set: (partial: Partial<TriggersStore>) => void,
+  workflowId: string,
+) => {
+  if (!workflowId) return [];
+  set((state) => ({
+    triggerSubscriptionsLoading: { ...state.triggerSubscriptionsLoading, [workflowId]: true },
+    triggerSubscriptionsError: { ...state.triggerSubscriptionsError, [workflowId]: null },
+  }));
+  try {
+    const subscriptions = await listTriggerSubscriptions(workflowId);
+    set((state) => ({
+      triggerSubscriptions: { ...state.triggerSubscriptions, [workflowId]: subscriptions },
+      triggerSubscriptionsLoading: { ...state.triggerSubscriptionsLoading, [workflowId]: false },
+    }));
+    return subscriptions;
+  } catch (error) {
+    set((state) => ({
+      triggerSubscriptionsLoading: { ...state.triggerSubscriptionsLoading, [workflowId]: false },
+      triggerSubscriptionsError: {
+        ...state.triggerSubscriptionsError,
+        [workflowId]: error instanceof Error ? error.message : 'Failed to load trigger subscriptions',
+      },
+    }));
+    throw error;
+  }
+};
+
+const deleteTriggerSubscriptionImpl = async (
+  set: (partial: Partial<TriggersStore>) => void,
+  subscriptionId: number,
+) => {
+  await apiDeleteTriggerSubscription(subscriptionId);
+  set((state) => {
+    const next: Record<string, TriggerSubscriptionResponse[]> = {};
+    for (const [workflowId, subscriptions] of Object.entries(state.triggerSubscriptions)) {
+      next[workflowId] = subscriptions.filter((subscription) => subscription.subscription_id !== subscriptionId);
+    }
+    return { triggerSubscriptions: next };
+  });
+};
+
+const saveDraftTriggerImpl = async (
+  get: () => TriggersStore,
+  workflowId: string,
+  draftId: string,
+  config: unknown,
+) => {
+  const state = get();
+  const drafts = state.draftTriggers.get(workflowId) || [];
+  const draft = drafts.find((d) => d.id === draftId);
+  if (!draft) throw new Error(`Draft trigger ${draftId} not found`);
+  await state.createTriggerSubscription({
+    workflow_id: workflowId,
+    trigger_key: draft.triggerKey,
+    config: config as Record<string, unknown>,
+  });
+  state.discardDraftTrigger(workflowId, draftId);
+};
+
 const createTriggersStore: StateCreator<TriggersStore> = (set, get) => ({
   triggerCatalog: [],
   triggerCatalogLoading: false,
@@ -61,69 +146,12 @@ const createTriggersStore: StateCreator<TriggersStore> = (set, get) => ({
   triggerSubscriptions: {},
   triggerSubscriptionsLoading: {},
   triggerSubscriptionsError: {},
-  // Phase 1: Initialize as Map
   draftTriggers: new Map(),
   async loadTriggerCatalog() {
-    if (get().triggerCatalogLoading) {
-      return get().triggerCatalog;
-    }
-    set({ triggerCatalogLoading: true, triggerCatalogError: null });
-    try {
-      const triggers = await listTriggers();
-      set({
-        triggerCatalog: triggers,
-        triggerCatalogLoading: false,
-        triggerCatalogLoaded: true,
-      });
-      return triggers;
-    } catch (error) {
-      set({
-        triggerCatalogLoading: false,
-        triggerCatalogError: error instanceof Error ? error.message : 'Failed to load triggers',
-      });
-      throw error;
-    }
+    return loadTriggerCatalogImpl(set, get);
   },
   async loadTriggerSubscriptions(workflowId) {
-    if (!workflowId) {
-      return [];
-    }
-    set((state) => ({
-      triggerSubscriptionsLoading: {
-        ...state.triggerSubscriptionsLoading,
-        [workflowId]: true,
-      },
-      triggerSubscriptionsError: {
-        ...state.triggerSubscriptionsError,
-        [workflowId]: null,
-      },
-    }));
-    try {
-      const subscriptions = await listTriggerSubscriptions(workflowId);
-      set((state) => ({
-        triggerSubscriptions: {
-          ...state.triggerSubscriptions,
-          [workflowId]: subscriptions,
-        },
-        triggerSubscriptionsLoading: {
-          ...state.triggerSubscriptionsLoading,
-          [workflowId]: false,
-        },
-      }));
-      return subscriptions;
-    } catch (error) {
-      set((state) => ({
-        triggerSubscriptionsLoading: {
-          ...state.triggerSubscriptionsLoading,
-          [workflowId]: false,
-        },
-        triggerSubscriptionsError: {
-          ...state.triggerSubscriptionsError,
-          [workflowId]: error instanceof Error ? error.message : 'Failed to load trigger subscriptions',
-        },
-      }));
-      throw error;
-    }
+    return loadTriggerSubscriptionsImpl(set, workflowId);
   },
   async createTriggerSubscription(payload) {
     const created = await apiCreateTriggerSubscription(payload);
@@ -148,61 +176,31 @@ const createTriggersStore: StateCreator<TriggersStore> = (set, get) => ({
     return updated;
   },
   async deleteTriggerSubscription(subscriptionId) {
-    await apiDeleteTriggerSubscription(subscriptionId);
-    set((state) => {
-      const next: Record<string, TriggerSubscriptionResponse[]> = {};
-      for (const [workflowId, subscriptions] of Object.entries(state.triggerSubscriptions)) {
-        next[workflowId] = subscriptions.filter((subscription) => subscription.subscription_id !== subscriptionId);
-      }
-      return { triggerSubscriptions: next };
-    });
+    return deleteTriggerSubscriptionImpl(set, subscriptionId);
   },
   async testTriggerSubscription({ subscriptionId, payload }) {
     return apiTestTriggerSubscription(subscriptionId, payload);
   },
-  // Phase 1: New draft trigger management implementations
   addDraftTrigger(workflowId, triggerKey, initialBindings = {}) {
     const draft: TriggerDraftMeta = {
       id: `draft-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       triggerKey,
       initialBindings,
     };
-
     const state = get();
     const drafts = state.draftTriggers.get(workflowId) || [];
     const newDrafts = new Map(state.draftTriggers);
     newDrafts.set(workflowId, [...drafts, draft]);
-
     set({ draftTriggers: newDrafts });
   },
   async saveDraftTrigger(workflowId, draftId, config) {
-    const state = get();
-    const drafts = state.draftTriggers.get(workflowId) || [];
-    const draft = drafts.find((d) => d.id === draftId);
-
-    if (!draft) {
-      throw new Error(`Draft trigger ${draftId} not found`);
-    }
-
-    // Create actual trigger subscription using the store's create method
-    await state.createTriggerSubscription({
-      workflow_id: workflowId,
-      trigger_key: draft.triggerKey,
-      config: config as Record<string, unknown>,
-    });
-
-    // Remove from drafts after successful creation
-    state.discardDraftTrigger(workflowId, draftId);
+    return saveDraftTriggerImpl(get, workflowId, draftId, config);
   },
   discardDraftTrigger(workflowId, draftId) {
     const state = get();
     const drafts = state.draftTriggers.get(workflowId) || [];
     const newDrafts = new Map(state.draftTriggers);
-    newDrafts.set(
-      workflowId,
-      drafts.filter((d) => d.id !== draftId),
-    );
-
+    newDrafts.set(workflowId, drafts.filter((d) => d.id !== draftId));
     set({ draftTriggers: newDrafts });
   },
   clearDraftTriggers(workflowId) {
@@ -211,10 +209,7 @@ const createTriggersStore: StateCreator<TriggersStore> = (set, get) => ({
     newDrafts.delete(workflowId);
     set({ draftTriggers: newDrafts });
   },
-  // Legacy setter (kept for backward compatibility during migration)
   setDraftTriggers(drafts) {
-    // Convert array to Map for backward compatibility
-    // Assume all drafts belong to the same workflow (current behavior)
     console.warn('setDraftTriggers is deprecated. Use addDraftTrigger/discardDraftTrigger instead.');
     set({ draftTriggers: new Map() });
   },

@@ -1,109 +1,50 @@
 import { useCallback, useMemo, useEffect } from 'react';
-import { useSearchParams, useParams } from 'react-router-dom';
-import { Node, ReactFlowProvider } from '@xyflow/react';
-import { WorkflowCanvas } from '@/components/workflows/canvas/WorkflowCanvas';
-import { WorkflowNodeConfigDialog } from '@/components/workflows/dialogs/WorkflowNodeConfigDialog';
+import { Node } from '@xyflow/react';
 import { WorkflowNodeData, WorkflowEdge } from '@/components/workflows/types';
 import type { TriggerSubscriptionUpdateRequest } from '@/types/triggers';
 import type { InputDef } from '@/types/workflow-spec';
 import { BuildAndChatPanel } from '@/components/workflows/panels/BuildAndChatPanel';
-import { FloatingWorkflowsPanel } from '@/components/workflows/panels/FloatingWorkflowsPanel';
-import { WorkflowImportDialog } from '@/components/workflows/dialogs/WorkflowImportDialog';
-import { WorkflowLifecycleBar } from '@/components/workflows/lifecycle/WorkflowLifecycleBar';
-import { useWorkflowStore } from '@/stores/workflowStore';
+import { WorkflowCanvasSection } from '@/components/workflows/layout/WorkflowCanvasSection';
+import { WorkflowDialogs } from '@/components/workflows/layout/WorkflowDialogs';
 import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowTriggers } from '@/hooks/useWorkflowTriggers';
 import { useDebouncedAutosave } from '@/hooks/useDebouncedAutosave';
-import { useBackendHealth } from '@/lib/backend-health';
-import { useToolsStore } from '@/stores/toolsStore';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { toast } from '@/components/ui/sonner';
-import { backendApiClient } from '@/lib/api-client';
-import { BUILT_IN_BLOCKS, getBlockIconForType } from '@/components/workflows/constants';
 import { useKeyboardShortcut } from '@/hooks/utility/useKeyboardShortcuts';
-import { KeymapDialog } from '@/components/general/KeymapDialog';
-import { GMAIL_TOOL_FALLBACK_NAMES } from '@/components/workflows/triggers/constants';
-import { useCanvasStore, useUIStore } from '@/stores';
 import { normalizeEdges, normalizeNodes } from '@/lib/workflow-normalization';
 import { useTriggerOptions } from '@/hooks/useTriggerOptions';
 import { useWorkflowSync } from '@/hooks/useWorkflowSync';
-import { WorkflowInputDialog } from '../components/workflows/dialogs/WorkflowInputDialog';
 import { useWorkflowActions } from '@/hooks/useWorkflowActions';
 import { useNodeActions } from '@/hooks/useNodeActions';
 import { useTriggerHandlers } from '@/hooks/useTriggerHandlers';
+import { useWorkflowInputs } from '@/hooks/useWorkflowInputs';
+import { useGmailIntegration } from '@/hooks/useGmailIntegration';
+import { useBackendConnectionEffects } from '@/hooks/useBackendConnectionEffects';
+import { useWorkflowPageState } from '@/hooks/useWorkflowPageState';
+import { useWorkflowLifecycleEffects } from '@/hooks/useWorkflowLifecycleEffects';
+import { useWorkflowBlocks } from '@/hooks/useWorkflowBlocks';
 
-const parseProviderConnectionId = (raw?: string | null): number | null => {
-  if (!raw) {
-    return null;
-  }
-  const segments = raw.split(':');
-  const numeric = Number(segments[segments.length - 1]);
-  return Number.isNaN(numeric) ? null : numeric;
-};
+interface WorkflowHooksParams {
+  selectedWorkflowId: string;
+  functionBlockSchemas: Record<string, unknown>;
+  functionBlocksMap: Record<string, unknown>;
+  setNodes: (nodes: Node<WorkflowNodeData>[]) => void;
+  setEdges: (edges: WorkflowEdge[]) => void;
+  setProposalPreview: (preview: unknown) => void;
+}
 
-export default function Workflows() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { workflowId: urlWorkflowId } = useParams<{ workflowId?: string }>();
-  const refreshIntegrationTools = useToolsStore((state) => state.refreshIntegrationTools);
-  const integrationTools = useToolsStore((state) => state.tools);
-  const isIntegrationConnected = useToolsStore((state) => state.isIntegrationConnected);
-  const getConnectionId = useToolsStore((state) => state.getConnectionId);
-  const nodes = useCanvasStore((state) => state.nodes);
-  const edges = useCanvasStore((state) => state.edges);
-  const editingNodeId = useCanvasStore((state) => state.editingNodeId);
-  const setNodes = useCanvasStore((state) => state.setNodes);
-  const setEdges = useCanvasStore((state) => state.setEdges);
-  const setSelectedNodeId = useCanvasStore((state) => state.setSelectedNodeId);
-  const setEditingNodeId = useCanvasStore((state) => state.setEditingNodeId);
-  const autosaveStatus = useCanvasStore((state) => state.autosaveStatus);
-  const isConfigDialogOpen = useUIStore((state) => state.isConfigDialogOpen);
-  const isImportDialogOpen = useUIStore((state) => state.isImportDialogOpen);
-  const isKeymapOpen = useUIStore((state) => state.isKeymapOpen);
-  const isInputDialogOpen = useUIStore((state) => state.isInputDialogOpen);
-  const buildChatPanelCollapsed = useUIStore((state) => state.buildChatPanelCollapsed);
-  const proposalPreview = useUIStore((state) => state.proposalPreview);
-  const setConfigDialogOpen = useUIStore((state) => state.setConfigDialogOpen);
-  const setImportDialogOpen = useUIStore((state) => state.setImportDialogOpen);
-  const setKeymapOpen = useUIStore((state) => state.setKeymapOpen);
-  const setInputDialogOpen = useUIStore((state) => state.setInputDialogOpen);
-  const setProposalPreview = useUIStore((state) => state.setProposalPreview);
-  const setWorkflowName = useWorkflowStore((state) => state.setWorkflowName);
-  const selectedWorkflowId = useWorkflowStore((state) => state.selectedWorkflowId);
-  const setSelectedWorkflowId = useWorkflowStore((state) => state.setSelectedWorkflowId);
-  const inputData = useWorkflowStore((state) => state.workflowInputData);
-  const setInputData = useWorkflowStore((state) => state.setWorkflowInputData);
-  const isLoadingWorkflow = useWorkflowStore((state) => state.isLoadingWorkflow);
-  const setIsLoadingWorkflow = useWorkflowStore((state) => state.setIsLoadingWorkflow);
-  const loadedWorkflow = useWorkflowStore((state) => state.currentWorkflow);
-  const editingNode = useMemo(
-    () => nodes.find((node) => node.id === editingNodeId) ?? null,
-    [nodes, editingNodeId],
-  );
-
-  // Register global keyboard shortcut for keymap
-  useKeyboardShortcut({
-    key: '/',
-    modifiers: { ctrl: true, meta: true },
-    handler: () => setKeymapOpen(true),
-    category: 'Help',
-    description: 'Show keyboard shortcuts',
-    scope: 'global',
-  });
-
-  const workflows = useWorkflowStore((state) => state.workflows);
-  const isLoadingWorkflows = useWorkflowStore((state) => state.isLoading);
-  const getWorkflow = useWorkflowStore((state) => state.getWorkflow);
-  const isExecuting = useWorkflowStore((state) => state.isExecuting);
-  const isPublishing = useWorkflowStore((state) => state.isPublishing);
-  const isRestoringVersion = useWorkflowStore((state) => state.isRestoringVersion);
-
+function useWorkflowHooks({
+  selectedWorkflowId,
+  functionBlockSchemas,
+  functionBlocksMap,
+  setNodes,
+  setEdges,
+  setProposalPreview,
+}: WorkflowHooksParams) {
   const {
     versions: workflowVersions,
     isLoading: isLoadingWorkflowVersions,
-    invalidate: invalidateWorkflowVersions,
   } = useWorkflowVersions(selectedWorkflowId);
-  const functionBlockSchemas = useToolsStore((state) => state.functionBlocks);
-  const functionBlocksMap = useToolsStore((state) => state.functionBlocksByType);
   const {
     triggers: triggerCatalog,
     subscriptions: triggerSubscriptions,
@@ -115,193 +56,111 @@ export default function Workflows() {
     toggleSubscription,
     deleteSubscription,
   } = useWorkflowTriggers(selectedWorkflowId);
-
-  const availableBlocks = useMemo(() => {
-    // Always include built-in blocks (LLM, If/Else, For Loop)
-    const builtInBlocksMap = new Map(BUILT_IN_BLOCKS.map(block => [block.type, block]));
-    
-    // Merge with function blocks from backend, but don't override built-in blocks
-    const mergedBlocks = [...BUILT_IN_BLOCKS];
-    
-    if (functionBlockSchemas.length > 0) {
-      functionBlockSchemas.forEach((schema) => {
-        // Only add if it's not already a built-in block
-        if (!builtInBlocksMap.has(schema.type)) {
-          mergedBlocks.push({
-            type: schema.type,
-            label: schema.label,
-            description: schema.description,
-            icon: getBlockIconForType(schema.type),
-          });
-        }
-      });
-    }
-    
-    return mergedBlocks;
-  }, [functionBlockSchemas]);
-
-  const workflowInputsDef = useMemo(() => loadedWorkflow?.spec?.inputs ?? {}, [loadedWorkflow?.spec?.inputs]);
-  const handleWorkflowInputsChange = useCallback(
-    async (nextInputs: Record<string, InputDef>) => {
-      if (!selectedWorkflowId || !loadedWorkflow) {
-        toast.error('Save the workflow before editing inputs');
-        return;
-      }
-      try {
-        await backendApiClient.request(`/api/v1/workflows/${selectedWorkflowId}/draft`, {
-          method: 'PATCH',
-          body: {
-            base_revision: loadedWorkflow.draft_revision,
-            spec: {
-              ...loadedWorkflow.spec,
-              inputs: nextInputs,
-            },
-          },
-        });
-        const refreshed = await getWorkflow(selectedWorkflowId);
-        setNodes(normalizeNodes(refreshed.graph.nodes, functionBlocksMap));
-        setEdges(normalizeEdges(refreshed.graph.edges));
-      } catch (error) {
-        console.error('Failed to update workflow inputs', error);
-        toast.error('Unable to update workflow inputs');
-        throw error;
-      }
-    },
-    [selectedWorkflowId, loadedWorkflow, getWorkflow, functionBlocksMap, setNodes, setEdges],
-  );
-  const gmailToolNames = useMemo(() => {
-    const normalized = Array.isArray(integrationTools) ? integrationTools : [];
-    const names = normalized
-      .filter((tool) => {
-        const integration = tool.integration_type?.toLowerCase();
-        if (integration) {
-          return integration === 'gmail';
-        }
-        return tool.name.toLowerCase().includes('gmail');
-      })
-      .map((tool) => tool.name);
-    return names.length > 0 ? names : GMAIL_TOOL_FALLBACK_NAMES;
-  }, [integrationTools]);
-  const gmailConnectionIdRaw = getConnectionId('gmail');
-  const gmailConnectionId = useMemo(
-    () => parseProviderConnectionId(gmailConnectionIdRaw),
-    [gmailConnectionIdRaw],
-  );
-  const gmailIntegrationReady = isIntegrationConnected('gmail') && typeof gmailConnectionId === 'number';
-
-  const workflowActions = useWorkflowActions();
-  const {
-    handleSave,
-    handleExecute,
-    handleExecuteWithInput,
-    handlePublish,
-    handleRestoreVersion,
-    handleNewWorkflow,
-    handleLoadWorkflow,
-    handleDeleteWorkflow,
-    handleRenameWorkflow,
-    handleExportWorkflow,
-    handleImportWorkflow,
-    autosaveCallback,
-    lifecycleStatus,
-    lastRunVersionId,
-    setLastRunVersionId,
-    canRun,
-    canPublish,
-    runDisabledReason,
-    publishDisabledReason,
-    resetSavedDataRef,
-  } = workflowActions;
-
-  const { triggerSave, resetSavedData } = useDebouncedAutosave({
-    data: { nodes, edges },
-    onSave: autosaveCallback,
-    options: {
-      delay: 1000,
-      enabled: !!selectedWorkflowId && !isLoadingWorkflow,
-    },
+  const { availableBlocks, handleWorkflowGraphSync } = useWorkflowBlocks({
+    functionBlockSchemas,
+    functionBlocksMap,
+    setNodes,
+    setEdges,
+    setProposalPreview,
+    setLastRunVersionId: () => {},
   });
 
-  const triggerHandlersHook = useTriggerHandlers({
-    gmailIntegrationReady,
-    gmailConnectionId,
-    gmailToolNames,
+  return {
+    workflowVersions,
+    isLoadingWorkflowVersions,
+    triggerCatalog,
+    triggerSubscriptions,
+    isLoadingTriggers,
+    isLoadingSubscriptions,
+    loadTriggerCatalogIfNeeded,
     createSubscription,
-  });
-  const { draftTriggers, isConnectingGmail, handleAddTriggerDraft, handleSaveTriggerDraft, handleDiscardTriggerDraft, handleConnectGmail } = triggerHandlersHook;
+    updateSubscription,
+    toggleSubscription,
+    deleteSubscription,
+    availableBlocks,
+    handleWorkflowGraphSync,
+  };
+}
 
-  const nodeActions = useNodeActions({
-    autosaveCallback,
-    triggerSave,
-    gmailIntegrationReady,
+function useWorkflowInitialization() {
+  const { workflowInputsDef, handleWorkflowInputsChange, inputFields } = useWorkflowInputs();
+  const { gmailToolNames, gmailConnectionId, gmailIntegrationReady } = useGmailIntegration();
+  useBackendConnectionEffects();
+
+  return {
+    workflowInputsDef,
+    handleWorkflowInputsChange,
+    inputFields,
+    gmailToolNames,
     gmailConnectionId,
-    handleConnectGmail,
-    isConnectingGmail,
-  });
-  const {
-    handleBlockSelect,
-    handleNodeDrop,
-    handleCanvasNodeDoubleClick,
-    handleConfigDialogOpenChange,
-    handleNodeConfigUpdate,
-    skipNextAutosaveRef,
-  } = nodeActions;
+    gmailIntegrationReady,
+  };
+}
 
-  // Input fields for workflow execution
-  const inputFields = useMemo(() => {
-    const resolveHtmlInputType = (inputType: InputDef['type']): string => {
-      if (inputType === 'number' || inputType === 'integer') {
-        return 'number';
-      }
-      return 'text';
-    };
-    return Object.entries(workflowInputsDef).map(([name, def]) => ({
-      id: name,
-      label: def.description || name,
-      type: resolveHtmlInputType(def.type),
-      required: def.required !== false,
-      variableName: name,
-    }));
-  }, [workflowInputsDef]);
+function CanvasSection({ canvasProps }: { canvasProps: Record<string, unknown> }) {
+  return (
+    <ResizablePanel defaultSize={75} minSize={50} className="flex flex-col">
+      <WorkflowCanvasSection {...canvasProps} />
+    </ResizablePanel>
+  );
+}
 
-  useEffect(() => {
-    resetSavedDataRef.current = resetSavedData;
-  }, [resetSavedData]);
+function ChatPanel({ chatProps }: { chatProps: Record<string, unknown> & { buildChatPanelCollapsed: boolean } }) {
+  const { buildChatPanelCollapsed, ...rest } = chatProps;
+  return (
+    <ResizablePanel
+      key={buildChatPanelCollapsed ? 'collapsed' : 'expanded'}
+      defaultSize={buildChatPanelCollapsed ? 3 : 25}
+      minSize={3}
+      maxSize={50}
+      collapsible
+      className="border-l"
+    >
+      <BuildAndChatPanel {...rest} />
+    </ResizablePanel>
+  );
+}
 
-  // Trigger autosave when nodes or edges change
-  useEffect(() => {
-    if (!selectedWorkflowId || isLoadingWorkflow) {
-      return;
-    }
-    if (skipNextAutosaveRef.current) {
-      skipNextAutosaveRef.current = false;
-      return;
-    }
-    triggerSave();
-  }, [nodes, edges, selectedWorkflowId, triggerSave, isLoadingWorkflow]);
+interface PreviewGraphData {
+  nodes: Node<WorkflowNodeData>[];
+  edges: WorkflowEdge[];
+}
 
-  // Handle autosave errors
-  useEffect(() => {
-    if (autosaveStatus === 'error') {
-      toast.error('Autosave failed', {
-        description: 'Your changes may not have been saved. Please save manually.',
-        duration: 5000,
-      });
-    }
-  }, [autosaveStatus]);
+interface ProposalPreviewData {
+  graph?: {
+    nodes?: unknown[];
+    edges?: unknown[];
+  };
+}
 
-  const previewGraph = useMemo(() => {
-    if (!proposalPreview) {
-      return null;
-    }
-    const previewNodes = normalizeNodes(proposalPreview.graph.nodes ?? [], functionBlocksMap);
-    const previewEdges = normalizeEdges(proposalPreview.graph.edges ?? []);
+function usePreviewGraph(proposalPreview: unknown, functionBlocksMap: Record<string, unknown>): PreviewGraphData | null {
+  return useMemo(() => {
+    if (!proposalPreview) return null;
+    const preview = proposalPreview as ProposalPreviewData;
+    const previewNodes = normalizeNodes(preview.graph?.nodes ?? [], functionBlocksMap);
+    const previewEdges = normalizeEdges(preview.graph?.edges ?? []);
     return { nodes: previewNodes, edges: previewEdges };
   }, [proposalPreview, functionBlocksMap]);
+}
 
-  const isPreviewActive = Boolean(previewGraph);
-  
-  const triggerHandlers = useMemo(
+interface TriggerHandlersConfigParams {
+  updateSubscription: (id: number, payload: TriggerSubscriptionUpdateRequest) => Promise<unknown>;
+  toggleSubscription: (config: { subscriptionId: number; enabled: boolean }) => Promise<unknown>;
+  deleteSubscription: (id: number) => Promise<unknown>;
+  handleSaveTriggerDraft: (draft: unknown) => void;
+  handleDiscardTriggerDraft: () => void;
+  handleWorkflowInputsChange: (inputs: Record<string, InputDef>) => void;
+}
+
+function useTriggerHandlersConfig({
+  updateSubscription,
+  toggleSubscription,
+  deleteSubscription,
+  handleSaveTriggerDraft,
+  handleDiscardTriggerDraft,
+  handleWorkflowInputsChange,
+}: TriggerHandlersConfigParams) {
+  return useMemo(
     () => ({
       update: (subscriptionId: number, payload: TriggerSubscriptionUpdateRequest) =>
         updateSubscription(subscriptionId, payload).then(() => undefined),
@@ -312,257 +171,168 @@ export default function Workflows() {
       discardDraft: handleDiscardTriggerDraft,
       updateWorkflowInputs: (inputs: Record<string, InputDef>) => handleWorkflowInputsChange(inputs),
     }),
-    [
-      updateSubscription,
-      toggleSubscription,
-      deleteSubscription,
-      handleSaveTriggerDraft,
-      handleDiscardTriggerDraft,
-      handleWorkflowInputsChange,
-    ],
+    [updateSubscription, toggleSubscription, deleteSubscription, handleSaveTriggerDraft, handleDiscardTriggerDraft, handleWorkflowInputsChange],
   );
+}
 
-  // Populate handlers for trigger nodes that don't have them
+function buildCanvasProps(params: {
+  selectedWorkflowId: string; previewGraph: PreviewGraphData | null; proposalPreview: unknown;
+  lifecycleStatus: unknown; workflows: unknown[]; isLoadingWorkflows: boolean;
+  workflowVersions: unknown[]; isLoadingWorkflowVersions: boolean; isExecuting: boolean;
+  isPublishing: boolean; isRestoringVersion: boolean; canRun: boolean; canPublish: boolean;
+  publishDisabledReason: string; runDisabledReason: string; isImportDialogOpen: boolean;
+  handleCanvasNodeDoubleClick: (id: string) => void; handleNodeDrop: (e: unknown) => void;
+  handleExecute: (fields: unknown) => void; handlePublish: () => void; handleRestoreVersion: (versionId: string) => void;
+  handleLoadWorkflow: (id: string) => void; handleDeleteWorkflow: (id: string) => void;
+  handleRenameWorkflow: (id: string, name: string) => void; handleNewWorkflow: () => void;
+  handleExportWorkflow: (id: string) => void; setImportDialogOpen: (open: boolean) => void;
+  handleImportWorkflow: (file: File) => void; inputFields: unknown;
+}) {
+  const {
+    selectedWorkflowId, previewGraph, proposalPreview, lifecycleStatus, workflows, isLoadingWorkflows,
+    workflowVersions, isLoadingWorkflowVersions, isExecuting, isPublishing, isRestoringVersion,
+    canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
+    handleCanvasNodeDoubleClick, handleNodeDrop, handleExecute, handlePublish, handleRestoreVersion,
+    handleLoadWorkflow, handleDeleteWorkflow, handleRenameWorkflow, handleNewWorkflow, handleExportWorkflow,
+    setImportDialogOpen, handleImportWorkflow, inputFields,
+  } = params;
+  return {
+    selectedWorkflowId, previewGraph, proposalPreview, lifecycleStatus, workflows, isLoadingWorkflows,
+    workflowVersions, isLoadingWorkflowVersions, isExecuting, isPublishing, isRestoringVersion,
+    canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
+    onNodeDoubleClick: handleCanvasNodeDoubleClick, onNodeDrop: handleNodeDrop,
+    onRunClick: () => handleExecute(inputFields), onPublishClick: handlePublish,
+    onVersionRestore: handleRestoreVersion, onLoadWorkflow: handleLoadWorkflow,
+    onDeleteWorkflow: handleDeleteWorkflow, onRenameWorkflow: handleRenameWorkflow,
+    onNewWorkflow: handleNewWorkflow, onExportWorkflow: handleExportWorkflow,
+    onImportDialogOpen: () => setImportDialogOpen(true), onImportWorkflow: handleImportWorkflow,
+    setImportDialogOpen,
+  };
+}
+
+function buildChatProps(params: {
+  buildChatPanelCollapsed: boolean; handleBlockSelect: (id: string) => void; selectedWorkflowId: string;
+  handleWorkflowGraphSync: (graph: unknown) => void; availableBlocks: unknown[]; triggerOptions: unknown;
+  isLoadingTriggers: boolean;
+}) {
+  return {
+    buildChatPanelCollapsed: params.buildChatPanelCollapsed,
+    onBlockSelect: params.handleBlockSelect, workflowId: params.selectedWorkflowId,
+    onWorkflowGraphSync: params.handleWorkflowGraphSync, functionBlocks: params.availableBlocks,
+    triggerOptions: params.triggerOptions, isLoadingTriggers: params.isLoadingTriggers, triggerInfoMessage: undefined,
+  };
+}
+
+export default function Workflows() {
+  const state = useWorkflowPageState();
+  const {
+    urlWorkflowId, nodes, edges, editingNodeId, setNodes, setEdges, setSelectedNodeId,
+    setEditingNodeId, autosaveStatus, isConfigDialogOpen, isImportDialogOpen, isKeymapOpen,
+    isInputDialogOpen, buildChatPanelCollapsed, proposalPreview, setConfigDialogOpen,
+    setImportDialogOpen, setKeymapOpen, setInputDialogOpen, setProposalPreview, setWorkflowName,
+    selectedWorkflowId, setSelectedWorkflowId, inputData, setInputData, isLoadingWorkflow,
+    setIsLoadingWorkflow, loadedWorkflow, workflows, isLoadingWorkflows, getWorkflow,
+    isExecuting, isPublishing, isRestoringVersion, functionBlockSchemas, functionBlocksMap, editingNode,
+  } = state;
+
+  useKeyboardShortcut({
+    key: '/', modifiers: { ctrl: true, meta: true }, handler: () => setKeymapOpen(true),
+    category: 'Help', description: 'Show keyboard shortcuts', scope: 'global',
+  });
+
+  const { workflowInputsDef, handleWorkflowInputsChange, inputFields, gmailToolNames, gmailConnectionId, gmailIntegrationReady } = useWorkflowInitialization();
+
+  const {
+    handleSave, handleExecute, handleExecuteWithInput, handlePublish, handleRestoreVersion,
+    handleNewWorkflow, handleLoadWorkflow, handleDeleteWorkflow, handleRenameWorkflow,
+    handleExportWorkflow, handleImportWorkflow, autosaveCallback, lifecycleStatus,
+    lastRunVersionId, setLastRunVersionId, canRun, canPublish, runDisabledReason,
+    publishDisabledReason, resetSavedDataRef,
+  } = useWorkflowActions();
+
+  const { triggerSave, resetSavedData } = useDebouncedAutosave({
+    data: { nodes, edges },
+    onSave: autosaveCallback,
+    options: { delay: 1000, enabled: !!selectedWorkflowId && !isLoadingWorkflow },
+  });
+
+  const { isConnectingGmail, handleAddTriggerDraft, handleSaveTriggerDraft, handleDiscardTriggerDraft, handleConnectGmail } = useTriggerHandlers({
+    gmailIntegrationReady, gmailConnectionId, gmailToolNames, createSubscription: () => Promise.resolve(),
+  });
+
+  const {
+    handleBlockSelect, handleNodeDrop, handleCanvasNodeDoubleClick, handleConfigDialogOpenChange,
+    handleNodeConfigUpdate, skipNextAutosaveRef,
+  } = useNodeActions({
+    autosaveCallback, triggerSave, gmailIntegrationReady, gmailConnectionId,
+    handleConnectGmail, isConnectingGmail,
+  });
+
   useEffect(() => {
-    const hasUnpopulatedTriggerNodes = nodes.some(
-      node => node.type === 'trigger' && node.data.triggerMeta && (!node.data.triggerMeta.handlers || Object.keys(node.data.triggerMeta.handlers).length === 0)
-    );
-    
-    if (hasUnpopulatedTriggerNodes) {
-      const updatedNodes = nodes.map(node => {
-        if (node.type === 'trigger' && node.data.triggerMeta && (!node.data.triggerMeta.handlers || Object.keys(node.data.triggerMeta.handlers).length === 0)) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              triggerMeta: {
-                ...node.data.triggerMeta,
-                handlers: triggerHandlers
-              }
-            }
-          };
-        }
-        return node;
-      });
-      setNodes(updatedNodes);
-    }
-  }, [nodes.length, triggerHandlers, setNodes]); // Only react to changes in number of nodes
+    resetSavedDataRef.current = resetSavedData;
+  }, [resetSavedData, resetSavedDataRef]);
 
-  const handleWorkflowGraphSync = useCallback(
-    (graph?: { nodes?: Node<WorkflowNodeData>[]; edges?: WorkflowEdge[] }) => {
-      if (!graph) return;
-      setNodes(normalizeNodes(graph.nodes, functionBlocksMap));
-      setEdges(normalizeEdges(graph.edges));
-      setProposalPreview(null);
-      setLastRunVersionId(null);
-    },
-    [functionBlocksMap, setNodes, setEdges, setProposalPreview, setLastRunVersionId],
-  );
+  const {
+    workflowVersions, isLoadingWorkflowVersions, triggerCatalog, isLoadingTriggers,
+    isLoadingSubscriptions, loadTriggerCatalogIfNeeded, updateSubscription, toggleSubscription,
+    deleteSubscription, availableBlocks, handleWorkflowGraphSync,
+  } = useWorkflowHooks({
+    selectedWorkflowId, functionBlockSchemas, functionBlocksMap, setNodes, setEdges, setProposalPreview,
+  });
+
+  const previewGraph = usePreviewGraph(proposalPreview, functionBlocksMap);
+  const isPreviewActive = Boolean(previewGraph);
+
+  const triggerHandlers = useTriggerHandlersConfig({
+    updateSubscription, toggleSubscription, deleteSubscription, handleSaveTriggerDraft,
+    handleDiscardTriggerDraft, handleWorkflowInputsChange,
+  });
+
+  useWorkflowLifecycleEffects({
+    autosaveStatus, nodes, edges, selectedWorkflowId, isLoadingWorkflow, editingNodeId,
+    isPreviewActive, buildChatPanelCollapsed, triggerSave, setNodes, setSelectedNodeId,
+    setEditingNodeId, setConfigDialogOpen, loadTriggerCatalogIfNeeded, triggerHandlers, skipNextAutosaveRef,
+  });
 
   const triggerOptions = useTriggerOptions({
-    triggerCatalog,
-    gmailIntegrationReady,
-    isConnectingGmail,
-    onAddTriggerDraft: handleAddTriggerDraft,
-    onConnectGmail: handleConnectGmail,
+    triggerCatalog, gmailIntegrationReady, isConnectingGmail,
+    onAddTriggerDraft: handleAddTriggerDraft, onConnectGmail: handleConnectGmail,
   });
 
-  useEffect(() => {
-    if (isPreviewActive) {
-      setSelectedNodeId(null);
-    }
-  }, [isPreviewActive, setSelectedNodeId]);
-
-  // Load trigger catalog when Build panel is expanded
-  useEffect(() => {
-    if (!buildChatPanelCollapsed) {
-      loadTriggerCatalogIfNeeded();
-    }
-  }, [buildChatPanelCollapsed, loadTriggerCatalogIfNeeded]);
-
-  useEffect(() => {
-    if (!editingNodeId) {
-      return;
-    }
-    const exists = nodes.some((node) => node.id === editingNodeId);
-    if (!exists) {
-      setEditingNodeId(null);
-      setConfigDialogOpen(false);
-    }
-  }, [editingNodeId, nodes, setConfigDialogOpen, setEditingNodeId]);
-
-  // Workflow URL sync
   useWorkflowSync({
-    urlWorkflowId,
-    loadedWorkflow,
-    functionBlocksMap,
-    getWorkflow,
-    setSelectedWorkflowId,
-    setWorkflowName,
-    setNodes,
-    setEdges,
-    setProposalPreview,
-    setLastRunVersionId,
-    setIsLoadingWorkflow,
+    urlWorkflowId, loadedWorkflow, functionBlocksMap, getWorkflow, setSelectedWorkflowId,
+    setWorkflowName, setNodes, setEdges, setProposalPreview, setLastRunVersionId, setIsLoadingWorkflow,
   });
 
-  // Check backend health
-  const { isHealthy } = useBackendHealth(); // check backend health
+  const canvasProps = buildCanvasProps({
+    selectedWorkflowId, previewGraph, proposalPreview, lifecycleStatus, workflows, isLoadingWorkflows,
+    workflowVersions, isLoadingWorkflowVersions, isExecuting, isPublishing, isRestoringVersion,
+    canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
+    handleCanvasNodeDoubleClick, handleNodeDrop, handleExecute, handlePublish, handleRestoreVersion,
+    handleLoadWorkflow, handleDeleteWorkflow, handleRenameWorkflow, handleNewWorkflow, handleExportWorkflow,
+    setImportDialogOpen, handleImportWorkflow, inputFields,
+  });
 
-  // Show toast notifications for backend status changes
-  useEffect(() => {
-    if (isHealthy === true) {
-      toast.success('Backend Connected', {
-        description: 'Successfully connected to backend server',
-        duration: 3000,
-      });
-    } else if (isHealthy === false) {
-      toast.error('Backend Disconnected', {
-        description: 'Unable to connect to backend server',
-        duration: 5000,
-      });
-    }
-  }, [isHealthy]);
-
-  // Handle OAuth connection redirect - refresh integration status when connected
-  useEffect(() => {
-    const connectedParam = searchParams.get('connected');
-    if (connectedParam) {
-      // Refresh integration tools status to reflect new connection
-      refreshIntegrationTools();
-      
-      // Show success toast
-      toast.success('Integration Connected', {
-        description: `Successfully connected to ${connectedParam}`,
-        duration: 3000,
-      });
-      
-      // Remove query parameter from URL
-      const newSearchParams = new URLSearchParams(searchParams);
-      newSearchParams.delete('connected');
-      setSearchParams(newSearchParams, { replace: true });
-    }
-  }, [searchParams, refreshIntegrationTools, setSearchParams]);
+  const chatProps = buildChatProps({
+    buildChatPanelCollapsed, handleBlockSelect, selectedWorkflowId, handleWorkflowGraphSync,
+    availableBlocks, triggerOptions, isLoadingTriggers: isLoadingTriggers || isLoadingSubscriptions,
+  });
 
   return (
     <div className="flex flex-col h-screen bg-background">
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-        {/* Main Canvas Area */}
-        <ResizablePanel defaultSize={75} minSize={50} className="flex flex-col">
-          {/* Canvas */}
-          <ReactFlowProvider>
-            <div className="flex-1 relative overflow-hidden">
-              <WorkflowCanvas
-              key={selectedWorkflowId ?? 'new'}
-                previewGraph={previewGraph}
-              onNodeDoubleClick={isPreviewActive ? undefined : handleCanvasNodeDoubleClick}
-              onNodeDrop={isPreviewActive ? undefined : handleNodeDrop}
-              readOnly={isPreviewActive}
-            />
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 pointer-events-none">
-              <div className="pointer-events-auto">
-                <WorkflowLifecycleBar
-                  lifecycleStatus={lifecycleStatus}
-                  onRunClick={() => handleExecute(inputFields)}
-                  onPublishClick={handlePublish}
-                  isExecuting={isExecuting}
-                  isPublishing={isPublishing}
-                isRestoringVersion={isRestoringVersion}
-                  canRun={canRun}
-                  canPublish={canPublish}
-                  publishDisabledReason={publishDisabledReason}
-                  runDisabledReason={runDisabledReason}
-                versionOptions={workflowVersions}
-                isVersionsLoading={isLoadingWorkflowVersions}
-                onVersionRestore={handleRestoreVersion}
-                versionRestoreDisabledReason={
-                  selectedWorkflowId ? undefined : 'Save the workflow before restoring versions'
-                }
-                />
-              </div>
-              {proposalPreview && (
-                <div className="pointer-events-auto">
-                  <div className="bg-sky-900/90 text-white px-4 py-2 rounded-full shadow-lg max-w-xl text-center">
-                    <p className="text-sm font-medium">Previewing workflow proposal</p>
-                    <p className="text-xs text-slate-100 line-clamp-2">
-                      {proposalPreview.proposal.summary}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Floating Workflows Panel */}
-            <FloatingWorkflowsPanel
-              workflows={workflows}
-              isLoadingWorkflows={isLoadingWorkflows}
-              selectedWorkflowId={selectedWorkflowId}
-              onLoadWorkflow={handleLoadWorkflow}
-              onDeleteWorkflow={handleDeleteWorkflow}
-              onRenameWorkflow={handleRenameWorkflow}
-              onNewWorkflow={handleNewWorkflow}
-              onExportWorkflow={handleExportWorkflow}
-              onImportWorkflow={() => setImportDialogOpen(true)}
-            />
-
-            {/* Workflow Import Dialog */}
-            <WorkflowImportDialog
-              open={isImportDialogOpen}
-              onOpenChange={setImportDialogOpen}
-              onImport={handleImportWorkflow}
-            />
-            
-            </div>
-          </ReactFlowProvider>
-        </ResizablePanel>
-        
-        {/* Build & Chat Panel - Always render with collapsible behavior */}
-
-          <>
-            <ResizableHandle withHandle />
-            <ResizablePanel 
-              key={buildChatPanelCollapsed ? 'collapsed' : 'expanded'}
-              defaultSize={buildChatPanelCollapsed ? 3 : 25} 
-              minSize={3}
-              maxSize={50}
-              collapsible
-              className="border-l"
-            >
-              <BuildAndChatPanel
-                onBlockSelect={handleBlockSelect}
-                workflowId={selectedWorkflowId}
-                onWorkflowGraphSync={handleWorkflowGraphSync}
-                functionBlocks={availableBlocks}
-                triggerOptions={triggerOptions}
-                isLoadingTriggers={isLoadingTriggers || isLoadingSubscriptions}
-                triggerInfoMessage={undefined}
-              />
-            </ResizablePanel>
-          </>
+        <CanvasSection canvasProps={canvasProps} />
+        <ResizableHandle withHandle />
+        <ChatPanel chatProps={chatProps} />
       </ResizablePanelGroup>
-
-      <WorkflowNodeConfigDialog
-        open={isConfigDialogOpen}
-        node={editingNode}
-        allNodes={nodes}
-        allEdges={edges}
-        onOpenChange={handleConfigDialogOpenChange}
-        onUpdate={handleNodeConfigUpdate}
-        workflowInputs={workflowInputsDef}
+      <WorkflowDialogs
+        isConfigDialogOpen={isConfigDialogOpen} isInputDialogOpen={isInputDialogOpen} isKeymapOpen={isKeymapOpen}
+        editingNode={editingNode} allNodes={nodes} allEdges={edges} workflowInputsDef={workflowInputsDef}
+        inputFields={inputFields} inputData={inputData} onConfigDialogOpenChange={handleConfigDialogOpenChange}
+        onNodeConfigUpdate={handleNodeConfigUpdate} setInputDialogOpen={setInputDialogOpen}
+        setInputData={setInputData} setKeymapOpen={setKeymapOpen}
+        onExecuteWithInput={() => handleExecuteWithInput(inputFields, inputData)}
       />
-
-      {/* Input Dialog */}
-      <WorkflowInputDialog
-        open={isInputDialogOpen}
-        onOpenChange={setInputDialogOpen}
-        inputFields={inputFields}
-        inputData={inputData}
-        onInputDataChange={setInputData}
-        onExecute={() => handleExecuteWithInput(inputFields, inputData)}
-      />
-
-      {/* Keyboard Shortcuts Dialog */}
-      <KeymapDialog open={isKeymapOpen} onOpenChange={setKeymapOpen} />
     </div>
   );
 }

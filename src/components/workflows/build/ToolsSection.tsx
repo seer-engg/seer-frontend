@@ -22,6 +22,34 @@ interface ToolsSectionProps {
   isLoading: boolean;
 }
 
+const normalizeIntegrationType = (integrationType: string | undefined): string => {
+  if (!integrationType) return 'other';
+  const key = integrationType.toLowerCase().trim();
+  return key === 'pull_request' ? 'github' : key;
+};
+
+const groupToolsByType = (tools: Tool[]): Record<string, Tool[]> =>
+  tools.reduce((acc, tool) => {
+    const type = normalizeIntegrationType(tool.integration_type);
+    (acc[type] = acc[type] || []).push(tool);
+    return acc;
+  }, {} as Record<string, Tool[]>);
+
+const filterToolsBySearch = (
+  toolsByType: Record<string, Tool[]>,
+  query: string
+): Record<string, Tool[]> => {
+  const result: Record<string, Tool[]> = {};
+  for (const [type, typeTools] of Object.entries(toolsByType)) {
+    const filtered = typeTools.filter((tool) =>
+      tool.name.toLowerCase().includes(query.toLowerCase()) ||
+      tool.description?.toLowerCase().includes(query.toLowerCase())
+    );
+    if (filtered.length > 0) result[type] = filtered;
+  }
+  return result;
+};
+
 export function ToolsSection({
   tools,
   searchQuery,
@@ -29,42 +57,11 @@ export function ToolsSection({
   onSelectTool,
   isLoading,
 }: ToolsSectionProps) {
-  // Normalize integration type: merge pull_request into github
-  const normalizeIntegrationType = (integrationType: string | undefined): string => {
-    if (!integrationType) return 'other';
-    const key = integrationType.toLowerCase().trim();
-    if (key === 'pull_request') return 'github';
-    return key;
-  };
-
-  // Group tools by normalized integration type
-  const toolsByIntegrationType = useMemo(() => {
-    return tools.reduce((acc, tool) => {
-      const normalizedType = normalizeIntegrationType(tool.integration_type);
-      if (!acc[normalizedType]) {
-        acc[normalizedType] = [];
-      }
-      acc[normalizedType].push(tool);
-      return acc;
-    }, {} as Record<string, Tool[]>);
-  }, [tools]);
-
-  // Filter tools by search query
-  const filteredToolsByType = useMemo(() => {
-    const filtered: Record<string, Tool[]> = {};
-    for (const [integrationType, typeTools] of Object.entries(toolsByIntegrationType)) {
-      const filteredTools = typeTools.filter((tool) => {
-        return (
-          tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          tool.description?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      });
-      if (filteredTools.length > 0) {
-        filtered[integrationType] = filteredTools;
-      }
-    }
-    return filtered;
-  }, [toolsByIntegrationType, searchQuery]);
+  const toolsByIntegrationType = useMemo(() => groupToolsByType(tools), [tools]);
+  const filteredToolsByType = useMemo(
+    () => filterToolsBySearch(toolsByIntegrationType, searchQuery),
+    [toolsByIntegrationType, searchQuery]
+  );
 
   if (isLoading) {
     return <div className="text-sm text-muted-foreground">Loading tools...</div>;
@@ -78,92 +75,79 @@ export function ToolsSection({
     );
   }
 
+  const ToolItem = ({ tool }: { tool: Tool }) => {
+    const handleDragStart = (e: React.DragEvent) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData(
+        'application/reactflow',
+        JSON.stringify({
+          type: 'tool',
+          tool: {
+            name: tool.name,
+            slug: tool.slug,
+            provider: tool.provider,
+            integration_type: tool.integration_type,
+            output_schema: tool.output_schema,
+          },
+        })
+      );
+    };
+
+    return (
+      <Tooltip key={tool.slug || tool.name}>
+        <TooltipTrigger asChild>
+          <Badge
+            draggable
+            onDragStart={handleDragStart}
+            variant="outline"
+            className="w-full justify-start cursor-grab active:cursor-grabbing hover:bg-accent transition-colors px-2.5 py-1.5 h-auto font-normal text-xs"
+            onClick={() => onSelectTool(tool)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelectTool(tool);
+              }
+            }}
+          >
+            {tool.name}
+          </Badge>
+        </TooltipTrigger>
+        {tool.description && <TooltipContent><p>{tool.description}</p></TooltipContent>}
+      </Tooltip>
+    );
+  };
+
+  const renderAccordionItems = () => Object.entries(filteredToolsByType)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([type, typeTools]) => (
+      <AccordionItem key={type} value={type}>
+        <AccordionTrigger className="w-full flex items-center gap-2 text-left py-2 transition-colors hover:text-foreground [&>svg]:hidden">
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground transition-transform data-[state=open]:rotate-90 shrink-0" />
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {getIntegrationTypeIcon(type)}
+            <span className="text-sm font-medium text-foreground truncate">{getIntegrationTypeLabel(type)}</span>
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px] ml-auto">{typeTools.length}</Badge>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="mt-2 ml-6 space-y-1.5">
+          {typeTools.map((tool) => <ToolItem key={tool.slug || tool.name} tool={tool} />)}
+        </AccordionContent>
+      </AccordionItem>
+    ));
+
   return (
     <div>
       <h3 className="text-sm font-medium mb-2 text-left">Tools</h3>
       <div className="relative mb-4">
         <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search tools..."
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-8 text-sm"
-        />
+        <Input placeholder="Search tools..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} className="pl-8 text-sm" />
       </div>
       {Object.keys(filteredToolsByType).length > 0 ? (
-        <Accordion type="single" collapsible className="space-y-3">
-          {Object.entries(filteredToolsByType)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([integrationType, integrationTools]) => (
-              <AccordionItem key={integrationType} value={integrationType}>
-                <AccordionTrigger className="w-full flex items-center gap-2 text-left py-2 transition-colors hover:text-foreground [&>svg]:hidden">
-                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground transition-transform data-[state=open]:rotate-90 shrink-0" />
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {getIntegrationTypeIcon(integrationType)}
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {getIntegrationTypeLabel(integrationType)}
-                    </span>
-                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] ml-auto">
-                      {integrationTools.length}
-                    </Badge>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="mt-2 ml-6 space-y-1.5">
-                  {integrationTools.map((tool) => {
-                    const handleDragStart = (e: React.DragEvent) => {
-                      e.dataTransfer.effectAllowed = 'move';
-                      e.dataTransfer.setData(
-                        'application/reactflow',
-                        JSON.stringify({
-                          type: 'tool',
-                          tool: {
-                            name: tool.name,
-                            slug: tool.slug,
-                            provider: tool.provider,
-                            integration_type: tool.integration_type,
-                            output_schema: tool.output_schema,
-                          },
-                        })
-                      );
-                    };
-
-                    return (
-                      <Tooltip key={tool.slug || tool.name}>
-                        <TooltipTrigger asChild>
-                          <Badge
-                            draggable
-                            onDragStart={handleDragStart}
-                            variant="outline"
-                            className="w-full justify-start cursor-grab active:cursor-grabbing hover:bg-accent hover:border-accent-foreground/20 transition-colors px-2.5 py-1.5 h-auto font-normal text-xs"
-                            onClick={() => onSelectTool(tool)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                onSelectTool(tool);
-                              }
-                            }}
-                          >
-                            {tool.name}
-                          </Badge>
-                        </TooltipTrigger>
-                        {tool.description && (
-                          <TooltipContent>
-                            <p>{tool.description}</p>
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
-                    );
-                  })}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-        </Accordion>
-      ) : tools.length === 0 ? (
-        <div className="text-sm text-muted-foreground text-center py-4">No tools available</div>
+        <Accordion type="single" collapsible className="space-y-3">{renderAccordionItems()}</Accordion>
       ) : (
-        <div className="text-sm text-muted-foreground text-center py-4">No tools found</div>
+        <div className="text-sm text-muted-foreground text-center py-4">{tools.length === 0 ? 'No tools available' : 'No tools found'}</div>
       )}
     </div>
   );

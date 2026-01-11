@@ -129,113 +129,54 @@ export const useTriggerConfig = (
     };
   }
 
-  // Derive quick options from schema
-  const quickOptions: QuickOption[] = (() => {
+  const deriveQuickOptions = (): QuickOption[] => {
     if (state.kind === 'webhook' && userSchema) {
       return deriveQuickOptionsFromUserSchema(userSchema);
     }
-    if (descriptor?.event_schema) {
-      return deriveQuickOptionsFromSchema(descriptor.event_schema);
-    }
-    return [];
-  })();
+    return descriptor?.event_schema ? deriveQuickOptionsFromSchema(descriptor.event_schema) : [];
+  };
+
+  const quickOptions = deriveQuickOptions();
 
   const isLoading = !triggerMeta.handlers;
 
-  /**
-   * Builds the payload for saving the trigger.
-   */
+  const validateRequired = useCallback((config: Record<string, JsonValue>): boolean => {
+    if (!descriptor?.config_schema) return true;
+    const required = Array.isArray(descriptor.config_schema.required) ? (descriptor.config_schema.required as string[]) : [];
+    for (const field of required) {
+      if (!config[field]) {
+        const label = field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        toast.error('Configuration incomplete', { description: `${label} is required.` });
+        return false;
+      }
+    }
+    return true;
+  }, [descriptor?.config_schema]);
+
   const buildSavePayload = useCallback(
     (args: {
       bindingState: BindingState;
       subscription: NonNullable<WorkflowNodeData['triggerMeta']>['subscription'];
       draft: NonNullable<WorkflowNodeData['triggerMeta']>['draft'];
-    }):
-      | {
-          mode: 'draft';
-          draftId: string;
-          body: {
-            triggerKey: string;
-            bindings: BindingState;
-            providerConfig?: Record<string, JsonValue>;
-          };
-        }
-      | {
-          mode: 'subscription';
-          subscriptionId: number;
-          body: {
-            bindings: Record<string, JsonValue>;
-            provider_config?: JsonObject;
-          };
-        }
-      | null => {
-      // Build provider config based on state type
-      let providerConfig: Record<string, JsonValue> | undefined;
+    }) => {
+      const cfg = state.kind === 'dynamic' ? state.serializeConfig() : state.kind === 'webhook' ? { user_schema: userSchema as JsonValue } : undefined;
+      const providerConfig = state.kind === 'dynamic' && (cfg && !validateRequired(cfg)) ? undefined : cfg;
+      if (!providerConfig && state.kind === 'dynamic') return null;
 
-      if (state.kind === 'dynamic') {
-        providerConfig = state.serializeConfig();
-
-        // Validate required fields from schema
-        if (descriptor?.config_schema) {
-          const requiredFields = Array.isArray(descriptor.config_schema.required)
-            ? (descriptor.config_schema.required as string[])
-            : [];
-
-          for (const field of requiredFields) {
-            const value = providerConfig[field];
-            if (value === undefined || value === null || value === '') {
-              const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-              toast.error('Configuration incomplete', {
-                description: `${fieldLabel} is required.`,
-              });
-              return null;
-            }
-          }
-        }
-      } else if (state.kind === 'webhook') {
-        // For webhook/form, store the user schema in provider_config
-        providerConfig = {
-          user_schema: userSchema as JsonValue,
-        };
-      }
-
-      // Build payload for draft
       if (!args.subscription && args.draft) {
-        return {
-          mode: 'draft',
-          draftId: args.draft.id,
-          body: {
-            triggerKey,
-            bindings: args.bindingState,
-            providerConfig,
-          },
-        };
+        return { mode: 'draft' as const, draftId: args.draft.id, body: { triggerKey, bindings: args.bindingState, providerConfig } };
       }
 
-      // Build payload for existing subscription
-      if (args.subscription) {
-        const payload: {
-          mode: 'subscription';
-          subscriptionId: number;
-          body: { bindings: Record<string, JsonValue>; provider_config?: JsonObject };
-        } = {
-          mode: 'subscription',
-          subscriptionId: args.subscription.subscription_id,
-          body: {
-            bindings: buildBindingsPayload(args.bindingState),
-          },
-        };
-
-        if (providerConfig) {
-          payload.body.provider_config = providerConfig as JsonObject;
-        }
-
-        return payload;
-      }
-
-      return null;
+      return args.subscription ? {
+        mode: 'subscription' as const,
+        subscriptionId: args.subscription.subscription_id,
+        body: {
+          bindings: buildBindingsPayload(args.bindingState),
+          ...(providerConfig && { provider_config: providerConfig as JsonObject }),
+        },
+      } : null;
     },
-    [triggerKey, state, descriptor?.config_schema, userSchema],
+    [triggerKey, state, userSchema, validateRequired],
   );
 
   return {

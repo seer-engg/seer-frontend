@@ -126,6 +126,290 @@ interface BackendClientWithMeta {
   getToken?: () => Promise<string | null>;
 }
 
+const loadWorkflowsImpl = async (set: (partial: Partial<WorkflowStore>) => void) => {
+  set({ isLoading: true, error: null });
+  try {
+    const response = await backendApiClient.request<WorkflowListResponse>('/api/v1/workflows', {
+      method: 'GET',
+    });
+    set({ workflows: response.items, isLoading: false, workflowsLoaded: true });
+    return response.items;
+  } catch (error) {
+    set({ isLoading: false, workflowsLoaded: true, error: error instanceof Error ? error.message : 'Failed to load workflows' });
+    throw error;
+  }
+};
+
+const getWorkflowImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  workflowId: string,
+) => {
+  set({ error: null });
+  try {
+    const response = await backendApiClient.request<WorkflowResponse>(`/api/v1/workflows/${workflowId}`, {
+      method: 'GET',
+    });
+    const workflow = toWorkflowModel(response);
+    set((state) => ({
+      workflows: updateWorkflowList(state.workflows, workflow),
+      currentWorkflow: workflow,
+      currentWorkflowId: workflowId,
+    }));
+    return workflow;
+  } catch (error) {
+    set({ error: error instanceof Error ? error.message : 'Failed to load workflow' });
+    throw error;
+  }
+};
+
+const createWorkflowImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  name: string,
+  description: string | undefined,
+  graph: WorkflowGraphData,
+) => {
+  set({ isCreating: true, error: null });
+  try {
+    const spec = graphToWorkflowSpec(graph);
+    const response = await backendApiClient.request<WorkflowResponse>('/api/v1/workflows', {
+      method: 'POST',
+      body: { name, description, spec },
+    });
+    const workflow = toWorkflowModel(response);
+    set((state) => ({
+      workflows: [toListItem(workflow), ...state.workflows],
+      isCreating: false,
+    }));
+    return workflow;
+  } catch (error) {
+    set({ isCreating: false, error: error instanceof Error ? error.message : 'Failed to create workflow' });
+    throw error;
+  }
+};
+
+const updateWorkflowMetadataImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  workflowId: string,
+  updates: { name?: string; description?: string; tags?: string[] },
+) => {
+  set({ isUpdating: true, error: null });
+  try {
+    const response = await backendApiClient.request<WorkflowResponse>(`/api/v1/workflows/${workflowId}`, {
+      method: 'PUT',
+      body: updates,
+    });
+    const workflow = toWorkflowModel(response);
+    set((state) => ({
+      workflows: updateWorkflowList(state.workflows, workflow),
+      currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? workflow : state.currentWorkflow,
+      isUpdating: false,
+    }));
+    return workflow;
+  } catch (error) {
+    set({ isUpdating: false, error: error instanceof Error ? error.message : 'Failed to update workflow' });
+    throw error;
+  }
+};
+
+const saveWorkflowDraftImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  get: () => WorkflowStore,
+  workflowId: string,
+  graph: WorkflowGraphData,
+  baseRevision: number,
+) => {
+  set({ isSavingDraft: true, error: null });
+  try {
+    const existing = get().currentWorkflow;
+    const spec = graphToWorkflowSpec(graph, existing?.spec);
+    const body: WorkflowDraftPatchRequest = { base_revision: baseRevision, spec };
+    const response = await backendApiClient.request<WorkflowResponse>(`/api/v1/workflows/${workflowId}/draft`, {
+      method: 'PATCH',
+      body: body as unknown as Record<string, unknown>,
+    });
+    const workflow = toWorkflowModel(response);
+    set((state) => ({
+      workflows: updateWorkflowList(state.workflows, workflow),
+      currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? workflow : state.currentWorkflow,
+      isSavingDraft: false,
+    }));
+    return workflow;
+  } catch (error) {
+    set({ isSavingDraft: false, error: error instanceof Error ? error.message : 'Failed to save draft' });
+    throw error;
+  }
+};
+
+const publishWorkflowImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  get: () => WorkflowStore,
+  workflowId: string,
+  versionId: number,
+) => {
+  set({ isPublishing: true, error: null });
+  try {
+    const response = await backendApiClient.request<WorkflowResponse>(`/api/v1/workflows/${workflowId}/publish`, {
+      method: 'POST',
+      body: { version_id: versionId },
+    });
+    const workflow = toWorkflowModel(response);
+    set((state) => ({
+      workflows: updateWorkflowList(state.workflows, workflow),
+      currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? workflow : state.currentWorkflow,
+      isPublishing: false,
+    }));
+    get().invalidateWorkflowVersions(workflowId);
+    return workflow;
+  } catch (error) {
+    set({ isPublishing: false, error: error instanceof Error ? error.message : 'Failed to publish workflow' });
+    throw error;
+  }
+};
+
+const deleteWorkflowImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  workflowId: string,
+) => {
+  set({ isDeleting: true, error: null });
+  try {
+    await backendApiClient.request(`/api/v1/workflows/${workflowId}`, { method: 'DELETE' });
+    set((state) => ({
+      workflows: removeWorkflowFromList(state.workflows, workflowId),
+      isDeleting: false,
+      currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? null : state.currentWorkflow,
+    }));
+  } catch (error) {
+    set({ isDeleting: false, error: error instanceof Error ? error.message : 'Failed to delete workflow' });
+    throw error;
+  }
+};
+
+const restoreWorkflowVersionImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  get: () => WorkflowStore,
+  workflowId: string,
+  versionId: number,
+  baseRevision?: number,
+) => {
+  set({ isRestoringVersion: true, error: null });
+  try {
+    const body: WorkflowVersionRestoreRequest = {};
+    if (typeof baseRevision === 'number') {
+      body.base_revision = baseRevision;
+    }
+    const response = await backendApiClient.request<WorkflowResponse>(
+      `/api/v1/workflows/${workflowId}/versions/${versionId}/restore`,
+      { method: 'POST', body: body as unknown as Record<string, unknown> },
+    );
+    const workflow = toWorkflowModel(response);
+    set((state) => ({
+      workflows: updateWorkflowList(state.workflows, workflow),
+      currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? workflow : state.currentWorkflow,
+      isRestoringVersion: false,
+    }));
+    get().invalidateWorkflowVersions(workflowId);
+    return workflow;
+  } catch (error) {
+    set({ isRestoringVersion: false, error: error instanceof Error ? error.message : 'Failed to restore workflow version' });
+    throw error;
+  }
+};
+
+const executeWorkflowImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  workflowId: string,
+  inputs?: Record<string, JsonValue>,
+  config?: Record<string, JsonValue>,
+) => {
+  set({ isExecuting: true, error: null });
+  try {
+    const payload = { inputs: inputs ?? {}, config: config ?? {} };
+    const response = await backendApiClient.request<RunResponse>(`/api/v1/workflows/${workflowId}/runs`, {
+      method: 'POST',
+      body: payload,
+    });
+    set({ isExecuting: false });
+    return response;
+  } catch (error) {
+    set({ isExecuting: false, error: error instanceof Error ? error.message : 'Failed to execute workflow' });
+    throw error;
+  }
+};
+
+const exportWorkflowImpl = async (workflowId: string) => {
+  const clientMeta = backendApiClient as unknown as BackendClientWithMeta;
+  const baseUrl = typeof clientMeta.getBaseUrl === 'function' ? clientMeta.getBaseUrl() : clientMeta.baseUrl ?? '';
+  const url = `${baseUrl}/api/v1/workflows/${workflowId}/export`;
+  const token = await clientMeta.getToken?.();
+  const headers: HeadersInit = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const response = await fetch(url, { method: 'GET', headers });
+  if (!response.ok) throw new Error('Failed to export workflow');
+  const contentDisposition = response.headers.get('Content-Disposition');
+  const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+  const filename = filenameMatch?.[1] || `workflow-${workflowId}.seer.json`;
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = downloadUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.URL.revokeObjectURL(downloadUrl);
+};
+
+const importWorkflowImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  file: File,
+  options: { name?: string; importTriggers: boolean },
+) => {
+  set({ error: null });
+  const text = await file.text();
+  const importData = JSON.parse(text);
+  const response = await backendApiClient.request<WorkflowResponse>('/api/v1/workflows/import', {
+    method: 'POST',
+    body: { import_data: importData, name: options.name, import_triggers: options.importTriggers },
+  });
+  const workflow = toWorkflowModel(response);
+  set((state) => ({
+    workflows: [toListItem(workflow), ...state.workflows],
+  }));
+  return workflow;
+};
+
+const loadWorkflowVersionsImpl = async (
+  set: (partial: Partial<WorkflowStore>) => void,
+  workflowId: string,
+) => {
+  set((state) => ({
+    workflowVersions: {
+      ...state.workflowVersions,
+      [workflowId]: { ...(state.workflowVersions[workflowId] ?? initialVersionState), isLoading: true, error: null },
+    },
+  }));
+  try {
+    const response = await backendApiClient.request<WorkflowVersionListResponse>(
+      `/api/v1/workflows/${workflowId}/versions`,
+      { method: 'GET' },
+    );
+    set((state) => ({
+      workflowVersions: { ...state.workflowVersions, [workflowId]: { response, isLoading: false, error: null } },
+    }));
+    return response;
+  } catch (error) {
+    set((state) => ({
+      workflowVersions: {
+        ...state.workflowVersions,
+        [workflowId]: { response: null, isLoading: false, error: error instanceof Error ? error.message : 'Failed to load versions' },
+      },
+    }));
+    throw error;
+  }
+};
+
 const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   workflows: [],
   isLoading: false,
@@ -147,35 +431,10 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   workflowInputData: {},
   isLoadingWorkflow: false,
   async loadWorkflows() {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await backendApiClient.request<WorkflowListResponse>('/api/v1/workflows', {
-        method: 'GET',
-      });
-      set({ workflows: response.items, isLoading: false, workflowsLoaded: true });
-      return response.items;
-    } catch (error) {
-      set({ isLoading: false, workflowsLoaded: true, error: error instanceof Error ? error.message : 'Failed to load workflows' });
-      throw error;
-    }
+    return loadWorkflowsImpl(set);
   },
   async getWorkflow(workflowId) {
-    set({ error: null });
-    try {
-      const response = await backendApiClient.request<WorkflowResponse>(`/api/v1/workflows/${workflowId}`, {
-        method: 'GET',
-      });
-      const workflow = toWorkflowModel(response);
-      set((state) => ({
-        workflows: updateWorkflowList(state.workflows, workflow),
-        currentWorkflow: workflow,
-        currentWorkflowId: workflowId,
-      }));
-      return workflow;
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Failed to load workflow' });
-      throw error;
-    }
+    return getWorkflowImpl(set, workflowId);
   },
   async loadWorkflow(workflowId) {
     const workflow = await get().getWorkflow(workflowId);
@@ -188,7 +447,6 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   setSelectedNodeId(nodeId) {
     set({ selectedNodeId: nodeId });
   },
-  // Phase 1: Implementation of consolidated state setters
   setSelectedWorkflowId(id) {
     set({ selectedWorkflowId: id });
   },
@@ -205,255 +463,34 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
     set({ isLoadingWorkflow: isLoading });
   },
   async createWorkflow(name, description, graph) {
-    set({ isCreating: true, error: null });
-    try {
-      const spec = graphToWorkflowSpec(graph);
-      const response = await backendApiClient.request<WorkflowResponse>('/api/v1/workflows', {
-        method: 'POST',
-        body: {
-          name,
-          description,
-          spec,
-        },
-      });
-      const workflow = toWorkflowModel(response);
-      set((state) => ({
-        workflows: [toListItem(workflow), ...state.workflows],
-        isCreating: false,
-      }));
-      return workflow;
-    } catch (error) {
-      set({ isCreating: false, error: error instanceof Error ? error.message : 'Failed to create workflow' });
-      throw error;
-    }
+    return createWorkflowImpl(set, name, description, graph);
   },
   async updateWorkflowMetadata(workflowId, updates) {
-    set({ isUpdating: true, error: null });
-    try {
-      const response = await backendApiClient.request<WorkflowResponse>(`/api/v1/workflows/${workflowId}`, {
-        method: 'PUT',
-        body: updates,
-      });
-      const workflow = toWorkflowModel(response);
-      set((state) => ({
-        workflows: updateWorkflowList(state.workflows, workflow),
-        currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? workflow : state.currentWorkflow,
-        isUpdating: false,
-      }));
-      return workflow;
-    } catch (error) {
-      set({ isUpdating: false, error: error instanceof Error ? error.message : 'Failed to update workflow' });
-      throw error;
-    }
+    return updateWorkflowMetadataImpl(set, workflowId, updates);
   },
   async saveWorkflowDraft(workflowId, { graph, baseRevision }) {
-    set({ isSavingDraft: true, error: null });
-    try {
-      const existing = get().currentWorkflow;
-      const spec = graphToWorkflowSpec(graph, existing?.spec);
-      const body: WorkflowDraftPatchRequest = {
-        base_revision: baseRevision,
-        spec,
-      };
-      const response = await backendApiClient.request<WorkflowResponse>(
-        `/api/v1/workflows/${workflowId}/draft`,
-        {
-          method: 'PATCH',
-          body: body as unknown as Record<string, unknown>,
-        },
-      );
-      const workflow = toWorkflowModel(response);
-      set((state) => ({
-        workflows: updateWorkflowList(state.workflows, workflow),
-        currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? workflow : state.currentWorkflow,
-        isSavingDraft: false,
-      }));
-      return workflow;
-    } catch (error) {
-      set({ isSavingDraft: false, error: error instanceof Error ? error.message : 'Failed to save draft' });
-      throw error;
-    }
+    return saveWorkflowDraftImpl(set, get, workflowId, graph, baseRevision);
   },
   async publishWorkflow(workflowId, versionId) {
-    set({ isPublishing: true, error: null });
-    try {
-      const response = await backendApiClient.request<WorkflowResponse>(
-        `/api/v1/workflows/${workflowId}/publish`,
-        {
-          method: 'POST',
-          body: { version_id: versionId },
-        },
-      );
-      const workflow = toWorkflowModel(response);
-      set((state) => ({
-        workflows: updateWorkflowList(state.workflows, workflow),
-        currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? workflow : state.currentWorkflow,
-        isPublishing: false,
-      }));
-      get().invalidateWorkflowVersions(workflowId);
-      return workflow;
-    } catch (error) {
-      set({ isPublishing: false, error: error instanceof Error ? error.message : 'Failed to publish workflow' });
-      throw error;
-    }
+    return publishWorkflowImpl(set, get, workflowId, versionId);
   },
   async deleteWorkflow(workflowId) {
-    set({ isDeleting: true, error: null });
-    try {
-      await backendApiClient.request(`/api/v1/workflows/${workflowId}`, {
-        method: 'DELETE',
-      });
-      set((state) => ({
-        workflows: removeWorkflowFromList(state.workflows, workflowId),
-        isDeleting: false,
-        currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? null : state.currentWorkflow,
-      }));
-    } catch (error) {
-      set({ isDeleting: false, error: error instanceof Error ? error.message : 'Failed to delete workflow' });
-      throw error;
-    }
+    return deleteWorkflowImpl(set, workflowId);
   },
   async restoreWorkflowVersion(workflowId, { versionId, baseRevision }) {
-    set({ isRestoringVersion: true, error: null });
-    try {
-      const body: WorkflowVersionRestoreRequest = {};
-      if (typeof baseRevision === 'number') {
-        body.base_revision = baseRevision;
-      }
-      const response = await backendApiClient.request<WorkflowResponse>(
-        `/api/v1/workflows/${workflowId}/versions/${versionId}/restore`,
-        {
-          method: 'POST',
-          body: body as unknown as Record<string, unknown>,
-        },
-      );
-      const workflow = toWorkflowModel(response);
-      set((state) => ({
-        workflows: updateWorkflowList(state.workflows, workflow),
-        currentWorkflow: state.currentWorkflow?.workflow_id === workflowId ? workflow : state.currentWorkflow,
-        isRestoringVersion: false,
-      }));
-      get().invalidateWorkflowVersions(workflowId);
-      return workflow;
-    } catch (error) {
-      set({
-        isRestoringVersion: false,
-        error: error instanceof Error ? error.message : 'Failed to restore workflow version',
-      });
-      throw error;
-    }
+    return restoreWorkflowVersionImpl(set, get, workflowId, versionId, baseRevision);
   },
   async executeWorkflow(workflowId, inputs, config) {
-    set({ isExecuting: true, error: null });
-    try {
-      const payload = {
-        inputs: inputs ?? {},
-        config: config ?? {},
-      };
-      const response = await backendApiClient.request<RunResponse>(
-        `/api/v1/workflows/${workflowId}/runs`,
-        {
-          method: 'POST',
-          body: payload,
-        },
-      );
-      set({ isExecuting: false });
-      return response;
-    } catch (error) {
-      set({ isExecuting: false, error: error instanceof Error ? error.message : 'Failed to execute workflow' });
-      throw error;
-    }
+    return executeWorkflowImpl(set, workflowId, inputs, config);
   },
   async exportWorkflow(workflowId) {
-    const clientMeta = backendApiClient as unknown as BackendClientWithMeta;
-    const baseUrl =
-      typeof clientMeta.getBaseUrl === 'function'
-        ? clientMeta.getBaseUrl()
-        : clientMeta.baseUrl ?? '';
-    const url = `${baseUrl}/api/v1/workflows/${workflowId}/export`;
-    const token = await clientMeta.getToken?.();
-    const headers: HeadersInit = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    const response = await fetch(url, {
-      method: 'GET',
-      headers,
-    });
-    if (!response.ok) {
-      throw new Error('Failed to export workflow');
-    }
-    const contentDisposition = response.headers.get('Content-Disposition');
-    const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
-    const filename = filenameMatch?.[1] || `workflow-${workflowId}.seer.json`;
-    const blob = await response.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = downloadUrl;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    window.URL.revokeObjectURL(downloadUrl);
+    return exportWorkflowImpl(workflowId);
   },
   async importWorkflow(file, options) {
-    set({ error: null });
-    const text = await file.text();
-    const importData = JSON.parse(text);
-    const response = await backendApiClient.request<WorkflowResponse>('/api/v1/workflows/import', {
-      method: 'POST',
-      body: {
-        import_data: importData,
-        name: options.name,
-        import_triggers: options.importTriggers,
-      },
-    });
-    const workflow = toWorkflowModel(response);
-    set((state) => ({
-      workflows: [toListItem(workflow), ...state.workflows],
-    }));
-    return workflow;
+    return importWorkflowImpl(set, file, options);
   },
   async loadWorkflowVersions(workflowId) {
-    set((state) => ({
-      workflowVersions: {
-        ...state.workflowVersions,
-        [workflowId]: {
-          ...(state.workflowVersions[workflowId] ?? initialVersionState),
-          isLoading: true,
-          error: null,
-        },
-      },
-    }));
-    try {
-      const response = await backendApiClient.request<WorkflowVersionListResponse>(
-        `/api/v1/workflows/${workflowId}/versions`,
-        { method: 'GET' },
-      );
-      set((state) => ({
-        workflowVersions: {
-          ...state.workflowVersions,
-          [workflowId]: {
-            response,
-            isLoading: false,
-            error: null,
-          },
-        },
-      }));
-      return response;
-    } catch (error) {
-      set((state) => ({
-        workflowVersions: {
-          ...state.workflowVersions,
-          [workflowId]: {
-            response: null,
-            isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to load versions',
-          },
-        },
-      }));
-      throw error;
-    }
+    return loadWorkflowVersionsImpl(set, workflowId);
   },
   invalidateWorkflowVersions(workflowId) {
     set((state) => {

@@ -335,6 +335,228 @@ export interface ToolsStore {
   loadFunctionBlocks: () => Promise<FunctionBlockSchema[]>;
 }
 
+const loadIntegrationToolsImpl = async (
+  set: (partial: Partial<ToolsStore>) => void,
+  get: () => ToolsStore,
+  syncDerived: () => void,
+) => {
+  if (!get().isAuthenticated) {
+    set({ tools: [], toolsLoaded: false });
+    syncDerived();
+    return [];
+  }
+  set({ toolsLoading: true, toolsError: null });
+  try {
+    const response = await backendApiClient.request<{ tools: ToolMetadata[] }>('/api/tools', {
+      method: 'GET',
+    });
+    set({ tools: response.tools, toolsLoaded: true, toolsLoading: false });
+    syncDerived();
+    return response.tools;
+  } catch (error) {
+    set({
+      toolsLoading: false,
+      toolsError: error instanceof Error ? error.message : 'Failed to load integration tools',
+    });
+    throw error;
+  }
+};
+
+const loadToolStatusImpl = async (
+  set: (partial: Partial<ToolsStore>) => void,
+  get: () => ToolsStore,
+  syncDerived: () => void,
+) => {
+  set({ toolStatusLoading: true });
+  try {
+    const response = await getToolsConnectionStatus();
+    const statuses = response.tools || [];
+    set({ toolStatus: statuses, toolStatusLoaded: true, toolStatusLoading: false });
+    syncDerived();
+    return statuses;
+  } catch (error) {
+    set({ toolStatusLoading: false, toolStatusLoaded: false });
+    throw error;
+  }
+};
+
+const loadConnectionsImpl = async (
+  set: (partial: Partial<ToolsStore>) => void,
+  get: () => ToolsStore,
+  syncDerived: () => void,
+) => {
+  set({ connectionsLoading: true });
+  try {
+    const response = await listConnectedAccounts({});
+    set({
+      connections: response.items,
+      connectionsLoaded: true,
+      connectionsLoading: false,
+    });
+    syncDerived();
+    return response.items;
+  } catch (error) {
+    set({ connectionsLoading: false, connectionsLoaded: false });
+    throw error;
+  }
+};
+
+const loadFromBootstrapImpl = async (
+  set: (partial: Partial<ToolsStore>) => void,
+  get: () => ToolsStore,
+  syncDerived: () => void,
+) => {
+  const USE_BOOTSTRAP = import.meta.env.VITE_USE_BOOTSTRAP === 'true';
+  if (!USE_BOOTSTRAP || !get().isAuthenticated) return null;
+
+  const state = get();
+  if (state.toolsLoading || state.toolStatusLoading || state.connectionsLoading) {
+    console.log('⏭️  Bootstrap already loading, skipping duplicate call');
+    return null;
+  }
+  if (state.toolsLoaded && state.toolStatusLoaded && state.connectionsLoaded) {
+    console.log('✅ Bootstrap data already loaded, skipping duplicate call');
+    return null;
+  }
+
+  try {
+    set({ toolsLoading: true, toolStatusLoading: true, connectionsLoading: true, toolsError: null });
+    const bootstrapData = await getBootstrapData();
+    const tools = bootstrapData.tools as ToolMetadata[];
+    const toolStatus = bootstrapData.tools_status;
+    const connections = bootstrapData.connections;
+    set({
+      tools,
+      toolsLoaded: true,
+      toolsLoading: false,
+      toolStatus,
+      toolStatusLoaded: true,
+      toolStatusLoading: false,
+      connections,
+      connectionsLoaded: true,
+      connectionsLoading: false,
+    });
+    syncDerived();
+    console.log('✅ Loaded data from bootstrap endpoint');
+    return bootstrapData;
+  } catch (error) {
+    console.warn('⚠️ Bootstrap failed, falling back to individual calls:', error);
+    set({ toolsLoading: false, toolStatusLoading: false, connectionsLoading: false });
+    return null;
+  }
+};
+
+const refreshIntegrationToolsImpl = async (
+  get: () => ToolsStore,
+  syncDerived: () => void,
+) => {
+  const state = get();
+  if (state.toolsLoading || state.toolStatusLoading || state.connectionsLoading) {
+    console.log('⏭️  Integration refresh already in progress, skipping');
+    return;
+  }
+  const bootstrapResult = await get().loadFromBootstrap();
+  if (!bootstrapResult) {
+    await Promise.allSettled([
+      get().loadIntegrationTools(),
+      get().loadToolStatus(),
+      get().loadConnections(),
+    ]);
+  }
+  syncDerived();
+};
+
+const connectIntegrationImpl = async (
+  set: (partial: Partial<ToolsStore>) => void,
+  get: () => ToolsStore,
+  type: IntegrationType,
+  options: { toolNames?: string[]; toolName?: string },
+) => {
+  const { userEmail, tools, integrationProviderMap, integrationScopesMap } = get();
+  if (!userEmail) {
+    console.error('[toolsStore] Cannot connect integration without user email.');
+    return null;
+  }
+  if (!integrationNeedsConnection(type)) {
+    console.warn(`[toolsStore] Integration ${type} does not require OAuth connection.`);
+    return null;
+  }
+  const toolNames = options.toolNames ?? (options.toolName ? [options.toolName] : []);
+  if (!toolNames.length) {
+    console.error(`[toolsStore] connectIntegration requires toolNames for ${type}.`);
+    return null;
+  }
+  const scopeSet = new Set<string>();
+  toolNames.forEach((toolName: string) => {
+    const tool = tools.find((t) => t.name === toolName);
+    if (tool?.required_scopes?.length) {
+      tool.required_scopes.forEach((scope) => scopeSet.add(scope));
+    }
+  });
+  if (!scopeSet.size) {
+    getIntegrationScopesForType(type, integrationScopesMap).forEach((scope) => scopeSet.add(scope));
+  }
+  if (!scopeSet.size) {
+    console.error(`[toolsStore] No scopes available for integration type ${type}.`);
+    return null;
+  }
+  const provider = getIntegrationProviderForType(type, integrationProviderMap);
+  if (!provider && type !== 'sandbox') {
+    console.error(`[toolsStore] No OAuth provider configured for ${type}`);
+    return null;
+  }
+  const callbackUrl = `${window.location.origin}${window.location.pathname}`;
+  const response = await initiateConnection({
+    userId: userEmail,
+    provider: provider ?? type,
+    scope: formatScopes(Array.from(scopeSet)),
+    callbackUrl,
+    integrationType: type,
+  });
+  return response.redirectUrl;
+};
+
+const loadFunctionBlocksImpl = async (set: (partial: Partial<ToolsStore>) => void) => {
+  set({ functionBlocksLoading: true, functionBlocksError: null });
+  try {
+    const response = await backendApiClient.request<NodeTypeResponse>(
+      '/api/v1/builder/node-types',
+      { method: 'GET' },
+    );
+    const blocks = response.node_types.map<FunctionBlockSchema>((nodeType) => ({
+      type: nodeType.type as FunctionBlockSchema['type'],
+      label: nodeType.title,
+      category: 'Core',
+      description: `${nodeType.title} block`,
+      defaults: {},
+      config_schema: {
+        type: 'object',
+        properties: nodeType.fields.reduce<Record<string, unknown>>((acc, field) => {
+          acc[field.name] = { type: 'string', description: field.kind };
+          return acc;
+        }, {}),
+      },
+    }));
+    const map = new Map<string, FunctionBlockSchema>();
+    blocks.forEach((block) => {
+      map.set(block.type, block);
+    });
+    set({
+      functionBlocks: blocks,
+      functionBlocksByType: map,
+      functionBlocksLoading: false,
+      functionBlocksLoaded: true,
+    });
+    return blocks;
+  } catch (error) {
+    set({
+      functionBlocksLoading: false,
+      functionBlocksError: error instanceof Error ? error.message : 'Failed to load function blocks',
+    });
+    throw error;
+  }
+};
+
 const createToolsStore: StateCreator<ToolsStore> = (set, get) => {
   const syncDerived = () => {
     const { tools, toolStatus, connections } = get();
@@ -370,147 +592,19 @@ const createToolsStore: StateCreator<ToolsStore> = (set, get) => {
       set({ userEmail: email, isAuthenticated });
     },
     async loadIntegrationTools() {
-      if (!get().isAuthenticated) {
-        set({ tools: [], toolsLoaded: false });
-        syncDerived();
-        return [];
-      }
-      set({ toolsLoading: true, toolsError: null });
-      try {
-        const response = await backendApiClient.request<{ tools: ToolMetadata[] }>('/api/tools', {
-          method: 'GET',
-        });
-        set({ tools: response.tools, toolsLoaded: true, toolsLoading: false });
-        syncDerived();
-        return response.tools;
-      } catch (error) {
-        set({
-          toolsLoading: false,
-          toolsError: error instanceof Error ? error.message : 'Failed to load integration tools',
-        });
-        throw error;
-      }
+      return loadIntegrationToolsImpl(set, get, syncDerived);
     },
     async loadToolStatus() {
-      set({ toolStatusLoading: true });
-      try {
-        const response = await getToolsConnectionStatus();
-        const statuses = response.tools || [];
-        set({ toolStatus: statuses, toolStatusLoaded: true, toolStatusLoading: false });
-        syncDerived();
-        return statuses;
-      } catch (error) {
-        set({
-          toolStatusLoading: false,
-          toolStatusLoaded: false,
-        });
-        throw error;
-      }
+      return loadToolStatusImpl(set, get, syncDerived);
     },
     async loadConnections() {
-      set({ connectionsLoading: true });
-      try {
-        const response = await listConnectedAccounts({});
-        set({
-          connections: response.items,
-          connectionsLoaded: true,
-          connectionsLoading: false,
-        });
-        syncDerived();
-        return response.items;
-      } catch (error) {
-        set({ connectionsLoading: false, connectionsLoaded: false });
-        throw error;
-      }
+      return loadConnectionsImpl(set, get, syncDerived);
     },
     async loadFromBootstrap() {
-      const USE_BOOTSTRAP = import.meta.env.VITE_USE_BOOTSTRAP === 'true';
-
-      if (!USE_BOOTSTRAP) {
-        // Feature flag disabled, use individual calls
-        return null;
-      }
-
-      if (!get().isAuthenticated) {
-        return null;
-      }
-
-      // Prevent duplicate concurrent calls - if already loading, return null
-      const state = get();
-      if (state.toolsLoading || state.toolStatusLoading || state.connectionsLoading) {
-        console.log('⏭️  Bootstrap already loading, skipping duplicate call');
-        return null;
-      }
-
-      // If already loaded, don't fetch again
-      if (state.toolsLoaded && state.toolStatusLoaded && state.connectionsLoaded) {
-        console.log('✅ Bootstrap data already loaded, skipping duplicate call');
-        return null;
-      }
-
-      try {
-        set({
-          toolsLoading: true,
-          toolStatusLoading: true,
-          connectionsLoading: true,
-          toolsError: null
-        });
-
-        const bootstrapData = await getBootstrapData();
-
-        // Extract and set all data from bootstrap response
-        const tools = bootstrapData.tools as ToolMetadata[];
-        const toolStatus = bootstrapData.tools_status;
-        const connections = bootstrapData.connections;
-
-        set({
-          tools,
-          toolsLoaded: true,
-          toolsLoading: false,
-          toolStatus,
-          toolStatusLoaded: true,
-          toolStatusLoading: false,
-          connections,
-          connectionsLoaded: true,
-          connectionsLoading: false,
-        });
-
-        syncDerived();
-        console.log('✅ Loaded data from bootstrap endpoint');
-        return bootstrapData;
-      } catch (error) {
-        console.warn('⚠️ Bootstrap failed, falling back to individual calls:', error);
-        set({
-          toolsLoading: false,
-          toolStatusLoading: false,
-          connectionsLoading: false,
-        });
-        return null;
-      }
+      return loadFromBootstrapImpl(set, get, syncDerived);
     },
     async refreshIntegrationTools() {
-      const state = get();
-
-      // Prevent concurrent refreshes
-      const isAlreadyLoading = state.toolsLoading || state.toolStatusLoading || state.connectionsLoading;
-      if (isAlreadyLoading) {
-        console.log('⏭️  Integration refresh already in progress, skipping');
-        return;
-      }
-
-      // Try bootstrap first, fall back to individual calls if it fails or is disabled
-      const bootstrapResult = await get().loadFromBootstrap();
-
-      if (!bootstrapResult) {
-        // Bootstrap failed or disabled, use individual calls
-        await Promise.allSettled([
-          get().loadIntegrationTools(),
-          get().loadToolStatus(),
-          get().loadConnections(),
-        ]);
-      }
-
-      syncDerived();
+      return refreshIntegrationToolsImpl(get, syncDerived);
     },
     getToolIntegrationStatus(toolName) {
       const { toolsWithStatus } = get();
@@ -532,88 +626,10 @@ const createToolsStore: StateCreator<ToolsStore> = (set, get) => {
       return providerConnectionsMap.get(provider)?.connectionId ?? null;
     },
     async connectIntegration(type, options) {
-      const { userEmail, tools, integrationProviderMap, integrationScopesMap } = get();
-      if (!userEmail) {
-        console.error('[toolsStore] Cannot connect integration without user email.');
-        return null;
-      }
-      if (!integrationNeedsConnection(type)) {
-        console.warn(`[toolsStore] Integration ${type} does not require OAuth connection.`);
-        return null;
-      }
-      const toolNames = options.toolNames ?? (options.toolName ? [options.toolName] : []);
-      if (!toolNames.length) {
-        console.error(`[toolsStore] connectIntegration requires toolNames for ${type}.`);
-        return null;
-      }
-      const scopeSet = new Set<string>();
-      toolNames.forEach((toolName) => {
-        const tool = tools.find((t) => t.name === toolName);
-        if (tool?.required_scopes?.length) {
-          tool.required_scopes.forEach((scope) => scopeSet.add(scope));
-        }
-      });
-      if (!scopeSet.size) {
-        getIntegrationScopesForType(type, integrationScopesMap).forEach((scope) => scopeSet.add(scope));
-      }
-      if (!scopeSet.size) {
-        console.error(`[toolsStore] No scopes available for integration type ${type}.`);
-        return null;
-      }
-      const provider = getIntegrationProviderForType(type, integrationProviderMap);
-      if (!provider && type !== 'sandbox') {
-        console.error(`[toolsStore] No OAuth provider configured for ${type}`);
-        return null;
-      }
-      const callbackUrl = `${window.location.origin}${window.location.pathname}`;
-      const response = await initiateConnection({
-        userId: userEmail,
-        provider: provider ?? type,
-        scope: formatScopes(Array.from(scopeSet)),
-        callbackUrl,
-        integrationType: type,
-      });
-      return response.redirectUrl;
+      return connectIntegrationImpl(set, get, type, options);
     },
     async loadFunctionBlocks() {
-      set({ functionBlocksLoading: true, functionBlocksError: null });
-      try {
-        const response = await backendApiClient.request<NodeTypeResponse>(
-          '/api/v1/builder/node-types',
-          { method: 'GET' },
-        );
-        const blocks = response.node_types.map<FunctionBlockSchema>((nodeType) => ({
-          type: nodeType.type as FunctionBlockSchema['type'],
-          label: nodeType.title,
-          category: 'Core',
-          description: `${nodeType.title} block`,
-          defaults: {},
-          config_schema: {
-            type: 'object',
-            properties: nodeType.fields.reduce<Record<string, unknown>>((acc, field) => {
-              acc[field.name] = { type: 'string', description: field.kind };
-              return acc;
-            }, {}),
-          },
-        }));
-        const map = new Map<string, FunctionBlockSchema>();
-        blocks.forEach((block) => {
-          map.set(block.type, block);
-        });
-        set({
-          functionBlocks: blocks,
-          functionBlocksByType: map,
-          functionBlocksLoading: false,
-          functionBlocksLoaded: true,
-        });
-        return blocks;
-      } catch (error) {
-        set({
-          functionBlocksLoading: false,
-          functionBlocksError: error instanceof Error ? error.message : 'Failed to load function blocks',
-        });
-        throw error;
-      }
+      return loadFunctionBlocksImpl(set);
     },
   };
 };

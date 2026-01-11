@@ -183,35 +183,26 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
   const syncSchema = useCallback(
     (nextFields: FieldDefinition[]) => {
       const schema = fieldsToSchema(nextFields);
-      const serialized = JSON.stringify(schema);
+      lastEmittedSchemaRef.current = JSON.stringify(schema);
       onChange(schema);
-      lastEmittedSchemaRef.current = serialized;
     },
     [onChange],
   );
 
   useEffect(() => {
     const hasValue = value && Object.keys(value).length > 0;
-    const serializedValue = hasValue ? JSON.stringify(value) : '';
+    const serialized = hasValue ? JSON.stringify(value) : JSON.stringify(DEFAULT_SCHEMA);
+
+    if (serialized === lastEmittedSchemaRef.current) return;
 
     if (hasValue) {
-      if (serializedValue === lastEmittedSchemaRef.current) {
-        return;
-      }
-      const parsedFields = schemaToFields(value);
-      setFields(parsedFields.length > 0 ? parsedFields : [createEmptyField()]);
-      lastEmittedSchemaRef.current = serializedValue;
-      return;
+      const parsed = schemaToFields(value);
+      setFields(parsed.length > 0 ? parsed : [createEmptyField()]);
+    } else {
+      setFields([createEmptyField()]);
+      onChange(DEFAULT_SCHEMA);
     }
-
-    const defaultSerialized = JSON.stringify(DEFAULT_SCHEMA);
-    if (lastEmittedSchemaRef.current === defaultSerialized) {
-      return;
-    }
-
-    setFields([createEmptyField()]);
-    onChange(DEFAULT_SCHEMA);
-    lastEmittedSchemaRef.current = defaultSerialized;
+    lastEmittedSchemaRef.current = serialized;
   }, [value, onChange]);
 
   const handleFieldChange = useCallback(
@@ -225,22 +216,6 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
     [syncSchema],
   );
 
-  const addField = () => {
-    handleFieldChange(prev => [...prev, createEmptyField()]);
-  };
-
-  const removeField = (index: number) => {
-    handleFieldChange(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const updateField = (index: number, updates: Partial<FieldDefinition>) => {
-    handleFieldChange(prev => {
-      const next = [...prev];
-      next[index] = { ...next[index], ...updates };
-      return next;
-    });
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -249,7 +224,7 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
           type="button"
           variant="outline"
           size="sm"
-          onClick={addField}
+          onClick={() => handleFieldChange(prev => [...prev, createEmptyField()])}
         >
           <Plus className="w-4 h-4 mr-1" />
           Add Field
@@ -279,8 +254,12 @@ export function StructuredOutputEditor({ value, onChange }: StructuredOutputEdit
                   key={index}
                   field={field}
                   index={index}
-                  onUpdate={updateField}
-                  onRemove={removeField}
+                  onUpdate={(i, u) => handleFieldChange(prev => {
+                    const next = [...prev];
+                    next[i] = { ...next[i], ...u };
+                    return next;
+                  })}
+                  onRemove={(i) => handleFieldChange(prev => prev.filter((_, idx) => idx !== i))}
                   canRemove={fields.length > 1}
                 />
               ))

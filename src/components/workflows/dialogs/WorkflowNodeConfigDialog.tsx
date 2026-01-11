@@ -38,6 +38,87 @@ interface WorkflowNodeConfigDialogProps {
   workflowInputs?: Record<string, InputDef>;
 }
 
+// Helper: Validate node configuration
+const useNodeValidation = (
+  node: Node<WorkflowNodeData> | null,
+  localConfig: ToolBlockConfig | null,
+  toolSchema: ToolMetadata | undefined
+) => {
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!node) {
+      setValidationErrors({});
+      return;
+    }
+
+    const configToValidate = localConfig ?? node.data.config;
+    let validation: ValidationResult;
+
+    switch (node.data.type) {
+      case 'tool': {
+        const paramSchema = toolSchema?.parameters?.properties || {};
+        const requiredParams = toolSchema?.parameters?.required || [];
+        validation = validateToolConfig(configToValidate, paramSchema, requiredParams);
+        break;
+      }
+      case 'llm':
+        validation = validateLlmConfig(configToValidate);
+        break;
+      case 'if_else':
+        validation = validateIfElseConfig(configToValidate);
+        break;
+      case 'for_loop':
+        validation = validateForLoopConfig(configToValidate);
+        break;
+      default:
+        validation = { isValid: true, errors: {} };
+    }
+
+    setValidationErrors(validation.errors);
+  }, [node, localConfig, toolSchema]);
+
+  return { validationErrors, hasValidationErrors: Object.keys(validationErrors).length > 0 };
+};
+
+// Helper: Auto-trigger save when local config changes
+const useAutoTriggerSave = (opts: {
+  node: Node<WorkflowNodeData> | null;
+  localConfig: ToolBlockConfig | null;
+  localOauthScope: string | undefined;
+  originalNodeRef: React.MutableRefObject<Node<WorkflowNodeData> | null>;
+  triggerSave: () => void;
+  hasValidationErrors: boolean;
+}) => {
+  useEffect(() => {
+    if (!opts.node || !opts.originalNodeRef.current || !opts.localConfig) return;
+
+    const currentConfig = opts.localConfig;
+    const currentOauth = opts.localOauthScope ?? opts.node.data.oauth_scope;
+    const originalConfig = opts.originalNodeRef.current.data.config;
+    const originalOauth = opts.originalNodeRef.current.data.oauth_scope;
+
+    const hasChanges =
+      JSON.stringify(currentConfig) !== JSON.stringify(originalConfig) ||
+      currentOauth !== originalOauth;
+
+    console.log('[WorkflowNodeConfigDialog] Checking for changes:', {
+      nodeType: opts.node.data.type,
+      hasChanges,
+      hasValidationErrors: opts.hasValidationErrors,
+      localConfigExists: !!opts.localConfig,
+      currentConfig,
+      originalConfig,
+    });
+
+    if (hasChanges) {
+      console.log('[WorkflowNodeConfigDialog] Triggering autosave for', opts.node.data.type);
+      opts.triggerSave();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opts.localConfig, opts.localOauthScope, opts.triggerSave]);
+};
+
 export function WorkflowNodeConfigDialog({
   open,
   node,
@@ -47,16 +128,11 @@ export function WorkflowNodeConfigDialog({
   onUpdate,
   workflowInputs,
 }: WorkflowNodeConfigDialogProps) {
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-
-  // Track local edits from BlockConfigPanel (for change detection and autosave)
   const [localConfig, setLocalConfig] = useState<ToolBlockConfig | null>(null);
   const [localOauthScope, setLocalOauthScope] = useState<string | undefined>(undefined);
-
-  // Track original node for comparison
   const originalNodeRef = useRef<Node<WorkflowNodeData> | null>(null);
 
-  // Fetch tool schema for tool blocks (for validation)
+  // Fetch tool schema for validation
   const toolName = node?.data.type === 'tool' ? (node.data.config?.tool_name || node.data.config?.toolName) : '';
   const { data: toolSchema } = useQuery<ToolMetadata | undefined>({
     queryKey: ['tool-schema', toolName],
@@ -84,115 +160,34 @@ export function WorkflowNodeConfigDialog({
         originalConfig: originalNodeRef.current?.data.config,
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id]);
 
-  // Validate configuration (use local state if available)
-  useEffect(() => {
-    if (!node) {
-      setValidationErrors({});
-      return;
-    }
+  // Validate configuration
+  const { validationErrors, hasValidationErrors } = useNodeValidation(node, localConfig, toolSchema);
 
-    // Use local config if available, otherwise fall back to node config
-    const configToValidate = localConfig ?? node.data.config;
-    let validation: ValidationResult;
-
-    switch (node.data.type) {
-      case 'tool':
-        const paramSchema = toolSchema?.parameters?.properties || {};
-        const requiredParams = toolSchema?.parameters?.required || [];
-        validation = validateToolConfig(configToValidate, paramSchema, requiredParams);
-        break;
-      case 'llm':
-        validation = validateLlmConfig(configToValidate);
-        break;
-      case 'if_else':
-        validation = validateIfElseConfig(configToValidate);
-        break;
-      case 'for_loop':
-        validation = validateForLoopConfig(configToValidate);
-        break;
-      default:
-        validation = { isValid: true, errors: {} };
-    }
-
-    setValidationErrors(validation.errors);
-  }, [node, localConfig, toolSchema]);
-
-  // Compute validation state
-  const hasValidationErrors = Object.keys(validationErrors).length > 0;
-
-  // Debounced autosave hook - saves changes after 800ms of inactivity
+  // Debounced autosave
   const { triggerSave } = useDebouncedAutosave({
     data: { localConfig, localOauthScope, nodeId: node?.id },
     onSave: async (data) => {
       if (!node) return;
-
-      // Use local state if available, otherwise fall back to node state
       const finalConfig = data.localConfig ?? node.data.config;
       const finalOauthScope = data.localOauthScope ?? node.data.oauth_scope;
-
-      await onUpdate(
-        node.id,
-        {
-          config: finalConfig,
-          oauth_scope: finalOauthScope,
-        },
-        { persist: true },
-      );
-
-      // Update original ref with the saved state
+      await onUpdate(node.id, { config: finalConfig, oauth_scope: finalOauthScope }, { persist: true });
       originalNodeRef.current = node
-        ? JSON.parse(
-            JSON.stringify({
-              ...node,
-              data: { ...node.data, config: finalConfig, oauth_scope: finalOauthScope },
-            }),
-          )
+        ? JSON.parse(JSON.stringify({ ...node, data: { ...node.data, config: finalConfig, oauth_scope: finalOauthScope } }))
         : null;
     },
-    options: {
-      delay: 800,
-      enabled: open, // Allow autosave even with validation errors - save work-in-progress
-    },
+    options: { delay: 800, enabled: open },
   });
 
-  // Trigger autosave when local config changes
-  useEffect(() => {
-    if (!node || !originalNodeRef.current || !localConfig) return;
+  // Auto-trigger save on changes
+  useAutoTriggerSave({ node, localConfig, localOauthScope, originalNodeRef, triggerSave, hasValidationErrors });
 
-    // Only trigger when we have LOCAL changes (not when node updates from elsewhere)
-    const currentConfig = localConfig;
-    const currentOauth = localOauthScope ?? node.data.oauth_scope;
-    const originalConfig = originalNodeRef.current.data.config;
-    const originalOauth = originalNodeRef.current.data.oauth_scope;
-
-    const hasChanges =
-      JSON.stringify(currentConfig) !== JSON.stringify(originalConfig) ||
-      currentOauth !== originalOauth;
-
-    console.log('[WorkflowNodeConfigDialog] Checking for changes:', {
-      nodeType: node.data.type,
-      hasChanges,
-      hasValidationErrors,
-      localConfigExists: !!localConfig,
-      currentConfig,
-      originalConfig,
-    });
-
-    if (hasChanges) {
-      console.log('[WorkflowNodeConfigDialog] Triggering autosave for', node.data.type);
-      triggerSave();
-    }
-  }, [localConfig, localOauthScope, triggerSave]);
-
-  // Handle local config changes from BlockConfigPanel
+  // Handle config changes
   const handleLocalConfigChange = useCallback(
     (config: ToolBlockConfig, oauthScope?: string) => {
-      // BlockConfigPanel includes input_refs in the merged config, but we need to extract it
-      // to compare properly with the original node config
       const { input_refs, ...configWithoutRefs } = config;
-
       console.log('[WorkflowNodeConfigDialog] Local config changed:', {
         config: configWithoutRefs,
         input_refs,
@@ -200,8 +195,6 @@ export function WorkflowNodeConfigDialog({
         nodeType: node?.data.type,
         nodeId: node?.id,
       });
-
-      // Store the config WITHOUT input_refs (input_refs are handled separately by BlockConfigPanel)
       setLocalConfig(configWithoutRefs as ToolBlockConfig);
       setLocalOauthScope(oauthScope);
     },
@@ -217,7 +210,6 @@ export function WorkflowNodeConfigDialog({
             Update block parameters, inputs, and outputs. Changes are saved automatically.
           </DialogDescription>
         </DialogHeader>
-
         <div className="max-h-[60vh] overflow-y-auto pr-2 scrollbar-thin">
           {node ? (
             <BlockConfigPanel
@@ -234,9 +226,7 @@ export function WorkflowNodeConfigDialog({
               workflowInputs={workflowInputs}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Select a block to configure.
-            </p>
+            <p className="text-sm text-muted-foreground">Select a block to configure.</p>
           )}
         </div>
       </DialogContent>

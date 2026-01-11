@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,40 +27,54 @@ interface FormConfig {
   styling?: Record<string, unknown>;
 }
 
-export default function PublicForm() {
-  const { suffix } = useParams<{ suffix: string }>();
-  const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
+// Helper: Render form field
+const FormFieldInput = ({ field, value, onChange, error }: {
+  field: FormField;
+  value: unknown;
+  onChange: (value: string) => void;
+  error?: string;
+}) => (
+  <div key={field.name} className="space-y-2">
+    <Label htmlFor={field.name}>
+      {field.displayLabel || field.name}
+      {field.required && <span className="text-destructive ml-1">*</span>}
+    </Label>
+    {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+    {field.type === 'object' ? (
+      <Textarea
+        id={field.name}
+        value={(value as string) || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+        required={field.required}
+        className={error ? 'border-destructive' : ''}
+      />
+    ) : (
+      <Input
+        id={field.name}
+        type={field.type}
+        value={(value as string) || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+        required={field.required}
+        className={error ? 'border-destructive' : ''}
+      />
+    )}
+    {error && <p className="text-xs text-destructive">{error}</p>}
+  </div>
+);
+
+// Helper: Form submission hook
+const useFormSubmission = (formConfig: FormConfig | null, suffix: string | undefined) => {
   const [formData, setFormData] = useState<Record<string, unknown>>({});
-  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    loadForm();
-  }, [suffix]);
-
-  const loadForm = async () => {
-    try {
-      const res = await fetch(`${getBackendBaseUrl()}/api/forms/resolve/${suffix}`);
-      if (!res.ok) {
-        throw new Error('Form not found');
-      }
-      const data = await res.json();
-      setFormConfig(data);
-    } catch (err) {
-      toast.error('Form not found');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!formConfig) return;
 
-    // Validate
     const newErrors: Record<string, string> = {};
     formConfig.fields.forEach((field) => {
       if (field.required && !formData[field.name]) {
@@ -85,9 +99,7 @@ export default function PublicForm() {
         const error = await res.json();
         if (error.detail?.errors) {
           const fieldErrors: Record<string, string> = {};
-          error.detail.errors.forEach((err: string) => {
-            fieldErrors.general = err;
-          });
+          error.detail.errors.forEach((err: string) => { fieldErrors.general = err; });
           setErrors(fieldErrors);
           toast.error('Please fix the errors below');
           return;
@@ -97,12 +109,41 @@ export default function PublicForm() {
 
       setIsSubmitted(true);
       toast.success(formConfig.success_message || 'Submitted!');
-    } catch (err) {
+    } catch {
       toast.error('Submission failed');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const updateField = (name: string, value: string) => {
+    setFormData({ ...formData, [name]: value });
+    setErrors({ ...errors, [name]: '' });
+  };
+
+  return { formData, isSubmitting, isSubmitted, errors, handleSubmit, updateField };
+};
+
+export default function PublicForm() {
+  const { suffix } = useParams<{ suffix: string }>();
+  const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const { formData, isSubmitting, isSubmitted, errors, handleSubmit, updateField } = useFormSubmission(formConfig, suffix);
+
+  const loadForm = useCallback(async () => {
+    try {
+      const res = await fetch(`${getBackendBaseUrl()}/api/forms/resolve/${suffix}`);
+      if (!res.ok) throw new Error('Form not found');
+      const data = await res.json();
+      setFormConfig(data);
+    } catch {
+      toast.error('Form not found');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [suffix]);
+
+  useEffect(() => { loadForm(); }, [loadForm]);
 
   if (isLoading) {
     return (
@@ -117,9 +158,7 @@ export default function PublicForm() {
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Form Not Found</h1>
-          <p className="mt-2 text-muted-foreground">
-            The form you're looking for doesn't exist or has been disabled.
-          </p>
+          <p className="mt-2 text-muted-foreground">The form you're looking for doesn't exist or has been disabled.</p>
         </div>
       </div>
     );
@@ -130,9 +169,7 @@ export default function PublicForm() {
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center space-y-4">
           <CheckCircle2 className="h-16 w-16 text-success mx-auto" />
-          <h2 className="text-2xl font-bold">
-            {formConfig.success_message || 'Thank You!'}
-          </h2>
+          <h2 className="text-2xl font-bold">{formConfig.success_message || 'Thank You!'}</h2>
         </div>
       </div>
     );
@@ -144,67 +181,26 @@ export default function PublicForm() {
         <div className="bg-card border rounded-lg p-8 space-y-6">
           <div>
             <h1 className="text-3xl font-bold">{formConfig.title}</h1>
-            {formConfig.description && (
-              <p className="text-muted-foreground mt-2">{formConfig.description}</p>
-            )}
+            {formConfig.description && <p className="text-muted-foreground mt-2">{formConfig.description}</p>}
           </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
             {formConfig.fields.map((field) => (
-              <div key={field.name} className="space-y-2">
-                <Label htmlFor={field.name}>
-                  {field.displayLabel || field.name}
-                  {field.required && <span className="text-destructive ml-1">*</span>}
-                </Label>
-
-                {field.description && (
-                  <p className="text-xs text-muted-foreground">{field.description}</p>
-                )}
-
-                {field.type === 'object' ? (
-                  <Textarea
-                    id={field.name}
-                    value={formData[field.name] || ''}
-                    onChange={(e) => {
-                      setFormData({ ...formData, [field.name]: e.target.value });
-                      setErrors({ ...errors, [field.name]: '' });
-                    }}
-                    placeholder={field.placeholder}
-                    required={field.required}
-                    className={errors[field.name] ? 'border-destructive' : ''}
-                  />
-                ) : (
-                  <Input
-                    id={field.name}
-                    type={field.type}
-                    value={formData[field.name] || ''}
-                    onChange={(e) => {
-                      setFormData({ ...formData, [field.name]: e.target.value });
-                      setErrors({ ...errors, [field.name]: '' });
-                    }}
-                    placeholder={field.placeholder}
-                    required={field.required}
-                    className={errors[field.name] ? 'border-destructive' : ''}
-                  />
-                )}
-
-                {errors[field.name] && (
-                  <p className="text-xs text-destructive">{errors[field.name]}</p>
-                )}
-              </div>
+              <FormFieldInput
+                key={field.name}
+                field={field}
+                value={formData[field.name]}
+                onChange={(value) => updateField(field.name, value)}
+                error={errors[field.name]}
+              />
             ))}
-
             <Button type="submit" disabled={isSubmitting} className="w-full">
               {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...
-                </>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...</>
               ) : (
                 formConfig.submit_button_text || 'Submit'
               )}
             </Button>
           </form>
-
           <div className="text-center text-xs text-muted-foreground pt-4 border-t">
             Powered by <span className="font-semibold">Seer</span>
           </div>
