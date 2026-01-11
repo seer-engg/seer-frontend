@@ -70,7 +70,7 @@ export interface WorkflowStore {
     workflowId: string,
     params: { graph: WorkflowGraphData; baseRevision: number },
   ) => Promise<WorkflowModel>;
-  publishWorkflow: (workflowId: string, versionId: number) => Promise<WorkflowModel>;
+  publishWorkflow: (workflowId: string) => Promise<WorkflowModel>;
   deleteWorkflow: (workflowId: string) => Promise<void>;
   restoreWorkflowVersion: (
     workflowId: string,
@@ -244,13 +244,11 @@ const publishWorkflowImpl = async (
   set: (partial: Partial<WorkflowStore>) => void,
   get: () => WorkflowStore,
   workflowId: string,
-  versionId: number,
 ) => {
   set({ isPublishing: true, error: null });
   try {
     const response = await backendApiClient.request<WorkflowResponse>(`/api/v1/workflows/${workflowId}/publish`, {
       method: 'POST',
-      body: { version_id: versionId },
     });
     const workflow = toWorkflowModel(response);
     set((state) => ({
@@ -471,8 +469,8 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
   async saveWorkflowDraft(workflowId, { graph, baseRevision }) {
     return saveWorkflowDraftImpl(set, get, workflowId, graph, baseRevision);
   },
-  async publishWorkflow(workflowId, versionId) {
-    return publishWorkflowImpl(set, get, workflowId, versionId);
+  async publishWorkflow(workflowId) {
+    return publishWorkflowImpl(set, get, workflowId);
   },
   async deleteWorkflow(workflowId) {
     return deleteWorkflowImpl(set, workflowId);
@@ -502,5 +500,4 @@ const createWorkflowStore: StateCreator<WorkflowStore> = (set, get) => ({
 });
 
 export const useWorkflowStore = createStore(createWorkflowStore);
-
 

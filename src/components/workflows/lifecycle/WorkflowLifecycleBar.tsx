@@ -175,42 +175,26 @@ function PublishButton({
 }: Pick<WorkflowLifecycleBarProps, 'onPublishClick' | 'isPublishing' | 'canPublish' | 'publishDisabledReason'>) {
   return (
     <Tooltip>
-      <DropdownMenu>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <Button
-              disabled={!canPublish || isPublishing}
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              aria-label="Publish Workflow"
-            >
-              {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
-            </Button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" sideOffset={8}>
-          <div className="flex flex-col gap-1">
-            <p className="font-medium text-sm">{isPublishing ? 'Publishing' : 'Publish Workflow'}</p>
-            {(!canPublish && publishDisabledReason) || !isPublishing ? (
-              <p className="text-xs text-muted-foreground">{publishDisabledReason ?? 'Create a production version'}</p>
-            ) : null}
-          </div>
-        </TooltipContent>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              onPublishClick();
-            }}
-          >
-            <div className="flex flex-col gap-0.5 text-xs">
-              <span className="font-medium text-foreground">Publish Version</span>
-              <span className="text-muted-foreground text-[10px]">Create new production release</span>
-            </div>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <TooltipTrigger asChild>
+        <Button
+          onClick={onPublishClick}
+          disabled={!canPublish || isPublishing}
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8"
+          aria-label="Publish Workflow"
+        >
+          {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={8}>
+        <div className="flex flex-col gap-1">
+          <p className="font-medium text-sm">{isPublishing ? 'Publishing' : 'Publish Workflow'}</p>
+          {(!canPublish && publishDisabledReason) || !isPublishing ? (
+            <p className="text-xs text-muted-foreground">{publishDisabledReason ?? 'Create a production version'}</p>
+          ) : null}
+        </div>
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -241,4 +225,3 @@ export function WorkflowLifecycleBar(props: WorkflowLifecycleBarProps) {
     </div>
   );
 }
-

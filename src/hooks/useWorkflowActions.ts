@@ -205,27 +205,23 @@ export function useWorkflowActions() {
    * Publish workflow
    */
   const handlePublish = useCallback(async () => {
-    if (!selectedWorkflowId || !lastRunVersionId) {
-      toast.error(
-        !selectedWorkflowId
-          ? 'Save the workflow before publishing'
-          : 'Run a test to create a publishable version',
-      );
+    if (!selectedWorkflowId) {
+      toast.error('Save the workflow before publishing');
       return;
     }
 
     try {
-      await publishWorkflow(selectedWorkflowId, lastRunVersionId);
+      await publishWorkflow(selectedWorkflowId);
       setLastRunVersionId(null);
       toast.success('Workflow published', {
-        description: `Version ${lastRunVersionId} is now live`,
+        description: 'The workflow is now live',
       });
     } catch (error) {
       console.error('Failed to publish workflow:', error);
       toast.error('Failed to publish workflow');
       throw error;
     }
-  }, [selectedWorkflowId, lastRunVersionId, publishWorkflow, setLastRunVersionId]);
+  }, [selectedWorkflowId, publishWorkflow, setLastRunVersionId]);
 
   /**
    * Restore workflow version
@@ -455,15 +451,11 @@ export function useWorkflowActions() {
   const capabilities = useMemo(() => {
     const canRun = Boolean(selectedWorkflowId);
     const runDisabledReason = canRun ? undefined : 'Save the workflow before testing';
-    const canPublish = Boolean(selectedWorkflowId && lastRunVersionId);
-    const publishDisabledReason = !selectedWorkflowId
-      ? 'Save the workflow before publishing'
-      : !lastRunVersionId
-        ? 'Run a test to create a publishable version'
-        : undefined;
+    const canPublish = Boolean(selectedWorkflowId);
+    const publishDisabledReason = canPublish ? undefined : 'Save the workflow before publishing';
 
     return { canRun, runDisabledReason, canPublish, publishDisabledReason };
-  }, [selectedWorkflowId, lastRunVersionId]);
+  }, [selectedWorkflowId]);
 
   return {
     // Lifecycle actions
