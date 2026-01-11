@@ -182,6 +182,7 @@ function buildCanvasProps(params: {
   isPublishing: boolean; isRestoringVersion: boolean; canRun: boolean; canPublish: boolean;
   publishDisabledReason: string; runDisabledReason: string; isImportDialogOpen: boolean;
   handleCanvasNodeDoubleClick: (id: string) => void; handleNodeDrop: (e: unknown) => void;
+  handleNodesRemoved: () => void;
   handleExecute: (fields: unknown) => { needsInput: boolean } | void; handlePublish: () => void;
   handleRestoreVersion: (versionId: string) => void;
   handleLoadWorkflow: (id: string) => void; handleDeleteWorkflow: (id: string) => void;
@@ -193,7 +194,7 @@ function buildCanvasProps(params: {
     selectedWorkflowId, previewGraph, proposalPreview, lifecycleStatus, workflows, isLoadingWorkflows,
     workflowVersions, isLoadingWorkflowVersions, isExecuting, isPublishing, isRestoringVersion,
     canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
-    handleCanvasNodeDoubleClick, handleNodeDrop, handleExecute, handlePublish, handleRestoreVersion,
+    handleCanvasNodeDoubleClick, handleNodeDrop, handleNodesRemoved, handleExecute, handlePublish, handleRestoreVersion,
     handleLoadWorkflow, handleDeleteWorkflow, handleRenameWorkflow, handleNewWorkflow, handleExportWorkflow,
     setImportDialogOpen, handleImportWorkflow, inputFields, setInputDialogOpen,
   } = params;
@@ -202,6 +203,7 @@ function buildCanvasProps(params: {
     workflowVersions, isLoadingWorkflowVersions, isExecuting, isPublishing, isRestoringVersion,
     canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
     onNodeDoubleClick: handleCanvasNodeDoubleClick, onNodeDrop: handleNodeDrop,
+    onNodesRemoved: handleNodesRemoved,
     onRunClick: () => {
       const result = handleExecute(inputFields);
       if (result?.needsInput) {
@@ -263,6 +265,10 @@ export default function Workflows() {
     options: { delay: 1000, enabled: !!selectedWorkflowId && !isLoadingWorkflow },
   });
 
+  const handleNodesRemoved = useCallback(() => {
+    triggerSave();
+  }, [triggerSave]);
+
   const {
     workflowVersions, isLoadingWorkflowVersions, triggerCatalog, isLoadingTriggers,
     isLoadingSubscriptions, loadTriggerCatalogIfNeeded, createSubscription, updateSubscription, toggleSubscription,
@@ -315,7 +321,7 @@ export default function Workflows() {
     selectedWorkflowId, previewGraph, proposalPreview, lifecycleStatus, workflows, isLoadingWorkflows,
     workflowVersions, isLoadingWorkflowVersions, isExecuting, isPublishing, isRestoringVersion,
     canRun, canPublish, publishDisabledReason, runDisabledReason, isImportDialogOpen,
-    handleCanvasNodeDoubleClick, handleNodeDrop, handleExecute, handlePublish, handleRestoreVersion,
+    handleCanvasNodeDoubleClick, handleNodeDrop, handleNodesRemoved, handleExecute, handlePublish, handleRestoreVersion,
     handleLoadWorkflow, handleDeleteWorkflow, handleRenameWorkflow, handleNewWorkflow, handleExportWorkflow,
     setImportDialogOpen, handleImportWorkflow, inputFields, setInputDialogOpen,
   });

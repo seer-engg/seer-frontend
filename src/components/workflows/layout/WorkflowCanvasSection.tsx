@@ -31,6 +31,7 @@ interface WorkflowCanvasSectionProps {
   isImportDialogOpen: boolean;
   onNodeDoubleClick?: (event: React.MouseEvent, node: Node<WorkflowNodeData>) => void;
   onNodeDrop?: (event: React.DragEvent) => void;
+  onNodesRemoved?: () => void;
   onRunClick: () => void;
   onPublishClick: () => void;
   onVersionRestore: (versionId: number) => void;
@@ -63,6 +64,7 @@ export function WorkflowCanvasSection({
   isImportDialogOpen,
   onNodeDoubleClick,
   onNodeDrop,
+  onNodesRemoved,
   onRunClick,
   onPublishClick,
   onVersionRestore,
@@ -85,6 +87,7 @@ export function WorkflowCanvasSection({
           previewGraph={previewGraph}
           onNodeDoubleClick={isPreviewActive ? undefined : onNodeDoubleClick}
           onNodeDrop={isPreviewActive ? undefined : onNodeDrop}
+          onNodesRemoved={isPreviewActive ? undefined : onNodesRemoved}
           readOnly={isPreviewActive}
         />
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 pointer-events-none">

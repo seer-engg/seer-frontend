@@ -42,12 +42,21 @@ export function useWorkflowLifecycleEffects(props: UseWorkflowLifecycleEffectsPr
     skipNextAutosaveRef,
   } = props;
 
+  const previousGraphCountsRef = useRef({ nodes: nodes.length, edges: edges.length });
+
   // Trigger autosave when nodes or edges change
   useEffect(() => {
+    const countsChanged =
+      nodes.length !== previousGraphCountsRef.current.nodes ||
+      edges.length !== previousGraphCountsRef.current.edges;
+    previousGraphCountsRef.current = { nodes: nodes.length, edges: edges.length };
+
     if (!selectedWorkflowId || isLoadingWorkflow) return;
     if (skipNextAutosaveRef.current) {
       skipNextAutosaveRef.current = false;
-      return;
+      if (!countsChanged) {
+        return;
+      }
     }
     triggerSave();
   }, [nodes, edges, selectedWorkflowId, triggerSave, isLoadingWorkflow, skipNextAutosaveRef]);

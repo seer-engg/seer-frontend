@@ -28,6 +28,7 @@ export function useDebouncedAutosave<T>({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedDataRef = useRef<T | null>(null);
   const isSavingRef = useRef(false);
+  const dataRef = useRef(data);
 
   // Clear timeout on unmount
   useEffect(() => {
@@ -37,6 +38,10 @@ export function useDebouncedAutosave<T>({
       }
     };
   }, []);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   const save = useCallback(async () => {
     if (!enabled || !isDirty || isSavingRef.current) {
@@ -50,8 +55,10 @@ export function useDebouncedAutosave<T>({
     }
 
     // Check if data actually changed
+    const nextData = dataRef.current;
+
     if (lastSavedDataRef.current !== null) {
-      const dataChanged = JSON.stringify(data) !== JSON.stringify(lastSavedDataRef.current);
+      const dataChanged = JSON.stringify(nextData) !== JSON.stringify(lastSavedDataRef.current);
       if (!dataChanged) {
         return;
       }
@@ -59,16 +66,16 @@ export function useDebouncedAutosave<T>({
 
     isSavingRef.current = true;
     try {
-      await onSave(data);
+      await onSave(nextData);
       // Store a deep copy to avoid reference issues
-      lastSavedDataRef.current = JSON.parse(JSON.stringify(data));
+      lastSavedDataRef.current = JSON.parse(JSON.stringify(nextData));
     } catch (error) {
       console.error('Autosave failed:', error);
       throw error; // Re-throw to allow caller to handle
     } finally {
       isSavingRef.current = false;
     }
-  }, [data, onSave, isDirty, enabled]);
+  }, [onSave, isDirty, enabled]);
 
   const triggerSave = useCallback(() => {
     if (!enabled || !isDirty) {
@@ -99,4 +106,3 @@ export function useDebouncedAutosave<T>({
     isSaving: isSavingRef.current,
   };
 }
-

@@ -92,11 +92,13 @@ export function useNodeActions({
           position,
         });
         setNodes((nds) => [...nds, newNode]);
+        triggerSave();
         return;
       }
 
       const newNode = createRegularBlockNode(block, position, functionBlocksMap);
       setNodes((nds) => [...nds, newNode]);
+      triggerSave();
     },
     [
       triggerCatalog,
@@ -107,6 +109,7 @@ export function useNodeActions({
       isConnectingGmail,
       functionBlocksMap,
       setNodes,
+      triggerSave,
     ],
   );
 
@@ -136,11 +139,13 @@ export function useNodeActions({
           position,
         });
         setNodes((nds) => [...nds, newNode]);
+        triggerSave();
         return;
       }
 
       const newNode = createRegularBlockNode(block, position, functionBlocksMap);
       setNodes((nds) => [...nds, newNode]);
+      triggerSave();
     },
     [
       triggerCatalog,
@@ -151,6 +156,7 @@ export function useNodeActions({
       isConnectingGmail,
       functionBlocksMap,
       setNodes,
+      triggerSave,
     ],
   );
 

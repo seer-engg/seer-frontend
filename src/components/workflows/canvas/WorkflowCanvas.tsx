@@ -65,15 +65,16 @@ interface WorkflowCanvasProps {
     blockData: DroppedBlockData,
     position: { x: number; y: number },
   ) => void;
+  onNodesRemoved?: () => void;
   className?: string;
   readOnly?: boolean;
 }
 
-// eslint-disable-next-line max-lines-per-function
 export function WorkflowCanvas({
   previewGraph = null,
   onNodeDoubleClick,
   onNodeDrop,
+  onNodesRemoved,
   className,
   readOnly = false,
 }: WorkflowCanvasProps) {
@@ -117,6 +118,7 @@ export function WorkflowCanvas({
       if (readOnly) {
         return;
       }
+      const hasRemoval = changes.some((change) => change.type === 'remove');
       // PHASE 3 FIX: Don't depend on renderedNodes - use functional update instead
       // This prevents infinite loops when renderedNodes changes after setNodes
       setNodes((currentNodes) => {
@@ -133,8 +135,11 @@ export function WorkflowCanvas({
         });
         return applyNodeChanges<Node<WorkflowNodeData>>(changes, nodesWithSelection);
       });
+      if (hasRemoval) {
+        onNodesRemoved?.();
+      }
     },
-    [readOnly, setNodes, selectedNodeId],
+    [readOnly, setNodes, selectedNodeId, onNodesRemoved],
   );
 
   const handleEdgesChange = useCallback(
@@ -238,4 +243,3 @@ export function WorkflowCanvas({
     </WorkflowCanvasContext.Provider>
   );
 }
-
