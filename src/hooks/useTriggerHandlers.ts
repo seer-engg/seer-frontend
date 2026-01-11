@@ -14,7 +14,7 @@ import {
 import { useTriggersStore } from '@/stores/triggersStore';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useToolsStore } from '@/stores/toolsStore';
-import type { TriggerDescriptor } from '@/types/triggers';
+import type { TriggerDescriptor, TriggerSubscriptionResponse } from '@/types/triggers';
 import { useWorkflowSave } from './useWorkflowSave';
 
 // Stable empty object reference to avoid creating new objects in selectors
@@ -41,7 +41,7 @@ export function useTriggerHandlers({
     provider_config?: Record<string, unknown>;
     provider_connection_id?: number;
     enabled: boolean;
-  }) => Promise<void>;
+  }) => Promise<TriggerSubscriptionResponse>;
 }) {
   // Fetch state from stores
   const selectedWorkflowId = useWorkflowStore((state) => state.selectedWorkflowId);

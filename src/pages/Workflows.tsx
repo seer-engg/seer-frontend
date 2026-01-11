@@ -256,8 +256,16 @@ export default function Workflows() {
     options: { delay: 1000, enabled: !!selectedWorkflowId && !isLoadingWorkflow },
   });
 
+  const {
+    workflowVersions, isLoadingWorkflowVersions, triggerCatalog, isLoadingTriggers,
+    isLoadingSubscriptions, loadTriggerCatalogIfNeeded, createSubscription, updateSubscription, toggleSubscription,
+    deleteSubscription, availableBlocks, handleWorkflowGraphSync,
+  } = useWorkflowHooks({
+    selectedWorkflowId, functionBlockSchemas, functionBlocksMap, setNodes, setEdges, setProposalPreview,
+  });
+
   const { isConnectingGmail, handleAddTriggerDraft, handleSaveTriggerDraft, handleDiscardTriggerDraft, handleConnectGmail } = useTriggerHandlers({
-    gmailIntegrationReady, gmailConnectionId, gmailToolNames, createSubscription: () => Promise.resolve(),
+    gmailIntegrationReady, gmailConnectionId, gmailToolNames, createSubscription,
   });
 
   const {
@@ -271,14 +279,6 @@ export default function Workflows() {
   useEffect(() => {
     resetSavedDataRef.current = resetSavedData;
   }, [resetSavedData, resetSavedDataRef]);
-
-  const {
-    workflowVersions, isLoadingWorkflowVersions, triggerCatalog, isLoadingTriggers,
-    isLoadingSubscriptions, loadTriggerCatalogIfNeeded, updateSubscription, toggleSubscription,
-    deleteSubscription, availableBlocks, handleWorkflowGraphSync,
-  } = useWorkflowHooks({
-    selectedWorkflowId, functionBlockSchemas, functionBlocksMap, setNodes, setEdges, setProposalPreview,
-  });
 
   const previewGraph = usePreviewGraph(proposalPreview, functionBlocksMap);
   const isPreviewActive = Boolean(previewGraph);
@@ -336,4 +336,3 @@ export default function Workflows() {
     </div>
   );
 }
-
